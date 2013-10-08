@@ -1,15 +1,14 @@
 {-# LANGUAGE RecordWildCards #-}
 module Yage.Resources where
 
-import             Linear                          (V3(..), V4(..), zero)
+import             Yage.Prelude
+
+import             Linear                          (V3(..), V4(..))
+import             Data.List                       (length)
 import             Linear.Quaternion               (Quaternion)
 import             Graphics.Rendering.OpenGL       (GLfloat)
 import             Foreign.Storable
-import             Foreign.Ptr                     (castPtr)
-import             Control.Applicative             ((<$>), (<*>))
 
-import             Debug.Trace
-import             Yage.Import
 ---------------------------------------------------------------------------------------------------
 
 type Orientation = Quaternion GLfloat
@@ -56,8 +55,7 @@ instance Ord TriMesh where
 
 mkTriMesh :: String -> [Vertex] -> [Index] -> TriMesh
 -- TODO some assertions for invalid meshes
-mkTriMesh id vs ixs | traceShow "here" False = undefined
-                    | otherwise = TriMesh id vs ixs $ (length ixs) `quot` 3
+mkTriMesh id vs ixs = TriMesh id vs ixs $ (length ixs) `quot` 3
 
 ---------------------------------------------------------------------------------------------------
 

@@ -2,9 +2,7 @@ module Yage.Rendering.Utils (
     makeVAO
     ) where
 
-import             Yage.Import
-
-import             Control.Monad.IO.Class
+import             Yage.Prelude
 
 import qualified   Graphics.Rendering.OpenGL       as GL
 import             Graphics.Rendering.OpenGL.GL    (($=))

@@ -1,48 +1,45 @@
 {-# LANGUAGE ExistentialQuantification, RecordWildCards, DeriveFunctor, GeneralizedNewtypeDeriving, DeriveDataTypeable, TypeFamilies #-}
 module Yage.Rendering.Types where
 
-import qualified   Data.Map                        as Map
-import qualified   Data.Trie                       as T
+import qualified   Prelude
+import             Yage.Prelude
+
 import             Data.Maybe                      (fromJust)
+import             Data.List                       (length, sum)
 import             Foreign.Storable                (sizeOf)
-import             Foreign.C.Types                 (CDouble(..))
 
 import             Data.Typeable
-import             Control.Applicative
-import             Control.Monad.RWS.Strict        (RWST, ask, asks, evalRWST, get, liftIO, modify, put)
-import             Control.Monad.IO.Class
+import             Control.Monad.RWS.Strict        (RWST)
+import             Control.Monad.Writer            ()
+import             Control.Monad.Reader            ()
+import             Control.Monad.State             ()
+import             Control.Monad.IO.Class          (MonadIO)
 import             Control.Lens                    ((^.))
-
+import             Linear                          (M44, M33, V3(..), zero, axisAngle, mkTransformation
+                                                   , _xyz, (!*!), adjoint, inv33, kronecker, point)
+---------------------------------------------------------------------------------------------------
 import             Graphics.GLUtil
 import qualified   Graphics.GLUtil                 as GL
-import             Graphics.GLUtil.Camera3D        (Camera(..), fpsCamera, camMatrix)
+import             Graphics.GLUtil.Camera3D        (Camera(..))
 import qualified   Graphics.GLUtil.Camera3D        as Cam
 import qualified   Graphics.Rendering.OpenGL       as GL
-import             Graphics.Rendering.OpenGL       (($=), Uniform(..), UniformComponent(..))
 ---------------------------------------------------------------------------------------------------
-import             Linear                          ( V3(..), V4(..), M44(..), M33(..), R3(_xyz), Quaternion
-                                                   , (!*!)
-                                                   , zero, inv33, m33_to_m44, kronecker, fromQuaternion
-                                                   , mkTransformation, point, axisAngle, adjoint)
----------------------------------------------------------------------------------------------------
-import             Yage.Import
 import             Yage.Math
 import             Yage.Resources
-import             Yage.Rendering.Primitives
 import             Yage.Rendering.Shader
 
-import             Debug.Trace
 -- =================================================================================================
 
+data Window = Window -- TODO Remove
 
-type Renderer = RWST RenderEnv () RenderState IO
-    --deriving (Functor, Applicative, Monad, MonadIO, MonadReader YageRenderEnv, MonadState RenderState, Typeable)
+type Renderer = RWST RenderEnv RenderLog RenderState IO
+    --deriving (Functor, Applicative, Monad, MonadIO, MonadReader YageRenderEnv, MonadWriter RenderLog MonadState RenderState, Typeable)
 
 data RenderEnv = RenderEnv
-    { envApplication    :: !Application      -- ^ The application to render the frame for
-    , envConfig         :: !RenderConfig    -- ^ The current settings for the frame
+    { envConfig         :: !RenderConfig    -- ^ The current settings for the frame
     }
 
+type RenderLog = [String]
 
 data RenderConfig = RenderConfig
     { confClearColor        :: !(GL.Color4 Double)
@@ -64,21 +61,6 @@ data RenderStatistics = RenderStatistics
     , loadedShadersCount    :: !Int
     , loadedMeshesCount     :: !Int
     } deriving Show
-
-initRenderStatistics = RenderStatistics
-    { lastObjectCount       = 0
-    , lastTriangleCount     = 0
-    , lastRenderDuration    = 0.0
-    , loadedShadersCount    = 0
-    , loadedMeshesCount     = 0
-    }
-
-initialRenderState = RenderState 
-    { loadedShaders         = []
-    , loadedMeshes          = []
-    , loadedDefinitions     = []
-    , renderStatistics      = initRenderStatistics
-    }
 
 type VBO = GL.BufferObject
 type EBO = GL.BufferObject
@@ -175,9 +157,9 @@ data RenderScene = RenderScene
     , projectionMatrix    :: !(M44 GL.GLfloat)
     } deriving (Typeable)
 
-camV = V3 0 0 10
+
 emptyRenderScene :: RenderScene
-emptyRenderScene = RenderScene [] 0.0 (camMatrix fpsCamera) (Cam.projectionMatrix (Cam.deg2rad 60) 1 1 45)
+emptyRenderScene = RenderScene [] 0.0 (Cam.camMatrix Cam.fpsCamera) (Cam.projectionMatrix (Cam.deg2rad 60) 1 1 45)
 
 
 entitiesCount :: RenderScene -> Int
@@ -212,12 +194,12 @@ instance Renderable RenderEntity where
         let scaleM      = mkScale . eScale $ r                                         :: M44 GL.GLfloat
             transformM  = mkTransformation (eOrientation $ r) ((ePosition $ r)^._xyz)  :: M44 GL.GLfloat
             modelM      = transformM !*! scaleM                                        :: M44 GL.GLfloat
-            normalM     = adjoint $ fromJust . inv33 . fromTransformation $ modelM               :: M33 GL.GLfloat
+            normalM     = adjoint $ fromJust . inv33 . fromTransformation $ modelM     :: M33 GL.GLfloat
         in (modelM, normalM)
         where mkScale = kronecker . point
 
                 
 
-from1 :: UniformComponent a => a -> GL.Index1 a
+from1 :: GL.UniformComponent a => a -> GL.Index1 a
 from1 = GL.Index1
 

@@ -1,11 +1,11 @@
 module Yage.Rendering.Primitives where
 
-import Control.Applicative ((<$>))
+import Yage.Prelude
 import Control.Lens ((^.))
 
+import Data.List ((++), reverse, map, take, length, (!!), concat, replicate, repeat, zipWith3)
 import Linear (point)
 
-import Yage.Import
 import Yage.Resources
 
 import Linear (V3(..), V4(..), R3(_xyz), cross, signorm, vector)

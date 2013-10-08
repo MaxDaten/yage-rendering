@@ -8,6 +8,6 @@ fromTransformation
     (V4 (V4 a b c _)
         (V4 d e f _)
         (V4 g h i _)
-        (V4 j k l _)) = V3 (V3 a b c)
+        (V4 _ _ _ _)) = V3 (V3 a b c)
                            (V3 d e f)
                            (V3 g h i)

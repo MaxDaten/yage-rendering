@@ -1,6 +1,8 @@
 {-# LANGUAGE RankNTypes, StandaloneDeriving, RecordWildCards #-}
 module Yage.Rendering.WorldState where
 
+
+import              Yage.Prelude
 ---------------------------------------------------------------------------------------------------
 import              Graphics.GLUtil.Camera3D    (Camera, fpsCamera)
 

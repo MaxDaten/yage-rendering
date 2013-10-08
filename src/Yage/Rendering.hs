@@ -6,24 +6,13 @@ module Yage.Rendering (
 
     ) where
 
-import Debug.Trace
+import             Yage.Prelude
 
-import qualified   Data.Map                        as Map
-import qualified   Data.Trie                       as T
-import             Data.List                       (groupBy)
+import             Data.List                       (length, head, sum, map, lookup, groupBy, (++))
 
-import             Data.ByteString.Char8           (ByteString)
-
-
-import             Foreign.Storable                (sizeOf)
-import             Control.Concurrent              (threadDelay)
-import             System.Mem                      (performGC)
-
-import             Data.Typeable
-import             Control.Applicative
-
-import             Control.Monad.RWS.Strict        (ask, asks, runRWST, get, gets, liftIO, modify, put)
-
+import             Control.Monad.RWS.Strict        (ask, asks, runRWST, get, gets, modify, put)
+import             Control.Monad                   (liftM, mapM)
+import             Filesystem.Path.CurrentOS       (encodeString)
 
 import             Graphics.GLUtil                 hiding (makeVAO)
 import qualified   Graphics.Rendering.OpenGL       as GL
@@ -33,14 +22,29 @@ import             Graphics.Rendering.OpenGL.GL    as GLReExports (Color4(..))
 import             Linear                          (V3(..), R3(_xyz), zero)
 import             Linear.Quaternion               (Quaternion)
 ---------------------------------------------------------------------------------------------------
-import             Yage.Import
-import 			   Yage.Rendering.Types
+import             Yage.Rendering.Types
 import             Yage.Rendering.WorldState
 import             Yage.Rendering.Shader           ((.=))
 import qualified   Yage.Rendering.Shader           as Shader
 import             Yage.Rendering.Utils
-import 			   Yage.Resources
+import             Yage.Resources
 {-=================================================================================================-}
+
+
+initRenderStatistics = RenderStatistics
+    { lastObjectCount       = 0
+    , lastTriangleCount     = 0
+    , lastRenderDuration    = 0.0
+    , loadedShadersCount    = 0
+    , loadedMeshesCount     = 0
+    }
+
+initialRenderState = RenderState 
+    { loadedShaders         = []
+    , loadedMeshes          = []
+    , loadedDefinitions     = []
+    , renderStatistics      = initRenderStatistics
+    }
 
 
 renderScene :: RenderScene -> Renderer ()
@@ -50,9 +54,6 @@ renderScene scene = renderFrame scene >> afterFrame
 
 afterFrame :: Renderer ()
 afterFrame = io $ do
-    -- this should not be part of the rendering, indeed
-    performGC
-    --threadDelay (16*1000) -- 60fps
     return ()
 
 
@@ -118,22 +119,23 @@ beforeRender = do
 
 
 setupFrame :: Renderer ()
-setupFrame = withWindow $ \win -> do
-    clearC <- asks $ confClearColor . envConfig
-    io $! do
-        beginDraw $ win
+setupFrame = undefined
+    --withWindow $ \_ -> do
+    --clearC <- asks $ confClearColor . envConfig
+    --io $! do
+    --    -- beginDraw $ win
 
-        GL.clearColor $= fmap realToFrac clearC
-        GL.depthFunc $= Just GL.Less -- to init
-        GL.depthMask $= GL.Enabled      -- to init
+    --    GL.clearColor $= fmap realToFrac clearC
+    --    GL.depthFunc $= Just GL.Less -- to init
+    --    GL.depthMask $= GL.Enabled      -- to init
         
-        GL.clear [GL.ColorBuffer, GL.DepthBuffer]
+    --    GL.clear [GL.ColorBuffer, GL.DepthBuffer]
 
 
-        w <- winWidth win
-        h <- winHeight win
-        r <- return . floor =<< pixelRatio win
-        GL.viewport $= ((GL.Position 0 0), (GL.Size (fromIntegral (r * w)) (fromIntegral (r * h))) )
+        --w <- winWidth win
+        --h <- winHeight win
+        --r <- return . floor =<< pixelRatio win
+        --GL.viewport $= ((GL.Position 0 0), (GL.Size (fromIntegral (r * w)) (fromIntegral (r * h))) )
 
 
 -- | Unloads unneeded render-resources and loads needed resources
@@ -145,7 +147,7 @@ prepareResources = return ()
 
 afterRender :: RenderStatistics -> Renderer ()
 afterRender stats = do
-    withWindow $ \win -> io . endDraw $ win
+    --withWindow $ \win -> io . endDraw $ win
     updateStatistics stats
             
 
@@ -173,11 +175,11 @@ shadeItem sProg scene r = shade sProg $! do
 
 
 withWindow :: ByteString -> (Maybe Window -> Renderer a) -> Renderer a
-withWindow name f = asks (T.lookup name . appWindows) >>= f
+withWindow name f = undefined -- TODO asks (T.lookup name . appWindows) >>= f
 
 
-withApplication :: (Application -> Renderer a) -> Renderer a
-withApplication f = asks envApplication >>= f
+--withApplication :: (Application -> Renderer a) -> Renderer a
+--withApplication f = asks envApplication >>= f
 
 
 ---------------------------------------------------------------------------------------------------
@@ -186,7 +188,7 @@ withApplication f = asks envApplication >>= f
 -- | runs the renderer in the given environment to render one frame.
 -- TODO :: combine this with the scene setup
 runRenderer :: Renderer a -> RenderState -> RenderEnv -> IO (a, RenderState)
-runRenderer renderer state env = runRWST env state
+runRenderer renderer state env = undefined -- runRWST env state
 
 ---------------------------------------------------------------------------------------------------
 
@@ -230,7 +232,7 @@ requestShader = requestRenderResource loadedShaders loadShaders addShader
     where
         loadShaders :: YageShaderResource -> Renderer (YageShaderProgram)
         loadShaders shader = do
-            sProg <- io $! loadShaderProgram (vert shader) (frag shader)
+            sProg <- io $! simpleShaderProgram (encodeString $ vert shader) (encodeString $ frag shader)
             return $! sProg
 
 

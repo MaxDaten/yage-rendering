@@ -1,16 +1,12 @@
 {-# LANGUAGE ExistentialQuantification, Rank2Types, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances, StandaloneDeriving, TypeFamilies #-}
 module Yage.Rendering.Shader where
 
-import             Yage.Import
-import             Control.Monad                 (liftM)
-import             Control.Monad.IO.Class
+import             Yage.Prelude
+import qualified   Prelude
 import             Control.Monad.Trans
 
-import             Graphics.GLUtil               (ShaderProgram, asUniform, getUniform)
+import             Graphics.GLUtil               (ShaderProgram)
 import             Graphics.GLUtil.Linear        (AsUniform)
-import             Linear
-
---import qualified   Graphics.Rendering.OpenGL       as GL
 
 ---------------------------------------------------------------------------------------------------
 
@@ -25,7 +21,7 @@ class Monad m => MonadShader sdf sp m | m -> sdf, m -> sp where
 newtype Shader d p m a = Shader { runShader :: d -> p -> m a }
 
 instance Monad m => Monad (Shader d p m) where
-    return a = Shader $ \d p -> return a
+    return a = Shader $ \_d _p -> return a
     m >>= k = Shader $ \d p -> do
         a <- runShader m d p
         runShader (k a) d p

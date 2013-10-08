@@ -13,3 +13,8 @@ dist/
 *.aux
 *.prof
 *.ps
+*.imports
+cabal.sandbox.config
+.cabal-sandbox
+.sublime-project
+.sublime-workspace
