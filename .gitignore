@@ -16,5 +16,5 @@ dist/
 *.imports
 cabal.sandbox.config
 .cabal-sandbox
-.sublime-project
-.sublime-workspace
+*.sublime-project
+*.sublime-workspace
