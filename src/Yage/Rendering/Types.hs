@@ -1,11 +1,10 @@
 {-# LANGUAGE ExistentialQuantification, RecordWildCards, DeriveFunctor, GeneralizedNewtypeDeriving, DeriveDataTypeable, TypeFamilies #-}
 module Yage.Rendering.Types where
 
-import qualified   Prelude
-import             Yage.Prelude
+import             Yage.Prelude                    hiding (log)
 
 import             Data.Maybe                      (fromJust)
-import             Data.List                       (length, sum)
+import             Data.List                       (length)
 import             Foreign.Storable                (sizeOf)
 
 import             Data.Typeable
@@ -13,14 +12,12 @@ import             Control.Monad.RWS.Strict        (RWST)
 import             Control.Monad.Writer            ()
 import             Control.Monad.Reader            ()
 import             Control.Monad.State             ()
-import             Control.Monad.IO.Class          (MonadIO)
 import             Control.Lens                    ((^.))
 import             Linear                          (M44, M33, V3(..), zero, axisAngle, mkTransformation
                                                    , _xyz, (!*!), adjoint, inv33, kronecker, point)
 ---------------------------------------------------------------------------------------------------
 import             Graphics.GLUtil
 import qualified   Graphics.GLUtil                 as GL
-import             Graphics.GLUtil.Camera3D        (Camera(..))
 import qualified   Graphics.GLUtil.Camera3D        as Cam
 import qualified   Graphics.Rendering.OpenGL       as GL
 ---------------------------------------------------------------------------------------------------
@@ -30,16 +27,23 @@ import             Yage.Rendering.Shader
 
 -- =================================================================================================
 
-data Window = Window -- TODO Remove
-
 type Renderer = RWST RenderEnv RenderLog RenderState IO
     --deriving (Functor, Applicative, Monad, MonadIO, MonadReader YageRenderEnv, MonadWriter RenderLog MonadState RenderState, Typeable)
 
-data RenderEnv = RenderEnv
-    { envConfig         :: !RenderConfig    -- ^ The current settings for the frame
+data RenderTarget = RenderTarget
+    { target'size   :: !(Int, Int)
+    , target'ratio  :: !Double
     }
 
-type RenderLog = [String]
+data RenderEnv = RenderEnv
+    { envConfig         :: !RenderConfig    -- ^ The current settings for the frame
+    , renderTarget      :: !RenderTarget
+    }
+
+data RenderLog = RenderLog 
+    { count :: !Integer
+    , log   :: [String]
+    } deriving (Show)
 
 data RenderConfig = RenderConfig
     { confClearColor        :: !(GL.Color4 Double)
@@ -51,19 +55,20 @@ data RenderState = RenderState
     { loadedShaders         :: ![(YageShaderResource, ShaderProgram)]
     , loadedMeshes          :: ![(TriMesh, (VBO, EBO))] -- TODO better Key, better structure
     , loadedDefinitions     :: ![(RenderDefinition, VAO)] -- BETTER KEY!!
-    , renderStatistics      :: !RenderStatistics
+    --, renderStatistics      :: !RenderStatistics
     }
 
-data RenderStatistics = RenderStatistics
-    { lastObjectCount       :: !Int
-    , lastTriangleCount     :: !Int
-    , lastRenderDuration    :: !Double
-    , loadedShadersCount    :: !Int
-    , loadedMeshesCount     :: !Int
-    } deriving Show
+--data RenderStatistics = RenderStatistics
+--    { lastObjectCount       :: !Int
+--    , lastTriangleCount     :: !Int
+--    , lastRenderDuration    :: !Double
+--    , loadedShadersCount    :: !Int
+--    , loadedMeshesCount     :: !Int
+--    } deriving Show
 
 type VBO = GL.BufferObject
 type EBO = GL.BufferObject
+type FBO = GL.FramebufferObject
 
 
 type YageShaderDef = ShaderDefs (GL.VertexArrayDescriptor Int) YageShader
@@ -71,6 +76,9 @@ type YageShaderProgram = ShaderProgram
 newtype YageShader a = YageShader (Shader YageShaderDef YageShaderProgram Renderer a) -- isolate YageRenderer to one
     deriving (Monad, MonadIO, MonadShader YageShaderDef YageShaderProgram)
 
+instance Monoid RenderLog where
+    mempty = RenderLog 0 []
+    mappend (RenderLog ca la) (RenderLog cb lb) = RenderLog (ca + cb) (mappend la lb) 
 
 shade :: ShaderProgram -> YageShader a -> Renderer a
 shade sh (YageShader x) = runShader x globShaderDef sh
@@ -100,7 +108,7 @@ mkUniformDef uni s = (uni s, \p v -> io $! v `asUniform` getUniform p s)
 mkAttrDef :: vad ~ GL.VertexArrayDescriptor a => (String -> vad -> ShaderAttributes String vad) -> String -> vad -> AttributeDef vad YageShader
 mkAttrDef attr s vad = 
     ( attr s vad,
-      \p v' -> io $! do
+      \p _ -> io $! do
         GL.enableAttrib p s
         GL.setAttrib p s GL.ToFloat vad
     )

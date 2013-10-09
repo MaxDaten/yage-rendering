@@ -21,7 +21,7 @@ class Monad m => MonadShader sdf sp m | m -> sdf, m -> sp where
 newtype Shader d p m a = Shader { runShader :: d -> p -> m a }
 
 instance Monad m => Monad (Shader d p m) where
-    return a = Shader $ \_d _p -> return a
+    return a = Shader $ \_ _ -> return a
     m >>= k = Shader $ \d p -> do
         a <- runShader m d p
         runShader (k a) d p

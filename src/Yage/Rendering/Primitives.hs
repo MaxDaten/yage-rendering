@@ -1,6 +1,7 @@
+{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 module Yage.Rendering.Primitives where
 
-import Yage.Prelude
+import Yage.Prelude hiding (id)
 import Control.Lens ((^.))
 
 import Data.List ((++), reverse, map, take, length, (!!), concat, replicate, repeat, zipWith3)
@@ -8,7 +9,7 @@ import Linear (point)
 
 import Yage.Resources
 
-import Linear (V3(..), V4(..), R3(_xyz), cross, signorm, vector)
+import Linear (V3(..), V4(..), R3(_xyz), cross, signorm)
 
 
 cubeMesh :: TriMesh
@@ -52,7 +53,7 @@ processSpareVerts vs ixs color = genNormals $ extract vs ixs
 
       genNormals :: [Position] -> [Vertex]
       genNormals vs =
-        let ns = concat $ map (\(a:b:xs) -> replicate 3 $ genNormal a b) $ splitEvery 3 vs
+        let ns = concat $ map (\(a:b:_) -> replicate 3 $ genNormal a b) $ splitEvery 3 vs
             cs = repeat color
         in zipWith3 Vertex vs ns cs
 

@@ -6,7 +6,7 @@ import              Yage.Prelude
 ---------------------------------------------------------------------------------------------------
 import              Graphics.GLUtil.Camera3D    (Camera, fpsCamera)
 
-import qualified    Yage.Resources      as Res
+-- import qualified    Yage.Resources      as Res
 
 ---------------------------------------------------------------------------------------------------
 

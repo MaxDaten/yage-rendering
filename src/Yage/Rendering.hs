@@ -1,16 +1,18 @@
+{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# LANGUAGE RecordWildCards, GeneralizedNewtypeDeriving, DeriveDataTypeable #-}
 module Yage.Rendering (
       module GLReExports
     , runRenderer
     , renderScene
-
+    , initialRenderState
+    , logRenderM
     ) where
 
-import             Yage.Prelude
+import             Yage.Prelude                    hiding (log)
 
 import             Data.List                       (length, head, sum, map, lookup, groupBy, (++))
 
-import             Control.Monad.RWS.Strict        (ask, asks, runRWST, get, gets, modify, put)
+import             Control.Monad.RWS.Strict        (gets, modify, asks, tell, listen, runRWST)
 import             Control.Monad                   (liftM, mapM)
 import             Filesystem.Path.CurrentOS       (encodeString)
 
@@ -19,11 +21,8 @@ import qualified   Graphics.Rendering.OpenGL       as GL
 import             Graphics.Rendering.OpenGL.GL    (($=))
 import             Graphics.Rendering.OpenGL.GL    as GLReExports (Color4(..))
 ---------------------------------------------------------------------------------------------------
-import             Linear                          (V3(..), R3(_xyz), zero)
-import             Linear.Quaternion               (Quaternion)
 ---------------------------------------------------------------------------------------------------
 import             Yage.Rendering.Types
-import             Yage.Rendering.WorldState
 import             Yage.Rendering.Shader           ((.=))
 import qualified   Yage.Rendering.Shader           as Shader
 import             Yage.Rendering.Utils
@@ -31,19 +30,21 @@ import             Yage.Resources
 {-=================================================================================================-}
 
 
-initRenderStatistics = RenderStatistics
-    { lastObjectCount       = 0
-    , lastTriangleCount     = 0
-    , lastRenderDuration    = 0.0
-    , loadedShadersCount    = 0
-    , loadedMeshesCount     = 0
-    }
+--initRenderStatistics :: RenderStatistics
+--initRenderStatistics = RenderStatistics
+--    { lastObjectCount       = 0
+--    , lastTriangleCount     = 0
+--    , lastRenderDuration    = 0.0
+--    , loadedShadersCount    = 0
+--    , loadedMeshesCount     = 0
+--    }
 
+initialRenderState :: RenderState
 initialRenderState = RenderState 
     { loadedShaders         = []
     , loadedMeshes          = []
     , loadedDefinitions     = []
-    , renderStatistics      = initRenderStatistics
+    --, renderStatistics      = initRenderStatistics
     }
 
 
@@ -65,15 +66,15 @@ renderFrame scene = do
 
     shCount <- gets $! length . loadedShaders
     mshCount <- gets $! length . loadedMeshes
-    let stats = RenderStatistics
-            { lastObjectCount    = objCount
-            , lastRenderDuration = renderTime
-            , lastTriangleCount  = sum $! map (triCount . model) $ entities scene
-            , loadedShadersCount = shCount
-            , loadedMeshesCount  = mshCount
-            }
+    --let stats = RenderStatistics
+    --        { lastObjectCount    = objCount
+    --        , lastRenderDuration = renderTime
+    --        , lastTriangleCount  = sum $! map (triCount . model) $ entities scene
+    --        , loadedShadersCount = shCount
+    --        , loadedMeshesCount  = mshCount
+    --        }
 
-    afterRender stats
+    afterRender
 
 
 doRender :: RenderScene -> Renderer Int
@@ -87,7 +88,7 @@ renderWithData scene r = requestRenderData r >>= \res -> render scene res r
 
 
 renderBatch :: RenderBatch SomeRenderable -> Renderer Int
-renderBatch b@RenderBatch{..} = preBatchAction batch >> length `liftM` mapM perItemAction batch
+renderBatch RenderBatch{..} = preBatchAction batch >> length `liftM` mapM perItemAction batch
 
 
 createShaderBatches :: RenderScene -> [SomeRenderable] -> [RenderBatch SomeRenderable]
@@ -119,23 +120,20 @@ beforeRender = do
 
 
 setupFrame :: Renderer ()
-setupFrame = undefined
-    --withWindow $ \_ -> do
-    --clearC <- asks $ confClearColor . envConfig
-    --io $! do
-    --    -- beginDraw $ win
-
-    --    GL.clearColor $= fmap realToFrac clearC
-    --    GL.depthFunc $= Just GL.Less -- to init
-    --    GL.depthMask $= GL.Enabled      -- to init
+setupFrame = do
+    clearC <- asks $ confClearColor . envConfig
+    target <- asks renderTarget
+    io $! do
+        GL.clearColor $= fmap realToFrac clearC
+        GL.depthFunc $= Just GL.Less    -- TODO to init
+        GL.depthMask $= GL.Enabled      -- TODO to init
         
-    --    GL.clear [GL.ColorBuffer, GL.DepthBuffer]
+        GL.clear [GL.ColorBuffer, GL.DepthBuffer]
 
 
-        --w <- winWidth win
-        --h <- winHeight win
-        --r <- return . floor =<< pixelRatio win
-        --GL.viewport $= ((GL.Position 0 0), (GL.Size (fromIntegral (r * w)) (fromIntegral (r * h))) )
+        let (w, h) = target'size target
+            r      = floor $ target'ratio target
+        GL.viewport $= ((GL.Position 0 0), (GL.Size (fromIntegral (r * w)) (fromIntegral (r * h))) )
 
 
 -- | Unloads unneeded render-resources and loads needed resources
@@ -145,16 +143,16 @@ prepareResources = return ()
 ---------------------------------------------------------------------------------------------------
 
 
-afterRender :: RenderStatistics -> Renderer ()
-afterRender stats = do
+afterRender :: Renderer ()
+afterRender = return ()
     --withWindow $ \win -> io . endDraw $ win
-    updateStatistics stats
+    --updateStatistics
             
 
 ---------------------------------------------------------------------------------------------------
 
 render :: RenderScene -> RenderData -> SomeRenderable -> Renderer ()
-render scene rd@RenderData{..} r = do
+render scene RenderData{..} r = do
     shadeItem shaderProgram scene r
     io $! withVAO vao $! drawIndexedTris . fromIntegral $ triangleCount
 
@@ -167,28 +165,17 @@ setSceneGlobals scene sProg = shade sProg $! do
 
 
 shadeItem :: YageShaderProgram -> RenderScene -> SomeRenderable -> Renderer ()
-shadeItem sProg scene r = shade sProg $! do
+shadeItem sProg _scene r = shade sProg $! do
     let (modelM, normalM) = modelAndNormalMatrix $! r
     Shader.sModelMatrix      .= modelM
     Shader.sNormalMatrix     .= normalM
 ---------------------------------------------------------------------------------------------------
 
 
-withWindow :: ByteString -> (Maybe Window -> Renderer a) -> Renderer a
-withWindow name f = undefined -- TODO asks (T.lookup name . appWindows) >>= f
-
-
---withApplication :: (Application -> Renderer a) -> Renderer a
---withApplication f = asks envApplication >>= f
-
-
----------------------------------------------------------------------------------------------------
-
-
 -- | runs the renderer in the given environment to render one frame.
 -- TODO :: combine this with the scene setup
-runRenderer :: Renderer a -> RenderState -> RenderEnv -> IO (a, RenderState)
-runRenderer renderer state env = undefined -- runRWST env state
+runRenderer :: Renderer a -> RenderState -> RenderEnv -> IO (a, RenderState, RenderLog)
+runRenderer renderer state env = runRWST renderer env state
 
 ---------------------------------------------------------------------------------------------------
 
@@ -197,6 +184,7 @@ requestRenderData r = do
     sh  <- requestShader $ shader r
     vao <- requestVAO $ renderDefinition r
     return $ RenderData vao sh (triCount . model $ r)
+
 
 requestRenderResource :: Eq a 
                   => (RenderState -> [(a, b)])                  -- ^ accassor function for state
@@ -209,6 +197,7 @@ requestRenderResource accessor loadResource addResource a = do
     maybe (loadResource a >>= \r -> addResource (a, r) >> (return $! r))
         return
         (lookup a rs)
+
 
 requestVAO :: RenderDefinition -> Renderer (VAO)
 requestVAO = requestRenderResource loadedDefinitions loadDefinition addDefinition
@@ -232,7 +221,10 @@ requestShader = requestRenderResource loadedShaders loadShaders addShader
     where
         loadShaders :: YageShaderResource -> Renderer (YageShaderProgram)
         loadShaders shader = do
+            io $ print "y<"
+            logRenderM $ format "loadShader: {0}" [show shader]
             sProg <- io $! simpleShaderProgram (encodeString $ vert shader) (encodeString $ frag shader)
+            io $ print "x>"
             return $! sProg
 
 
@@ -240,15 +232,13 @@ requestMesh :: TriMesh -> Renderer (VBO, EBO)
 requestMesh = requestRenderResource loadedMeshes loadMesh addMesh
     where
         loadMesh :: TriMesh -> Renderer (VBO, EBO)
-        loadMesh mesh 
-            | traceShow "start loading mesh" False = undefined
-            | otherwise = io $ do
-                print $ "mesh loaded1" ++ show mesh
-                vbo <- makeBuffer GL.ArrayBuffer $ vertices $ mesh
-                print "mesh loaded2"
-                ebo <- bufferIndices $ map fromIntegral $ indices mesh
-                print "mesh loaded3"
-                return $! (vbo, ebo)
+        loadMesh mesh = io $ do
+            print $ "mesh loaded1" ++ show mesh
+            vbo <- makeBuffer GL.ArrayBuffer $ vertices $ mesh
+            print "mesh loaded2"
+            ebo <- bufferIndices $ map fromIntegral $ indices mesh
+            print "mesh loaded3"
+            return $! (vbo, ebo)
 
 ---------------------------------------------------------------------------------------------------
 
@@ -264,6 +254,9 @@ addDefinition :: (RenderDefinition, VAO) -> Renderer ()
 addDefinition d = modify $ \st -> st{ loadedDefinitions = d:(loadedDefinitions st) }
 
 
-updateStatistics :: RenderStatistics -> Renderer ()
-updateStatistics stats = modify $ \st -> st{ renderStatistics = stats }
+logRenderM :: String -> Renderer ()
+logRenderM msg = tell $ mempty{log = [msg]}
+
+--updateStatistics :: RenderStatistics -> Renderer ()
+--updateStatistics stats = modify $ \st -> st{ renderStatistics = stats }
 

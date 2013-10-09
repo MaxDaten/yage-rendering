@@ -1,7 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
 module Yage.Resources where
 
-import             Yage.Prelude
+import             Yage.Prelude                    hiding (id)
 
 import             Linear                          (V3(..), V4(..))
 import             Data.List                       (length)
@@ -21,9 +21,9 @@ type Color = V4 GLfloat
 type Index = Int
 
 data Vertex = Vertex 
-    { position :: Position
-    , normal   :: Normal
-    , color    :: Color
+    { vert'position :: Position
+    , vert'normal   :: Normal
+    , vert'color    :: Color
     } deriving (Show, Eq)
 
 instance Storable Vertex where
@@ -36,9 +36,9 @@ instance Storable Vertex where
             <*> peekByteOff ptr (sizeOf (undefined :: Position) + sizeOf (undefined :: Normal))
 
     poke ptr Vertex{..} = do
-        pokeByteOff ptr 0 position
-        pokeByteOff ptr (sizeOf (undefined :: Position)) normal
-        pokeByteOff ptr (sizeOf (undefined :: Position) + sizeOf (undefined :: Normal)) color
+        pokeByteOff ptr 0 vert'position
+        pokeByteOff ptr (sizeOf (undefined :: Position)) vert'normal
+        pokeByteOff ptr (sizeOf (undefined :: Position) + sizeOf (undefined :: Normal)) vert'color
 
 data TriMesh = TriMesh
     { meshId   :: !String
