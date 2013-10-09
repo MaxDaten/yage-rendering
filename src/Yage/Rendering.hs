@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
-{-# LANGUAGE RecordWildCards, GeneralizedNewtypeDeriving, DeriveDataTypeable #-}
+{-# LANGUAGE RecordWildCards, GeneralizedNewtypeDeriving, DeriveDataTypeable, ScopedTypeVariables #-}
 module Yage.Rendering (
       module GLReExports
     , runRenderer
@@ -221,10 +221,8 @@ requestShader = requestRenderResource loadedShaders loadShaders addShader
     where
         loadShaders :: YageShaderResource -> Renderer (YageShaderProgram)
         loadShaders shader = do
-            io $ print "y<"
             logRenderM $ format "loadShader: {0}" [show shader]
             sProg <- io $! simpleShaderProgram (encodeString $ vert shader) (encodeString $ frag shader)
-            io $ print "x>"
             return $! sProg
 
 
