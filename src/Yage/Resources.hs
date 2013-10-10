@@ -59,13 +59,14 @@ mkTriMesh id vs ixs = TriMesh id vs ixs $ (length ixs) `quot` 3
 
 ---------------------------------------------------------------------------------------------------
 
-data YageShaderResource = YageShaderResource
+data ShaderResource = ShaderResource
     { vert  :: FilePath
     , frag  :: FilePath
     } deriving (Show, Eq, Ord)
 
 data RenderDefinition = RenderDefinition
-    { defs :: (TriMesh, YageShaderResource)
+    { def'mesh   :: TriMesh
+    , def'shader :: (ShaderResource)
     } deriving (Show, Eq, Ord)
 
 

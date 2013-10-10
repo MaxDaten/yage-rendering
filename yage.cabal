@@ -35,6 +35,7 @@ library
                         Yage.Rendering.Types
                         Yage.Rendering.WorldState
                         Yage.Rendering.Primitives
+                        Yage.Rendering.Logging
   other-modules:
                         Yage.Rendering.Utils
 

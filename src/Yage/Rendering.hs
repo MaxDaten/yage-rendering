@@ -26,6 +26,7 @@ import             Yage.Rendering.Types
 import             Yage.Rendering.Shader           ((.=))
 import qualified   Yage.Rendering.Shader           as Shader
 import             Yage.Rendering.Utils
+import             Yage.Rendering.Logging
 import             Yage.Resources
 {-=================================================================================================-}
 
@@ -157,14 +158,14 @@ render scene RenderData{..} r = do
     io $! withVAO vao $! drawIndexedTris . fromIntegral $ triangleCount
 
 
-setSceneGlobals :: RenderScene -> YageShaderProgram -> Renderer ()
+setSceneGlobals :: RenderScene -> ShaderProgram -> Renderer ()
 setSceneGlobals scene sProg = shade sProg $! do
     Shader.sGlobalTime       .= sceneTime scene
     Shader.sProjectionMatrix .= projectionMatrix scene
     Shader.sViewMatrix       .= viewMatrix scene
 
 
-shadeItem :: YageShaderProgram -> RenderScene -> SomeRenderable -> Renderer ()
+shadeItem :: ShaderProgram -> RenderScene -> SomeRenderable -> Renderer ()
 shadeItem sProg _scene r = shade sProg $! do
     let (modelM, normalM) = modelAndNormalMatrix $! r
     Shader.sModelMatrix      .= modelM
@@ -186,29 +187,35 @@ requestRenderData r = do
     return $ RenderData vao sh (triCount . model $ r)
 
 
-requestRenderResource :: Eq a 
-                  => (RenderState -> [(a, b)])                  -- ^ accassor function for state
+requestRenderResource :: (Eq a, Show b)
+                  => (RenderState -> [(a, b)])              -- ^ accassor function for state
                   -> (a -> Renderer b)                      -- ^ load function for resource
                   -> ((a,b) -> Renderer ())                 -- ^ function to add loaded resource to state
-                  -> a                                          -- ^ the value to load resource from
+                  -> a                                      -- ^ the value to load resource from
                   -> Renderer b                             -- ^ the loaded resource
 requestRenderResource accessor loadResource addResource a = do
     rs <- gets accessor
-    maybe (loadResource a >>= \r -> addResource (a, r) >> (return $! r))
-        return
-        (lookup a rs)
+    r <- case lookup a rs of
+        Just res ->
+            return res
+        Nothing  -> do
+            loaded <- loadResource a
+            logRenderMf "loaded resource: {0}" [show loaded]
+            addResource (a, loaded)
+            return $! loaded
+    return r 
 
 
 requestVAO :: RenderDefinition -> Renderer (VAO)
 requestVAO = requestRenderResource loadedDefinitions loadDefinition addDefinition
     where
         loadDefinition :: RenderDefinition -> Renderer (VAO)
-        loadDefinition (RenderDefinition (mesh, shader)) = do
-            (vbo, ebo) <- requestMesh mesh
-            sProg      <- requestShader shader
+        loadDefinition RenderDefinition{..} = do
+            (vbo, ebo) <- requestMesh def'mesh
+            sProg      <- requestShader def'shader
 
             makeVAO $ do
-                io $ GL.bindBuffer GL.ArrayBuffer $= Just vbo
+                io $ GL.bindBuffer GL.ArrayBuffer        $= Just vbo
                 io $ GL.bindBuffer GL.ElementArrayBuffer $= Just ebo
                 shade sProg $ do
                     Shader.enableAttrib Shader.sVertexPosition
@@ -216,12 +223,12 @@ requestVAO = requestRenderResource loadedDefinitions loadDefinition addDefinitio
                     Shader.enableAttrib Shader.sVertexColor
 
 
-requestShader :: YageShaderResource -> Renderer (YageShaderProgram)
+requestShader :: ShaderResource -> Renderer ShaderProgram
 requestShader = requestRenderResource loadedShaders loadShaders addShader
     where
-        loadShaders :: YageShaderResource -> Renderer (YageShaderProgram)
+        loadShaders :: ShaderResource -> Renderer ShaderProgram
         loadShaders shader = do
-            logRenderM $ format "loadShader: {0}" [show shader]
+            logRenderMf "loadShader: {0}" [show shader]
             sProg <- io $! simpleShaderProgram (encodeString $ vert shader) (encodeString $ frag shader)
             return $! sProg
 
@@ -231,11 +238,8 @@ requestMesh = requestRenderResource loadedMeshes loadMesh addMesh
     where
         loadMesh :: TriMesh -> Renderer (VBO, EBO)
         loadMesh mesh = io $ do
-            print $ "mesh loaded1" ++ show mesh
             vbo <- makeBuffer GL.ArrayBuffer $ vertices $ mesh
-            print "mesh loaded2"
             ebo <- bufferIndices $ map fromIntegral $ indices mesh
-            print "mesh loaded3"
             return $! (vbo, ebo)
 
 ---------------------------------------------------------------------------------------------------
@@ -244,16 +248,13 @@ addMesh :: (TriMesh, (VBO, EBO)) -> Renderer ()
 addMesh m = modify $! \st -> st{ loadedMeshes = m:(loadedMeshes st) }
 
 
-addShader :: (YageShaderResource, YageShaderProgram) -> Renderer ()
+addShader :: (ShaderResource, ShaderProgram) -> Renderer ()
 addShader s = modify $! \st -> st{ loadedShaders = s:(loadedShaders st) }
 
 
 addDefinition :: (RenderDefinition, VAO) -> Renderer ()
 addDefinition d = modify $ \st -> st{ loadedDefinitions = d:(loadedDefinitions st) }
 
-
-logRenderM :: String -> Renderer ()
-logRenderM msg = tell $ mempty{log = [msg]}
 
 --updateStatistics :: RenderStatistics -> Renderer ()
 --updateStatistics stats = modify $ \st -> st{ renderStatistics = stats }

@@ -34,12 +34,11 @@ instance MonadIO m => MonadIO (Shader d p m) where
     liftIO = lift . liftIO
 
 
--- TODO: abstract p Program
-instance (Monad m, p ~ Program) => MonadShader d p (Shader d p m) where
+-- TODO: abstract p ShaderProgram
+instance (Monad m, p ~ ShaderProgram) => MonadShader d p (Shader d p m) where
     setUniform loc value = Shader $ \d p -> let (_, action) = loc d in runShader (action p value) d p
     enableAttrib loc = Shader $ \d p -> let (attr, action) = loc d in runShader (action p attr) d p
 
-type Program = ShaderProgram
 
 data ShaderAttributes s vad = 
       VertexPos !s !vad

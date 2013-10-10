@@ -1,4 +1,10 @@
-{-# LANGUAGE ExistentialQuantification, RecordWildCards, DeriveFunctor, GeneralizedNewtypeDeriving, DeriveDataTypeable, TypeFamilies #-}
+{-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
+{-# LANGUAGE ExistentialQuantification  #-}
+{-# LANGUAGE RecordWildCards            #-}
+{-# LANGUAGE DeriveFunctor              #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveDataTypeable         #-}
+{-# LANGUAGE TypeFamilies               #-}
 module Yage.Rendering.Types where
 
 import             Yage.Prelude                    hiding (log)
@@ -41,9 +47,10 @@ data RenderEnv = RenderEnv
     }
 
 data RenderLog = RenderLog 
-    { count :: !Integer
-    , log   :: [String]
-    } deriving (Show)
+    { rlog'objcount :: !Integer
+    , rlog'log      :: ![String]
+    } deriving (Show, Eq)
+
 
 data RenderConfig = RenderConfig
     { confClearColor        :: !(GL.Color4 Double)
@@ -52,7 +59,7 @@ data RenderConfig = RenderConfig
 
 
 data RenderState = RenderState
-    { loadedShaders         :: ![(YageShaderResource, ShaderProgram)]
+    { loadedShaders         :: ![(ShaderResource, ShaderProgram)]
     , loadedMeshes          :: ![(TriMesh, (VBO, EBO))] -- TODO better Key, better structure
     , loadedDefinitions     :: ![(RenderDefinition, VAO)] -- BETTER KEY!!
     --, renderStatistics      :: !RenderStatistics
@@ -72,13 +79,10 @@ type FBO = GL.FramebufferObject
 
 
 type YageShaderDef = ShaderDefs (GL.VertexArrayDescriptor Int) YageShader
-type YageShaderProgram = ShaderProgram
-newtype YageShader a = YageShader (Shader YageShaderDef YageShaderProgram Renderer a) -- isolate YageRenderer to one
-    deriving (Monad, MonadIO, MonadShader YageShaderDef YageShaderProgram)
+--type YageShaderProgram = ShaderProgram
+newtype YageShader a = YageShader (Shader YageShaderDef ShaderProgram Renderer a) -- isolate YageRenderer to one
+    deriving (Monad, MonadIO, MonadShader YageShaderDef ShaderProgram)
 
-instance Monoid RenderLog where
-    mempty = RenderLog 0 []
-    mappend (RenderLog ca la) (RenderLog cb lb) = RenderLog (ca + cb) (mappend la lb) 
 
 shade :: ShaderProgram -> YageShader a -> Renderer a
 shade sh (YageShader x) = runShader x globShaderDef sh
@@ -112,6 +116,13 @@ mkAttrDef attr s vad =
         GL.enableAttrib p s
         GL.setAttrib p s GL.ToFloat vad
     )
+
+---------------------------------------------------------------------------------------------------
+
+instance Monoid RenderLog where
+    mempty = RenderLog 0 []
+    mappend (RenderLog ca la) (RenderLog cb lb) = RenderLog (ca + cb) (mappend la lb)
+
 ---------------------------------------------------------------------------------------------------
 
 class Typeable r => Renderable r where
@@ -124,11 +135,11 @@ class Typeable r => Renderable r where
     renderDefinition :: r -> RenderDefinition
     modelAndNormalMatrix :: r -> (M44 GL.GLfloat, M33 GL.GLfloat)
     
-    shader :: r -> YageShaderResource
-    shader = snd . defs . renderDefinition
+    shader :: r -> ShaderResource
+    shader = def'shader . renderDefinition
 
     model :: r -> TriMesh
-    model = fst . defs . renderDefinition
+    model = def'mesh . renderDefinition
             
 
 
@@ -210,4 +221,8 @@ instance Renderable RenderEntity where
 
 from1 :: GL.UniformComponent a => a -> GL.Index1 a
 from1 = GL.Index1
+
+---------------------------------------------------------------------------------------------------
+
+deriving instance Show ShaderProgram
 
