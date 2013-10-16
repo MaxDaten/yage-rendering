@@ -11,19 +11,21 @@ module Yage.Rendering (
 
 import             Yage.Prelude                    hiding (log)
 
+import             Foreign.Ptr                     (plusPtr)
 import             Data.List                       (length, head, sum, map, lookup, groupBy, (++))
 
 import             Control.Monad.RWS.Strict        (gets, modify, asks, tell, listen, runRWST)
 import             Control.Monad                   (liftM, mapM, mapM_)
 import             Filesystem.Path.CurrentOS       (encodeString)
 
-import             Graphics.GLUtil                 hiding (makeVAO)
+import             Graphics.GLUtil                 hiding (makeVAO, offset0)
 import qualified   Graphics.Rendering.OpenGL       as GL
 import             Graphics.Rendering.OpenGL.GL    (($=))
 import             Graphics.Rendering.OpenGL.GL    as GLReExports (Color4(..))
 ---------------------------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------------------------
 import             Yage.Rendering.Types
+import             Yage.Rendering.VertexSpec
 import qualified   Yage.Rendering.Shader           as Shader
 import             Yage.Rendering.Utils
 import             Yage.Rendering.Logging
@@ -87,7 +89,7 @@ doRender scene@RenderScene{..} =
 
 
 renderWithData :: RenderScene -> SomeRenderable -> Renderer ()
-renderWithData scene r = requestRenderData r >>= \res -> render scene res r
+renderWithData scene r = requestRenderData r >>= \rdata -> render scene rdata r
 
 
 renderBatch :: RenderBatch SomeRenderable -> Renderer Int
@@ -157,7 +159,7 @@ render :: RenderScene -> RenderData -> SomeRenderable -> Renderer ()
 render scene RenderData{..} r =
     io $! withVAO vao $! do
         let udef = uniform'def . programDef  . renderProgram $ r
-        runUniform udef r scene
+        runUniform udef r scene shaderProgram
         drawIndexedTris . fromIntegral $ triangleCount
 
 
@@ -175,7 +177,8 @@ requestRenderData :: SomeRenderable -> Renderer RenderData
 requestRenderData r = do
     sh  <- requestShader . programSrc . renderProgram $ r
     vao <- requestVAO $ renderDefinition r
-    return $ RenderData vao sh (triCount . def'data . renderDefinition $ r)
+    let triCount = length . vertices . def'data . renderDefinition $ r
+    return $ RenderData vao sh triCount
 
 
 requestRenderResource :: (Eq a, Show b)
@@ -186,7 +189,7 @@ requestRenderResource :: (Eq a, Show b)
                   -> Renderer b                             -- ^ the loaded resource
 requestRenderResource accessor loadResource addResource a = do
     rs <- gets accessor
-    r <- case lookup a rs of
+    r  <- case lookup a rs of
         Just res ->
             return res
         Nothing  -> do
@@ -197,20 +200,35 @@ requestRenderResource accessor loadResource addResource a = do
     return r 
 
 
-requestVAO :: RenderDefinition -> Renderer (VAO)
+requestVAO :: RenderDefinition -> Renderer VAO
 requestVAO = requestRenderResource loadedDefinitions loadDefinition addDefinition
     where
-        loadDefinition :: RenderDefinition -> Renderer (VAO)
+        loadDefinition :: RenderDefinition -> Renderer VAO
         loadDefinition RenderDefinition{..} = do
             (vbo, ebo) <- requestMesh def'data
             sProg      <- requestShader . programSrc $ def'program
-            let defs = attrib'def . programDef $ def'program
+            let defs   = attrib'def . programDef $ def'program
+
             io $ makeVAO $ do
                 GL.bindBuffer GL.ArrayBuffer        $= Just vbo
+                setVertexAttributes sProg defs
                 GL.bindBuffer GL.ElementArrayBuffer $= Just ebo
-                setAttributes sProg defs
-        setAttributes prog =
-            mapM_ (\(name, AttribDef{..}) -> setAttrib prog name ih vad)
+
+
+setVertexAttributes :: ShaderProgram -> [VertexDef] -> IO ()
+setVertexAttributes prog = mapM_ $ setAttribute prog
+    where
+        setAttribute prog (name, layout, _) = do
+            setAttrib prog name GL.ToFloat $ makeVAD layout
+            enableAttrib prog name
+        
+        makeVAD :: MemoryLayout -> GL.VertexArrayDescriptor a
+        makeVAD (off, count, stride) =
+            let n = fromIntegral count
+                t = GL.Float
+                s = fromIntegral stride
+                o = (offset0 `plusPtr` off)
+            in GL.VertexArrayDescriptor n t s o 
 
 
 requestShader :: ShaderResource -> Renderer ShaderProgram
@@ -223,10 +241,10 @@ requestShader = requestRenderResource loadedShaders loadShaders addShader
             return $! sProg
 
 
-requestMesh :: TriMesh -> Renderer (VBO, EBO)
+requestMesh :: Mesh Vertex434 -> Renderer (VBO, EBO)
 requestMesh = requestRenderResource loadedMeshes loadMesh addMesh
     where
-        loadMesh :: TriMesh -> Renderer (VBO, EBO)
+        loadMesh :: Mesh Vertex434 -> Renderer (VBO, EBO)
         loadMesh mesh = io $ do
             vbo <- makeBuffer GL.ArrayBuffer $ vertices $ mesh
             ebo <- bufferIndices $ map fromIntegral $ indices mesh
@@ -234,7 +252,7 @@ requestMesh = requestRenderResource loadedMeshes loadMesh addMesh
 
 ---------------------------------------------------------------------------------------------------
 
-addMesh :: (TriMesh, (VBO, EBO)) -> Renderer ()
+addMesh :: (Mesh Vertex434, (VBO, EBO)) -> Renderer ()
 addMesh m = modify $! \st -> st{ loadedMeshes = m:(loadedMeshes st) }
 
 

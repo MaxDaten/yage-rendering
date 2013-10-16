@@ -8,11 +8,12 @@ import Data.List ((++), reverse, map, take, length, (!!), concat, replicate, rep
 import Linear (point)
 
 import Yage.Rendering.Types
+import Yage.Rendering.VertexSpec
 
 import Linear (V3(..), V4(..), R3(_xyz), cross, signorm)
 
 
-cubeMesh :: TriMesh
+cubeMesh :: Mesh Vertex434
 cubeMesh = 
     let verts = point 
                 <$> [ V3 (-0.5) 0.5 0.5   , V3 0.5 0.5 0.5   , V3 0.5 (-0.5) 0.5   , V3 (-0.5) (-0.5) 0.5
@@ -31,7 +32,7 @@ cubeMesh =
                   ++ bottomFace
     in mkTriMeshfromSpare "cube" (traceShow' verts) (traceShow' ixs) (V4 1.0 1.0 1.0 1.0)
 
-quadMesh :: TriMesh
+quadMesh :: Mesh Vertex434
 quadMesh = 
     let verts = point 
                 <$> [ V3 (-0.5) 0.5 0.0, V3 (-0.5) (-0.5) 0.0, V3 0.5 (-0.5) 0.0, V3 0.5 0.5 0.0 ]
@@ -39,19 +40,19 @@ quadMesh =
         color = V4 1.0 1.0 1.0 1.0
     in mkTriMeshfromSpare "quad" verts ixs color
 
-mkTriMeshfromSpare :: String -> [Position] -> [Index] -> Color -> TriMesh
+mkTriMeshfromSpare :: String -> [Position4f] -> [Index] -> Color4f -> Mesh Vertex434
 mkTriMeshfromSpare id verts ixs color = traceShow' $ mkTriMesh id (processSpareVerts verts ixs color) (take (length ixs) [0..])
 
 
 -- | takes spare 3d-points (without duplicates) and the indices
 -- to construct the adequate attributes to be processed by opengl 
-processSpareVerts :: [Position] -> [Index] -> Color -> [Vertex]
+processSpareVerts :: [Position4f] -> [Index] -> Color4f -> [Vertex434]
 processSpareVerts vs ixs color = genNormals $ extract vs ixs
     where 
-      extract :: [Position] -> [Index] -> [Position]
+      extract :: [Position4f] -> [Index] -> [Position4f]
       extract vs = map (vs!!)
 
-      genNormals :: [Position] -> [Vertex]
+      genNormals :: [Position4f] -> [Vertex434]
       genNormals vs =
         let ns = concat $ map (\(a:b:_) -> replicate 3 $ genNormal a b) $ splitEvery 3 vs
             cs = repeat color
@@ -59,6 +60,6 @@ processSpareVerts vs ixs color = genNormals $ extract vs ixs
 
       -- | generate a normal with cross product from two vectors and flip the normal to
       -- show from the inside to the outside
-      genNormal :: Position -> Position -> Normal
+      genNormal :: Position4f -> Position4f -> Normal3f
       genNormal v1 v2 = signorm $ (v1^._xyz) `cross` (v2^._xyz)
 

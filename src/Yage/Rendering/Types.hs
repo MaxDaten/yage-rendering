@@ -8,27 +8,29 @@
 {-# LANGUAGE TypeSynonymInstances       #-}
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE UndecidableInstances       #-}
+{-# LANGUAGE DeriveDataTypeable, DeriveTraversable #-}
 module Yage.Rendering.Types where
 
 import             Yage.Prelude                    hiding (log)
 
 import             Data.List                       (length)
+import             Foreign.C.Types                 (CFloat(..))
 
 import             Data.Typeable
-import             Foreign.Storable
+import             Data.Data
 import             Control.Monad.RWS.Strict        (RWST)
 import             Control.Monad.Writer            ()
 import             Control.Monad.Reader            ()
 import             Control.Monad.State             ()
-import             Linear                          (Quaternion, M44, M33, V4(..), V3(..), zero, axisAngle, mkTransformation
-                                                   , _xyz, (!*!), adjoint, inv33, kronecker, point)
+import             Control.Lens                    hiding (Index)
+import             Linear                          (Quaternion, M22, M33, M44, V3(..), V4(..), zero, axisAngle)
 ---------------------------------------------------------------------------------------------------
 import             Graphics.GLUtil
 import qualified   Graphics.GLUtil.Camera3D        as Cam
 import qualified   Graphics.Rendering.OpenGL       as GL
-import             Graphics.Rendering.OpenGL       (GLfloat)
 ---------------------------------------------------------------------------------------------------
-
+import             Yage.Rendering.VertexSpec
 -- =================================================================================================
 
 type Renderer = RWST RenderEnv RenderLog RenderState IO
@@ -58,7 +60,7 @@ data RenderConfig = RenderConfig
 
 data RenderState = RenderState
     { loadedShaders         :: ![(ShaderResource, ShaderProgram)]
-    , loadedMeshes          :: ![(TriMesh, (VBO, EBO))] -- TODO better Key, better structure
+    , loadedMeshes          :: ![(Mesh Vertex434, (VBO, EBO))] -- TODO better Key, better structure
     , loadedDefinitions     :: ![(RenderDefinition, VAO)] -- BETTER KEY!!
     --, renderStatistics      :: !RenderStatistics
     }
@@ -85,14 +87,18 @@ instance Monoid RenderLog where
 ---------------------------------------------------------------------------------------------------
 
 class Typeable r => Renderable r where
-    --render             :: RenderScene -> RenderData -> r -> YageRenderer ()
 
     -- | resources required by the 'Renderable'
     --   this definition will be used to generate the resources for a
     --   'render'-call. If the 'Renderable' leaves the 'RenderScene'
     --   the resources will be freed
     renderDefinition :: r -> RenderDefinition
-    --modelAndNormalMatrix :: r -> (M44 GL.GLfloat, M33 GL.GLfloat)
+
+    fromRenderable :: SomeRenderable -> Maybe r
+    fromRenderable (SomeRenderable r) = cast r
+    
+    toRenderable :: r -> SomeRenderable
+    toRenderable = SomeRenderable
             
 
    
@@ -105,17 +111,12 @@ programSrc = fst
 programDef :: Program -> ShaderDefinition
 programDef = snd
 
-renderData :: (Renderable r) => r -> TriMesh
+renderData :: (Renderable r) => r -> Mesh Vertex434
 renderData = def'data . renderDefinition
 
 
-data SomeRenderable = forall r. Renderable r => SomeRenderable r
+data SomeRenderable = forall r. (Typeable r, Renderable r) => SomeRenderable r
     deriving (Typeable)
-
-
-fromRenderable :: Renderable r => SomeRenderable -> Maybe r
-fromRenderable (SomeRenderable r) = cast r
-
 
 instance Renderable SomeRenderable where
     --render scene res (SomeRenderable r) = render scene res r
@@ -136,9 +137,9 @@ data Renderable r => RenderBatch r = RenderBatch
 -- mark ents or seperate?
 data RenderScene = RenderScene
     { entities            :: [SomeRenderable]
-    , sceneTime           :: !GL.GLfloat
-    , viewMatrix          :: !(M44 GL.GLfloat)
-    , projectionMatrix    :: !(M44 GL.GLfloat)
+    , sceneTime           :: !Float
+    , viewMatrix          :: !(M44 Float)
+    , projectionMatrix    :: !(M44 Float)
     } deriving (Typeable)
 
 
@@ -151,12 +152,16 @@ entitiesCount = length . entities
 
 ---------------------------------------------------------------------------------------------------
 
+type Orientation = Quaternion Float
+type Scale       = V3 Float
+type Position    = V3 Float
+
 data RenderEntity = RenderEntity
     { ePosition    :: !Position
     , eOrientation :: !Orientation
     , eScale       :: !Scale
     , renderDef    :: RenderDefinition
-    } deriving (Typeable)
+    } deriving (Typeable, Show)
 
 mkRenderEntity :: RenderDefinition -> RenderEntity
 mkRenderEntity def = RenderEntity
@@ -192,56 +197,25 @@ from1 = GL.Index1
 ---------------------------------------------------------------------------------------------------
 
 deriving instance Show ShaderProgram
-
-
-type Orientation = Quaternion GLfloat
-type Scale = V3 GLfloat
-
---type Vertex = V4 GLfloat
-type Position = V4 GLfloat
-type Normal = V3 GLfloat
-type Color = V4 GLfloat
-type Index = Int
-
-data Vertex = Vertex 
-    { vert'position :: Position
-    , vert'normal   :: Normal
-    , vert'color    :: Color
-    } deriving (Show, Eq)
-
-instance Storable Vertex where
-    sizeOf _ = sizeOf (undefined::Position) + sizeOf (undefined::Normal) + sizeOf (undefined::Color)
-    alignment _ = alignment (undefined::Position)
-    peek ptr = 
-        Vertex 
-            <$> peekByteOff ptr 0
-            <*> peekByteOff ptr (sizeOf (undefined :: Position))
-            <*> peekByteOff ptr (sizeOf (undefined :: Position) + sizeOf (undefined :: Normal))
-
-    poke ptr Vertex{..} = do
-        pokeByteOff ptr 0 vert'position
-        pokeByteOff ptr (sizeOf (undefined :: Position)) vert'normal
-        pokeByteOff ptr (sizeOf (undefined :: Position) + sizeOf (undefined :: Normal)) vert'color
-
+type Index     = Int
 -- TODO need a layout
 
-data TriMesh = 
-    TriMesh
-    { meshId   :: !String
-    , vertices :: ![Vertex]
+data Mesh v = 
+    Mesh
+    { ident    :: !String
+    , vertices :: ![v]
     , indices  :: ![Index]
-    , triCount :: !Int
     } deriving (Show)
 
-instance Eq TriMesh where
-    a == b = meshId a == meshId b
+instance Eq (Mesh v) where
+    a == b = ident a == ident b
 
-instance Ord TriMesh where
-    compare a b = compare (meshId a) (meshId b)
+instance Ord (Mesh v) where
+    compare a b = compare (ident a) (ident b)
 
-mkTriMesh :: String -> [Vertex] -> [Index] -> TriMesh
+mkTriMesh :: String -> [v] -> [Index] -> Mesh v
 -- TODO some assertions for invalid meshes
-mkTriMesh id vs ixs = TriMesh id vs ixs $ (length ixs) `quot` 3
+mkTriMesh ident vs ixs = Mesh ident vs ixs -- $ (length ixs) `quot` 3
 
 ---------------------------------------------------------------------------------------------------
 
@@ -251,29 +225,42 @@ data ShaderResource = ShaderResource
     , frag'src   :: FilePath
     } deriving (Show, Eq, Ord)
 
-data AttribDef a = AttribDef
-    { vad :: GL.VertexArrayDescriptor a
-    , ih  :: GL.IntegerHandling
-    } deriving (Show, Eq, Ord)
---type ShaderDefinition = forall a. ShaderDef (VAD a) RenderEntity RenderScene
-
-type ShaderAttributeDef a = (String, AttribDef a)
-data ShaderUniformDef r s = ShaderUniformDef { runUniform :: r -> s -> IO () }
+data ShaderUniformDef r s = ShaderUniformDef { runUniform :: r -> s -> ShaderProgram -> IO () }
 
 data ShaderDefinition = ShaderDefinition
-    { attrib'def :: forall a. [ShaderAttributeDef a]
-    , uniform'def :: (Renderable r) => ShaderUniformDef r RenderScene
+    { attrib'def  :: [VertexDef]
+    , uniform'def :: ShaderUniformDef SomeRenderable RenderScene
     }
-
-instance Show ShaderDefinition where show = show . attrib'def
-instance Eq ShaderDefinition where (==) a b = attrib'def a == attrib'def b 
-instance Ord ShaderDefinition where compare a b = attrib'def a `compare` attrib'def b
 
 type Program = (ShaderResource, ShaderDefinition)
 
 data RenderDefinition = RenderDefinition
-    { def'data      :: TriMesh
+    { def'ident     :: String
+    , def'data      :: Mesh Vertex434
     , def'program   :: Program
-    } deriving (Show, Eq, Ord)
+    } deriving (Show)
 
+instance Eq RenderDefinition where
+    a == b = def'ident a == def'ident b
 
+instance Ord RenderDefinition where
+    compare a b = compare (def'ident a) (def'ident b) 
+
+instance Show ShaderDefinition where
+    show = show . attrib'def
+
+---------------------------------------------------------------------------------------------------
+instance AsUniform Float where
+    asUniform = asUniform . CFloat
+
+--instance AsUniform Double where
+--    asUniform = asUniform . CFloat . double2Float
+
+instance AsUniform (M44 Float) where
+    asUniform m = asUniform $ over (mapped.mapped) CFloat m
+
+instance AsUniform (M33 Float) where
+    asUniform m = asUniform $ over (mapped.mapped) CFloat m
+
+instance AsUniform (M22 Float) where
+    asUniform m = asUniform $ over (mapped.mapped) CFloat m
