@@ -7,7 +7,7 @@ import Control.Lens ((^.))
 import Data.List ((++), reverse, map, take, length, (!!), concat, replicate, repeat, zipWith3)
 import Linear (point)
 
-import Yage.Resources
+import Yage.Rendering.Types
 
 import Linear (V3(..), V4(..), R3(_xyz), cross, signorm)
 

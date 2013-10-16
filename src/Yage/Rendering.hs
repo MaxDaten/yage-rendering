@@ -6,6 +6,7 @@ module Yage.Rendering (
     , renderScene
     , initialRenderState
     , logRenderM
+    , version
     ) where
 
 import             Yage.Prelude                    hiding (log)
@@ -13,7 +14,7 @@ import             Yage.Prelude                    hiding (log)
 import             Data.List                       (length, head, sum, map, lookup, groupBy, (++))
 
 import             Control.Monad.RWS.Strict        (gets, modify, asks, tell, listen, runRWST)
-import             Control.Monad                   (liftM, mapM)
+import             Control.Monad                   (liftM, mapM, mapM_)
 import             Filesystem.Path.CurrentOS       (encodeString)
 
 import             Graphics.GLUtil                 hiding (makeVAO)
@@ -23,12 +24,13 @@ import             Graphics.Rendering.OpenGL.GL    as GLReExports (Color4(..))
 ---------------------------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------------------------
 import             Yage.Rendering.Types
-import             Yage.Rendering.Shader           ((.=))
 import qualified   Yage.Rendering.Shader           as Shader
 import             Yage.Rendering.Utils
 import             Yage.Rendering.Logging
 import             Yage.Resources
 {-=================================================================================================-}
+
+import Paths_yage_rendering
 
 
 --initRenderStatistics :: RenderStatistics
@@ -98,16 +100,15 @@ createShaderBatches scene rs =
     in map mkShaderBatch shaderGroups
     where
         sameShader :: SomeRenderable -> SomeRenderable -> Bool
-        sameShader a b = shader a == shader b
+        sameShader a b = (programSrc $ renderProgram a) == (programSrc $ renderProgram b)
 
         mkShaderBatch :: [SomeRenderable] -> RenderBatch SomeRenderable
         mkShaderBatch rs =
-            let batchShader = shader . head $ rs
+            let batchShader = programSrc $ renderProgram . head $ rs
             in RenderBatch
                 { preBatchAction = \_ -> do
                     shader <- requestShader batchShader 
                     io $! GL.currentProgram $= Just (program shader)
-                    setSceneGlobals scene shader
                 , perItemAction = renderWithData scene
                 , batch = rs
                 }
@@ -153,23 +154,13 @@ afterRender = return ()
 ---------------------------------------------------------------------------------------------------
 
 render :: RenderScene -> RenderData -> SomeRenderable -> Renderer ()
-render scene RenderData{..} r = do
-    shadeItem shaderProgram scene r
-    io $! withVAO vao $! drawIndexedTris . fromIntegral $ triangleCount
+render scene RenderData{..} r =
+    io $! withVAO vao $! do
+        let udef = uniform'def . programDef  . renderProgram $ r
+        runUniform udef r scene
+        drawIndexedTris . fromIntegral $ triangleCount
 
 
-setSceneGlobals :: RenderScene -> ShaderProgram -> Renderer ()
-setSceneGlobals scene sProg = shade sProg $! do
-    Shader.sGlobalTime       .= sceneTime scene
-    Shader.sProjectionMatrix .= projectionMatrix scene
-    Shader.sViewMatrix       .= viewMatrix scene
-
-
-shadeItem :: ShaderProgram -> RenderScene -> SomeRenderable -> Renderer ()
-shadeItem sProg _scene r = shade sProg $! do
-    let (modelM, normalM) = modelAndNormalMatrix $! r
-    Shader.sModelMatrix      .= modelM
-    Shader.sNormalMatrix     .= normalM
 ---------------------------------------------------------------------------------------------------
 
 
@@ -182,9 +173,9 @@ runRenderer renderer state env = runRWST renderer env state
 
 requestRenderData :: SomeRenderable -> Renderer RenderData
 requestRenderData r = do
-    sh  <- requestShader $ shader r
+    sh  <- requestShader . programSrc . renderProgram $ r
     vao <- requestVAO $ renderDefinition r
-    return $ RenderData vao sh (triCount . model $ r)
+    return $ RenderData vao sh (triCount . def'data . renderDefinition $ r)
 
 
 requestRenderResource :: (Eq a, Show b)
@@ -211,16 +202,15 @@ requestVAO = requestRenderResource loadedDefinitions loadDefinition addDefinitio
     where
         loadDefinition :: RenderDefinition -> Renderer (VAO)
         loadDefinition RenderDefinition{..} = do
-            (vbo, ebo) <- requestMesh def'mesh
-            sProg      <- requestShader def'shader
-
-            makeVAO $ do
-                io $ GL.bindBuffer GL.ArrayBuffer        $= Just vbo
-                io $ GL.bindBuffer GL.ElementArrayBuffer $= Just ebo
-                shade sProg $ do
-                    Shader.enableAttrib Shader.sVertexPosition
-                    Shader.enableAttrib Shader.sVertexNormal
-                    Shader.enableAttrib Shader.sVertexColor
+            (vbo, ebo) <- requestMesh def'data
+            sProg      <- requestShader . programSrc $ def'program
+            let defs = attrib'def . programDef $ def'program
+            io $ makeVAO $ do
+                GL.bindBuffer GL.ArrayBuffer        $= Just vbo
+                GL.bindBuffer GL.ElementArrayBuffer $= Just ebo
+                setAttributes sProg defs
+        setAttributes prog =
+            mapM_ (\(name, AttribDef{..}) -> setAttrib prog name ih vad)
 
 
 requestShader :: ShaderResource -> Renderer ShaderProgram
@@ -229,7 +219,7 @@ requestShader = requestRenderResource loadedShaders loadShaders addShader
         loadShaders :: ShaderResource -> Renderer ShaderProgram
         loadShaders shader = do
             logRenderMf "loadShader: {0}" [show shader]
-            sProg <- io $! simpleShaderProgram (encodeString $ vert shader) (encodeString $ frag shader)
+            sProg <- io $! simpleShaderProgram (encodeString $ vert'src shader) (encodeString $ frag'src shader)
             return $! sProg
 
 

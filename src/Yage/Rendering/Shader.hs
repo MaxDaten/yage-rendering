@@ -10,66 +10,21 @@ import             Graphics.GLUtil.Linear        (AsUniform)
 
 ---------------------------------------------------------------------------------------------------
 
--- | sdf = shader def
--- sp = shader program
--- m the inside monad
-class Monad m => MonadShader sdf sp m | m -> sdf, m -> sp where
-    -- | set (.=) for an infix
-    setUniform :: AsUniform u => (sdf -> UniformDef u m) -> u -> m ()
-    enableAttrib :: (sdf -> AttributeDef vad m) -> m ()
 
-newtype Shader d p m a = Shader { runShader :: d -> p -> m a }
+--data ShaderAttributeDef vad = ShaderAttributeDef
+--    { shaderAttr'name       :: String
+--    , shaderAttr'descriptor :: vad
+--    }
 
-instance Monad m => Monad (Shader d p m) where
-    return a = Shader $ \_ _ -> return a
-    m >>= k = Shader $ \d p -> do
-        a <- runShader m d p
-        runShader (k a) d p
-    fail str = Shader $ \_ _ -> fail str
+--data ShaderUniformDef r s m = ShaderUniformDef
+--    { uniformFun :: r -> s -> m () }
 
-instance MonadTrans (Shader d p) where
-    lift m = Shader $ \_ _ -> m
-
-instance MonadIO m => MonadIO (Shader d p m) where
-    liftIO = lift . liftIO
-
-
--- TODO: abstract p ShaderProgram
-instance (Monad m, p ~ ShaderProgram) => MonadShader d p (Shader d p m) where
-    setUniform loc value = Shader $ \d p -> let (_, action) = loc d in runShader (action p value) d p
-    enableAttrib loc = Shader $ \d p -> let (attr, action) = loc d in runShader (action p attr) d p
-
-
-data ShaderAttributes s vad = 
-      VertexPos !s !vad
-    | VertexNormal !s !vad
-    | VertexColor !s !vad
-
-type EnableAction vad m = ShaderProgram -> ShaderAttributes String vad -> m ()
-type AttributeDef vad m = (ShaderAttributes String vad, EnableAction vad m)
-
-data ShaderUniforms s = 
-      GlobalTime !s
-    | ProjectionMatrix !s
-    | ViewMatrix !s
-    | ModelMatrix !s
-    | NormalMatrix !s
-
-type SetAction u m = ShaderProgram -> u -> m ()
-type UniformDef u m = (ShaderUniforms String, SetAction u m)
-
-data ShaderDefs vad m = ShaderDefs
-    { sVertexPosition     :: AttributeDef vad m
-    , sVertexNormal       :: AttributeDef vad m
-    , sVertexColor        :: AttributeDef vad m
-    , sGlobalTime         :: (AsUniform u) => UniformDef u m
-    , sProjectionMatrix   :: (AsUniform u) => UniformDef u m
-    , sViewMatrix         :: (AsUniform u) => UniformDef u m
-    , sModelMatrix        :: (AsUniform u) => UniformDef u m
-    , sNormalMatrix       :: (AsUniform u) => UniformDef u m
-    }
+--data ShaderDef vad r s = ShaderDef
+--    { attribs :: [(String, vad)]        -- | attribute name asign to vertex array descriptor
+--    , uniform :: r -> s -> IO ()
+--    }
 
 ---------------------------------------------------------------------------------------------------
 
-(.=) :: (AsUniform u, Monad m, MonadShader sdf sp m) => (sdf -> UniformDef u m) -> u -> m ()
-(.=) = setUniform
+--(.=) :: (AsUniform u, Monad m, MonadShader sdf sp m) => (sdf -> UniformDef u m) -> u -> m ()
+--(.=) = setUniform

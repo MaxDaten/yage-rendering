@@ -37,6 +37,7 @@ library
                         Yage.Rendering.Primitives
                         Yage.Rendering.Logging
   other-modules:
+                        Paths_yage_rendering
                         Yage.Rendering.Utils
 
   ghc-options:          -threaded -O2
