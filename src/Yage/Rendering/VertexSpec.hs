@@ -13,7 +13,7 @@ module Yage.Rendering.VertexSpec
     , Position4f, Normal3f, Color4f
     , Vertex434
     , VertexDef, _name, _layout, _data
-    , MemoryLayout, _offset, _stride, _count
+    , MemoryLayout, _offset, _size, _count
     , define, toDef, (^:=)
     ) where
 ---------------------------------------------------------------------------------------------------
@@ -60,25 +60,25 @@ instance (Storable p, Storable n, Storable c) => Storable (Vertex p n c) where
 
 
 
-type VertexDef = (String, MemoryLayout, SomeStorable)
-type MemoryLayout = (Int, Int, Int) -- | (offset, count, stride)
+type VertexDef = (String, MemoryLayout)
+type MemoryLayout = (Int, Int, Int) -- | (offset, count, size)
 
 _name   = _1
 _layout = _2
 _data   = _3
 _offset = _1
 _count  = _2
-_stride = _3
+_size   = _3
 
 define :: s -> [Getting VertexDef s VertexDef] -> [VertexDef]
 define datum defs = map (\g -> datum^.g) defs & scanl1Of (traverse._2) offsetPlus
     where
         offsetPlus :: MemoryLayout -> MemoryLayout -> MemoryLayout 
-        offsetPlus l1 l2 = set _offset (l1^._offset + l1^._stride + l2^._offset) l2
+        offsetPlus l1 l2 = set _offset (l1^._offset + l1^._size + l2^._offset) l2
 
 
 toDef :: (Typeable (t s), Traversable t, Storable (t s)) => String -> Getter (t s) VertexDef
-toDef name = to $ \s -> (name, memoryLayout s, toStorable s)
+toDef name = to $ \s -> (name, memoryLayout s)
     where 
         memoryLayout :: (Traversable t, Storable (t s)) => t s -> MemoryLayout
         memoryLayout s = (0, lengthOf traverse s, sizeOf s)

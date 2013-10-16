@@ -10,6 +10,7 @@ module Yage.Rendering (
     ) where
 
 import             Yage.Prelude                    hiding (log)
+import             Control.Lens                    hiding (indices)
 
 import             Foreign.Ptr                     (plusPtr)
 import             Data.List                       (length, head, sum, map, lookup, groupBy, (++))
@@ -178,7 +179,7 @@ requestRenderData r = do
     sh  <- requestShader . programSrc . renderProgram $ r
     vao <- requestVAO $ renderDefinition r
     let triCount = length . vertices . def'data . renderDefinition $ r
-    return $ RenderData vao sh triCount
+    return $ RenderData vao sh (triCount `quot` 3)
 
 
 requestRenderResource :: (Eq a, Show b)
@@ -207,7 +208,7 @@ requestVAO = requestRenderResource loadedDefinitions loadDefinition addDefinitio
         loadDefinition RenderDefinition{..} = do
             (vbo, ebo) <- requestMesh def'data
             sProg      <- requestShader . programSrc $ def'program
-            let defs   = attrib'def . programDef $ def'program
+            let defs    =    attrib'def . programDef $ def'program
 
             io $ makeVAO $ do
                 GL.bindBuffer GL.ArrayBuffer        $= Just vbo
@@ -216,18 +217,22 @@ requestVAO = requestRenderResource loadedDefinitions loadDefinition addDefinitio
 
 
 setVertexAttributes :: ShaderProgram -> [VertexDef] -> IO ()
-setVertexAttributes prog = mapM_ $ setAttribute prog
+setVertexAttributes prog vdef = 
+    let stride = sumOf (folded._layout._size) vdef
+    in mapM_ (setAttribute prog stride) vdef 
     where
-        setAttribute prog (name, layout, _) = do
-            setAttrib prog name GL.ToFloat $ makeVAD layout
+        setAttribute prog stride (name, layout) = do
+            let vad = makeVAD layout stride
+            print vad
+            setAttrib prog name GL.ToFloat vad
             enableAttrib prog name
         
-        makeVAD :: MemoryLayout -> GL.VertexArrayDescriptor a
-        makeVAD (off, count, stride) =
+        makeVAD :: MemoryLayout -> Int -> GL.VertexArrayDescriptor a
+        makeVAD (off, count, size) stride =
             let n = fromIntegral count
                 t = GL.Float
-                s = fromIntegral stride
-                o = (offset0 `plusPtr` off)
+                s = fromIntegral stride --n * 2 * fromIntegral size
+                o = (offsetPtr off)
             in GL.VertexArrayDescriptor n t s o 
 
 
