@@ -24,6 +24,8 @@ l     = -one
 
 white = (V4 1.0 1.0 1.0 1.0)
 
+-------------------------------------------------------------------------------
+
 cubeMesh :: Mesh Vertex434
 cubeMesh = 
     let 
@@ -52,6 +54,8 @@ cubeMesh =
                   ++ bottomFace
     in makeMeshfromSpare "cube" (traceShow' verts) (traceShow' ixs) white
 
+
+
 quadMesh :: Mesh Vertex434
 quadMesh = 
     let tl    = V3 (-one)   one  zero
@@ -62,9 +66,14 @@ quadMesh =
         ixs   = [0, 1, 2, 2, 3, 0]
     in makeMeshfromSpare "quad" verts ixs white
 
+
+-------------------------------------------------------------------------------
+
+
 makeMeshfromSpare :: String -> [Position4f] -> [Index] -> Color4f -> Mesh Vertex434
 makeMeshfromSpare id verts ixs color =
     mkTriMesh id (processSpareVerts verts ixs color) $ take (length ixs) [0..]
+
 
 
 -- | takes spare 3d-points (without duplicates) and the indices
