@@ -179,16 +179,6 @@ data RenderData = RenderData
 instance Renderable RenderEntity where
     renderDefinition = renderDef
 
-{--
-modelAndNormalMatrix r =
-        let scaleM      = mkScale . eScale $ r                                         :: M44 GL.GLfloat
-            transformM  = mkTransformation (eOrientation $ r) ((ePosition $ r)^._xyz)  :: M44 GL.GLfloat
-            modelM      = transformM !*! scaleM                                        :: M44 GL.GLfloat
-            normalM     = adjoint $ fromJust . inv33 . fromTransformation $ modelM     :: M33 GL.GLfloat
-        in (modelM, normalM)
-        where mkScale = kronecker . point
---}
-                
 
 from1 :: GL.UniformComponent a => a -> GL.Index1 a
 from1 = GL.Index1
@@ -197,13 +187,13 @@ from1 = GL.Index1
 
 deriving instance Show ShaderProgram
 type Index     = Int
--- TODO need a layout
 
 data Mesh v = 
     Mesh
     { ident    :: !String
     , vertices :: ![v]
     , indices  :: ![Index]
+    , triCount :: !Int
     } deriving (Show)
 
 instance Eq (Mesh v) where
@@ -214,7 +204,7 @@ instance Ord (Mesh v) where
 
 mkTriMesh :: String -> [v] -> [Index] -> Mesh v
 -- TODO some assertions for invalid meshes
-mkTriMesh ident vs ixs = Mesh ident vs ixs -- $ (length ixs) `quot` 3
+mkTriMesh ident vs ixs = Mesh ident vs ixs $ (length ixs) `quot` 3
 
 ---------------------------------------------------------------------------------------------------
 
@@ -248,15 +238,9 @@ instance Ord RenderDefinition where
 instance Show RenderDefinition where
     show = show . def'ident 
 
---instance Show ShaderDefinition where
---    show = show . attrib'def
-
 ---------------------------------------------------------------------------------------------------
 instance AsUniform Float where
     asUniform = asUniform . CFloat
-
---instance AsUniform Double where
---    asUniform = asUniform . CFloat . double2Float
 
 instance AsUniform (M44 Float) where
     asUniform m = asUniform $ over (mapped.mapped) CFloat m

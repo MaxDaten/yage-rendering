@@ -8,7 +8,7 @@ module Yage.Rendering (
     , logRenderM
     , version
     ) where
-
+---------------------------------------------------------------------------------------------------
 import             Yage.Prelude                    hiding (log)
 import             Control.Lens                    hiding (indices)
 
@@ -163,10 +163,10 @@ runRenderer renderer state env = runRWST renderer env state
 
 requestRenderData :: SomeRenderable -> Renderer RenderData
 requestRenderData r = do
-    sh  <- requestShader . programSrc . renderProgram $ r
-    vao <- requestVAO $ renderDefinition r
-    let triCount = length . vertices . def'data . renderDefinition $ r
-    return $ RenderData vao sh (triCount `quot` 3)
+    sh       <- requestShader . programSrc . renderProgram $ r
+    vao      <- requestVAO $ renderDefinition r
+    let tris = triCount . def'data . renderDefinition $ r
+    return $ RenderData vao sh tris
 
 
 requestRenderResource :: (Eq a, Show b)
