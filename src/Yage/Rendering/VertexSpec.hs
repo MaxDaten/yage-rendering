@@ -6,14 +6,18 @@
 {-# LANGUAGE ImpredicativeTypes         #-}
 {-# LANGUAGE KindSignatures             #-}
 {-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE TupleSections              #-}
 {-# LANGUAGE NoMonomorphismRestriction  #-} -- evil but just for _offset _count _stride
 
 module Yage.Rendering.VertexSpec
     ( Vertex(..), _position, _normal, _color
     , Position4f, Normal3f, Color4f
     , Vertex434
-    , VertexDef, _name, _layout, _data
-    , MemoryLayout, _offset, _size, _count
+    , VertexSize
+    , VertexMapDef
+    , VertexDef, _vertMap, _vertSize
+    , VertexAttribMapping, _attrName, _attrDef
+    , VertexAttribDef, _attrOffset, _attrCount, _attrSize
     , define, toDef, (^:=)
     ) where
 ---------------------------------------------------------------------------------------------------
@@ -59,29 +63,34 @@ instance (Storable p, Storable n, Storable c) => Storable (Vertex p n c) where
         pokeByteOff ptr (sizeOf (undefined :: p) + sizeOf (undefined :: n)) __color
 
 
+type VertexMapDef s      = Getting VertexAttribMapping s VertexAttribMapping
+type VertexSize          = Int
+type VertexDef           = ([VertexAttribMapping], VertexSize)
+type VertexAttribMapping = (String, VertexAttribDef)
+type VertexAttribDef     = (Int, Int, Int) -- | (offset, count, size)
 
-type VertexDef = (String, MemoryLayout)
-type MemoryLayout = (Int, Int, Int) -- | (offset, count, size)
+_attrName   = _1
+_attrDef    = _2
 
-_name   = _1
-_layout = _2
-_data   = _3
-_offset = _1
-_count  = _2
-_size   = _3
+_vertMap    = _1
+_vertSize   = _2
 
-define :: s -> [Getting VertexDef s VertexDef] -> [VertexDef]
-define datum defs = map (\g -> datum^.g) defs & scanl1Of (traverse._2) offsetPlus
+_attrOffset = _1
+_attrCount  = _2
+_attrSize   = _3
+
+define :: (Storable s) => [VertexMapDef s] -> s -> VertexDef
+define defs datum = (, sizeOf datum) $ map (\g -> datum^.g) defs & scanl1Of (traverse._2) offsetPlus
     where
-        offsetPlus :: MemoryLayout -> MemoryLayout -> MemoryLayout 
-        offsetPlus l1 l2 = set _offset (l1^._offset + l1^._size + l2^._offset) l2
+        offsetPlus :: VertexAttribDef -> VertexAttribDef -> VertexAttribDef 
+        offsetPlus l1 l2 = set _attrOffset (l1^._attrOffset + l1^._attrSize + l2^._attrOffset) l2
 
 
-toDef :: (Typeable (t s), Traversable t, Storable (t s)) => String -> Getter (t s) VertexDef
+toDef :: (Typeable (t s), Traversable t, Storable (t s)) => String -> Getter (t s) VertexAttribMapping
 toDef name = to $ \s -> (name, memoryLayout s)
     where 
-        memoryLayout :: (Traversable t, Storable (t s)) => t s -> MemoryLayout
+        memoryLayout :: (Traversable t, Storable (t s)) => t s -> VertexAttribDef
         memoryLayout s = (0, lengthOf traverse s, sizeOf s)
 
-(^:=) :: (Typeable (t a), Traversable t, Storable (t a)) => String -> Getter s (t a) -> Getter s VertexDef
+(^:=) :: (Typeable (t a), Traversable t, Storable (t a)) => String -> Getter s (t a) -> Getter s VertexAttribMapping
 s ^:= l = l.toDef s

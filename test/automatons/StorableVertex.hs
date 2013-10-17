@@ -22,9 +22,10 @@ fixureVertex = Vertex
 vertexSpecs :: Spec
 vertexSpecs = do
     describe "vertex definition" $ do
-        let v4Size = sizeOf (undefined::V4 Float)
-            v3Size = sizeOf (undefined::V3 Float)
-            fixureDef = [("pos", (0, 4, v4Size)), ("norm", (v4Size, 3, v3Size)), ("col", (v3Size+v4Size, 4, v4Size))]
+        let v4Size    = sizeOf (undefined::V4 Float)
+            v3Size    = sizeOf (undefined::V3 Float)
+            mapping   = [("pos", (0, 4, v4Size)), ("norm", (v4Size, 3, v3Size)), ("col", (v3Size+v4Size, 4, v4Size))]
+            fixureDef = (mapping, sizeOf fixureVertex)
             v = fixureVertex
             defs = [ "pos"  ^:= _position
                    , "norm" ^:= _normal
@@ -32,7 +33,7 @@ vertexSpecs = do
                    ]
         
         it "generates a bunch of definitions" $ do
-            let spec = define v defs
+            let spec = define defs v
                         
             spec `shouldBe` fixureDef
 

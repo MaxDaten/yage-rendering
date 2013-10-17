@@ -18,13 +18,12 @@ import             Data.List                       (length)
 import             Foreign.C.Types                 (CFloat(..))
 
 import             Data.Typeable
-import             Data.Data
 import             Control.Monad.RWS.Strict        (RWST)
 import             Control.Monad.Writer            ()
 import             Control.Monad.Reader            ()
 import             Control.Monad.State             ()
 import             Control.Lens                    hiding (Index)
-import             Linear                          (Quaternion, M22, M33, M44, V3(..), V4(..), zero, axisAngle)
+import             Linear                          (Quaternion, M22, M33, M44, V3(..), zero, axisAngle)
 ---------------------------------------------------------------------------------------------------
 import             Graphics.GLUtil
 import qualified   Graphics.GLUtil.Camera3D        as Cam
@@ -228,7 +227,7 @@ data ShaderResource = ShaderResource
 data ShaderUniformDef r s = ShaderUniformDef { runUniform :: r -> s -> ShaderProgram -> IO () }
 
 data ShaderDefinition = ShaderDefinition
-    { attrib'def  :: [VertexDef]
+    { attrib'def  :: [VertexMapDef Vertex434]
     , uniform'def :: ShaderUniformDef SomeRenderable RenderScene
     }
 
@@ -238,16 +237,19 @@ data RenderDefinition = RenderDefinition
     { def'ident     :: String
     , def'data      :: Mesh Vertex434
     , def'program   :: Program
-    } deriving (Show)
+    }
 
 instance Eq RenderDefinition where
     a == b = def'ident a == def'ident b
 
 instance Ord RenderDefinition where
-    compare a b = compare (def'ident a) (def'ident b) 
+    compare a b = compare (def'ident a) (def'ident b)
 
-instance Show ShaderDefinition where
-    show = show . attrib'def
+instance Show RenderDefinition where
+    show = show . def'ident 
+
+--instance Show ShaderDefinition where
+--    show = show . attrib'def
 
 ---------------------------------------------------------------------------------------------------
 instance AsUniform Float where

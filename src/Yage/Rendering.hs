@@ -208,7 +208,9 @@ requestVAO = requestRenderResource loadedDefinitions loadDefinition addDefinitio
         loadDefinition RenderDefinition{..} = do
             (vbo, ebo) <- requestMesh def'data
             sProg      <- requestShader . programSrc $ def'program
-            let defs    =    attrib'def . programDef $ def'program
+            let mapping = attrib'def . programDef $ def'program
+                vert    = head . vertices $ def'data
+                defs    = define mapping vert
 
             io $ makeVAO $ do
                 GL.bindBuffer GL.ArrayBuffer        $= Just vbo
@@ -216,22 +218,22 @@ requestVAO = requestRenderResource loadedDefinitions loadDefinition addDefinitio
                 GL.bindBuffer GL.ElementArrayBuffer $= Just ebo
 
 
-setVertexAttributes :: ShaderProgram -> [VertexDef] -> IO ()
+setVertexAttributes :: ShaderProgram -> VertexDef -> IO ()
 setVertexAttributes prog vdef = 
-    let stride = sumOf (folded._layout._size) vdef
-    in mapM_ (setAttribute prog stride) vdef 
+    let stride = vdef^._vertSize
+    in vdef^._vertMap & mapM_ (setAttribute prog stride) 
     where
+        setAttribute :: ShaderProgram -> VertexSize -> VertexAttribMapping -> IO ()
         setAttribute prog stride (name, layout) = do
             let vad = makeVAD layout stride
-            print vad
             setAttrib prog name GL.ToFloat vad
             enableAttrib prog name
         
-        makeVAD :: MemoryLayout -> Int -> GL.VertexArrayDescriptor a
-        makeVAD (off, count, size) stride =
+        makeVAD :: VertexAttribDef -> VertexSize -> GL.VertexArrayDescriptor a
+        makeVAD (off, count, _size) stride =
             let n = fromIntegral count
                 t = GL.Float
-                s = fromIntegral stride --n * 2 * fromIntegral size
+                s = fromIntegral stride
                 o = (offsetPtr off)
             in GL.VertexArrayDescriptor n t s o 
 
