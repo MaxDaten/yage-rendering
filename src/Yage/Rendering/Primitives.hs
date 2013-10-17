@@ -3,7 +3,6 @@ module Yage.Rendering.Primitives where
 
 import Yage.Prelude -- hiding (id)
 import Control.Lens hiding (Index)
--- import Control.Lens -- ((^.))
 
 import Data.List ((++), reverse, map, take, length, (!!), concat, replicate, repeat, zipWith3)
 
@@ -13,7 +12,6 @@ import Yage.Rendering.Types
 import Yage.Rendering.VertexSpec
 import Yage.Math
 
---one, zero :: CFloat
 one  = 1.0
 zero = 0.0
 -- f = front; h = hidden; t = top; b = bottom; r = right; l = left
@@ -65,7 +63,7 @@ quadMesh =
     in makeMeshfromSpare "quad" verts ixs white
 
 makeMeshfromSpare :: String -> [Position4f] -> [Index] -> Color4f -> Mesh Vertex434
-makeMeshfromSpare id verts ixs color = traceShowS ("mesh: "++) $
+makeMeshfromSpare id verts ixs color =
     mkTriMesh id (processSpareVerts verts ixs color) $ take (length ixs) [0..]
 
 
@@ -73,14 +71,11 @@ makeMeshfromSpare id verts ixs color = traceShowS ("mesh: "++) $
 -- to construct the adequate attributes to be processed by opengl 
 processSpareVerts :: [Position4f] -> [Index] -> Color4f -> [Vertex434]
 processSpareVerts vs' ixs color = 
-    let vs = traceShowS ("vs: " ++) $ extract vs' ixs
+    let vs = extract vs' ixs
         ns = (normals $ vs^..traverse._xyz)^..traverse.replicated 3 
-        cs = traceShowS ("cs: " ++) $ replicate (length vs) color
+        cs = repeat color
     in zipWith3 Vertex vs ns cs
     where 
       extract :: [Position4f] -> [Index] -> [Position4f]
       extract vs = map (vs!!)
-
-      -- | generate a normal with cross product from two vectors and flip the normal to
-      -- show from the inside to the outside
 
