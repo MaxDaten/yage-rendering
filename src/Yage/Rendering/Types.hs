@@ -64,13 +64,13 @@ data RenderState = RenderState
     --, renderStatistics      :: !RenderStatistics
     }
 
---data RenderStatistics = RenderStatistics
---    { lastObjectCount       :: !Int
---    , lastTriangleCount     :: !Int
---    , lastRenderDuration    :: !Double
---    , loadedShadersCount    :: !Int
---    , loadedMeshesCount     :: !Int
---    } deriving Show
+data RenderStatistics = RenderStatistics
+    { lastObjectCount       :: !Int
+    , lastTriangleCount     :: !Int
+    , lastRenderDuration    :: !Double
+    , loadedShadersCount    :: !Int
+    , loadedMeshesCount     :: !Int
+    } deriving Show
 
 type VBO = GL.BufferObject
 type EBO = GL.BufferObject

@@ -1,5 +1,5 @@
+{-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 {-# LANGUAGE TemplateHaskell            #-}
-{-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE RecordWildCards            #-}
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
@@ -28,11 +28,10 @@ import             Data.Data
 import             Data.List                       (map)
 ---------------------------------------------------------------------------------------------------
 import             Foreign.Storable
-import             Foreign.SomeStorable
 ---------------------------------------------------------------------------------------------------
 import             Linear                          (V3(..), V4(..))
 import             Graphics.Rendering.OpenGL       (GLfloat)
----------------------------------------------------------------------------------------------------
+{-=================================================================================================-}
 
 type Position4f = V4 GLfloat
 type Normal3f   = V3 GLfloat

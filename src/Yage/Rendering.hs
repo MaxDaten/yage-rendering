@@ -12,10 +12,9 @@ module Yage.Rendering (
 import             Yage.Prelude                    hiding (log)
 import             Control.Lens                    hiding (indices)
 
-import             Foreign.Ptr                     (plusPtr)
-import             Data.List                       (length, head, sum, map, lookup, groupBy, (++))
+import             Data.List                       (length, head, sum, map, lookup, groupBy)
 
-import             Control.Monad.RWS.Strict        (gets, modify, asks, tell, listen, runRWST)
+import             Control.Monad.RWS.Strict        (gets, modify, asks, runRWST)
 import             Control.Monad                   (liftM, mapM, mapM_)
 import             Filesystem.Path.CurrentOS       (encodeString)
 
@@ -24,33 +23,20 @@ import qualified   Graphics.Rendering.OpenGL       as GL
 import             Graphics.Rendering.OpenGL.GL    (($=))
 import             Graphics.Rendering.OpenGL.GL    as GLReExports (Color4(..))
 ---------------------------------------------------------------------------------------------------
----------------------------------------------------------------------------------------------------
 import             Yage.Rendering.Types
 import             Yage.Rendering.VertexSpec
-import qualified   Yage.Rendering.Shader           as Shader
 import             Yage.Rendering.Utils
 import             Yage.Rendering.Logging
-import             Yage.Resources
 {-=================================================================================================-}
 
 import Paths_yage_rendering
 
-
---initRenderStatistics :: RenderStatistics
---initRenderStatistics = RenderStatistics
---    { lastObjectCount       = 0
---    , lastTriangleCount     = 0
---    , lastRenderDuration    = 0.0
---    , loadedShadersCount    = 0
---    , loadedMeshesCount     = 0
---    }
 
 initialRenderState :: RenderState
 initialRenderState = RenderState 
     { loadedShaders         = []
     , loadedMeshes          = []
     , loadedDefinitions     = []
-    --, renderStatistics      = initRenderStatistics
     }
 
 
@@ -72,13 +58,14 @@ renderFrame scene = do
 
     shCount <- gets $! length . loadedShaders
     mshCount <- gets $! length . loadedMeshes
-    --let stats = RenderStatistics
-    --        { lastObjectCount    = objCount
-    --        , lastRenderDuration = renderTime
-    --        , lastTriangleCount  = sum $! map (triCount . model) $ entities scene
-    --        , loadedShadersCount = shCount
-    --        , loadedMeshesCount  = mshCount
-    --        }
+    let stats = RenderStatistics
+            { lastObjectCount    = objCount
+            , lastRenderDuration = renderTime
+            , lastTriangleCount  = -1 -- sum $! map (triCount . model) $ entities scene
+            , loadedShadersCount = shCount
+            , loadedMeshesCount  = mshCount
+            }
+    logRenderM $ show stats
 
     afterRender
 
@@ -270,7 +257,4 @@ addShader s = modify $! \st -> st{ loadedShaders = s:(loadedShaders st) }
 addDefinition :: (RenderDefinition, VAO) -> Renderer ()
 addDefinition d = modify $ \st -> st{ loadedDefinitions = d:(loadedDefinitions st) }
 
-
---updateStatistics :: RenderStatistics -> Renderer ()
---updateStatistics stats = modify $ \st -> st{ renderStatistics = stats }
 
