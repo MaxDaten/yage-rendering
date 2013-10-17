@@ -5,6 +5,7 @@ module Yage.Rendering (
     , runRenderer
     , renderScene
     , initialRenderState
+    , (!=)
     , logRenderM
     , version
     ) where
@@ -257,4 +258,7 @@ addShader s = modify $! \st -> st{ loadedShaders = s:(loadedShaders st) }
 addDefinition :: (RenderDefinition, VAO) -> Renderer ()
 addDefinition d = modify $ \st -> st{ loadedDefinitions = d:(loadedDefinitions st) }
 
+
+(!=) :: (AsUniform u) => GL.UniformLocation -> u -> IO ()
+(!=) = flip asUniform
 

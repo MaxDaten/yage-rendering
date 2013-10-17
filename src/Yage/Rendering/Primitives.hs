@@ -1,5 +1,8 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
-module Yage.Rendering.Primitives where
+module Yage.Rendering.Primitives
+  (cubeMesh, quadMesh
+  , makeMeshfromSpare, processSpareVerts
+  ) where
 
 import Yage.Prelude -- hiding (id)
 import Control.Lens hiding (Index)
