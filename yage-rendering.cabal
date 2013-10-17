@@ -2,7 +2,7 @@
 -- see http://haskell.org/cabal/users-guide/
 
 name:                yage-rendering
-version:             0.0.1.4
+version:             0.0.1.5
 synopsis:            yet another graphics engine
 -- description:         
 license:             MIT
@@ -55,7 +55,7 @@ library
                         NoImplicitPrelude
 
   build-depends:          base                    >= 4.6 && <= 4.7
-                        , yage-contrib            == 0.0.0.2
+                        , yage-contrib            == 0.0.0.3
                         , system-filepath         == 0.4.*
                         , OpenGLRaw               == 1.4.*
                         , OpenGL                  == 2.9.*
