@@ -40,6 +40,6 @@ normalCalculation = do
 
         it ("calculates the plain normal form with it's normal " ++
             "n == z-Axis from 3 points on a z-colinear plain") $ do
-                let [v1, v2, v3] = [V3 (-1) 0 5, V3 0 0 5, V3 0 (-1) 5]
+                let [v1, v2, v3] = [V3 (1) 0 5, V3 0 0 5, V3 0 (1) 5]
                     (n, _, _) = plainNormalForm v1 v2 v3
                 n `shouldBe` zAxis
