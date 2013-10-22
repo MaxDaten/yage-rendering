@@ -36,27 +36,29 @@ white = (V4 1.0 1.0 1.0 1.0)
 cubeMesh :: Mesh Vertex4342
 cubeMesh = 
     let 
-        ltf   = (V3 l t f, uv00)
-        rtf   = (V3 r t f, uv01)
-        rbf   = (V3 r b f, uv11)
-        lbf   = (V3 l b f, uv10)
-        lth   = (V3 l t h, uv01)
-        rth   = (V3 r t h, uv00)
-        rbh   = (V3 r b h, uv10)
-        lbh   = (V3 l b h, uv11)
+        tlf   = (V3 l t f, uv00)
+        trf   = (V3 r t f, uv01)
+        brf   = (V3 r b f, uv11)
+        blf   = (V3 l b f, uv10)
+        
+        tlh   = (V3 l t h, uv01)
+        trh   = (V3 r t h, uv00)
+        brh   = (V3 r b h, uv10)
+        blh   = (V3 l b h, uv11)
         verts = over (mapped._1) point 
-                  [ ltf, lbf, rbf, rtf
-                  , lth, rth, rbh, lbh
+                  [ tlf, blf, brf, trf
+                  , tlh, trh, brh, blh
                   ]
         frontFace = [0, 1, 2, 2, 3, 0] :: [Int]
         leftFace  = [0, 4, 7, 7, 1, 0] :: [Int]
         rightFace = [2, 6, 5, 5, 3, 2] :: [Int]
         topFace   = [0, 3, 5, 5, 4, 0] :: [Int]
         bottomFace= [1, 2, 6, 6, 7, 1] :: [Int]
+        hiddenFace= reverse (map (+4) frontFace)
         ixs       = frontFace
                   ++ leftFace
                   ++ topFace
-                  ++ reverse (map (+4) frontFace) -- back
+                  ++ hiddenFace
                   ++ rightFace
                   ++ bottomFace
     in makeMeshfromSpare "cube" (traceShow' verts) (traceShow' ixs) white
@@ -65,9 +67,9 @@ cubeMesh =
 
 quadMesh :: Mesh Vertex4342
 quadMesh = 
-    let tl    = (V3 (-one)   one  zero, uv01)
+    let tl    = (V3 (-one)   one  zero, uv10)
         tr    = (V3   one    one  zero, uv11)
-        br    = (V3   one  (-one) zero, uv10)
+        br    = (V3   one  (-one) zero, uv01)
         bl    = (V3 (-one) (-one) zero, uv00)
         verts = over (mapped._1) point [tl, bl, br, tr]
         ixs   = [ 0, 1, 2
