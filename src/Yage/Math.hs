@@ -35,7 +35,7 @@ normal v1 v2 = normalize $ cross v1 v2
 -- | calculates a plain in normal form from three position vectors
 plainNormalForm :: (Num a, Floating a, Epsilon a) => V3 a -> V3 a -> V3 a -> Plain3DNF a
 plainNormalForm v1 v2 v3 = 
-    let n = normal (v1 - v2) (v2 - v3)
+    let n = normal (v2 - v1) (v2 - v3)
         p = v1
         q = v2
     in (n, p, q)

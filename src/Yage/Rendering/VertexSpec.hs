@@ -11,7 +11,7 @@
 
 module Yage.Rendering.VertexSpec
     ( Vertex(..), _position, _normal, _color, _texture
-    , Position4f, Normal3f, Color4f, Texture2f
+    , Position4f, Position3f, Normal3f, Color4f, Texture2f
     , Vertex4342
     , VertexSize
     , VertexMapDef
@@ -34,6 +34,7 @@ import             Graphics.Rendering.OpenGL       (GLfloat)
 {-=================================================================================================-}
 
 type Position4f = V4 GLfloat
+type Position3f = V3 GLfloat
 type Normal3f   = V3 GLfloat
 type Color4f    = V4 GLfloat
 type Texture2f  = V2 GLfloat

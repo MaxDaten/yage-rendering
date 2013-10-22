@@ -5,9 +5,13 @@
 module Main where
 import Test.Hspec (hspec, describe)
 import StorableVertexTest
+import MathNormalTest
 
 main :: IO ()
 main = do
     hspec $ do
         describe "storable vertex" $ do
             vertexSpecs
+
+        describe "calculate correct normals" $ do
+            normalCalculation
