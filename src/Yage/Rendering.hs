@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
-{-# LANGUAGE RecordWildCards, GeneralizedNewtypeDeriving, DeriveDataTypeable, ScopedTypeVariables #-}
+{-# LANGUAGE RecordWildCards, TupleSections, GeneralizedNewtypeDeriving, DeriveDataTypeable, ScopedTypeVariables #-}
 module Yage.Rendering (
       module GLReExports
     , runRenderer
@@ -13,10 +13,10 @@ module Yage.Rendering (
 import             Yage.Prelude                    hiding (log)
 import             Control.Lens                    hiding (indices)
 
-import             Data.List                       (length, head, sum, map, lookup, groupBy)
+import             Data.List                       (length, head, sum, map, lookup, groupBy, zipWith, unzip, zip, (++))
 
 import             Control.Monad.RWS.Strict        (gets, modify, asks, runRWST)
-import             Control.Monad                   (liftM, mapM, mapM_)
+import             Control.Monad                   (liftM, mapM, mapM_, sequence_, sequence)
 import             Filesystem.Path.CurrentOS       (encodeString)
 
 import             Graphics.GLUtil                 hiding (makeVAO, offset0)
@@ -25,6 +25,8 @@ import             Graphics.Rendering.OpenGL.GL    (($=))
 import             Graphics.Rendering.OpenGL.GL    as GLReExports (Color4(..))
 ---------------------------------------------------------------------------------------------------
 import             Yage.Rendering.Types
+import qualified   Yage.Rendering.Texture          as Tex
+import             Yage.Rendering.Shader
 import             Yage.Rendering.VertexSpec
 import             Yage.Rendering.Utils
 import             Yage.Rendering.Logging
@@ -38,6 +40,7 @@ initialRenderState = RenderState
     { loadedShaders         = []
     , loadedMeshes          = []
     , loadedDefinitions     = []
+    , loadedTextures        = []
     }
 
 
@@ -55,34 +58,33 @@ renderFrame :: RenderScene -> Renderer ()
 renderFrame scene = do
     beforeRender
     
-    (objCount, renderTime) <- ioTime $ doRender scene
+    (_, renderTime) <- ioTime $ doRender scene
 
     shCount <- gets $! length . loadedShaders
     mshCount <- gets $! length . loadedMeshes
-    let stats = RenderStatistics
-            { lastObjectCount    = objCount
-            , lastRenderDuration = renderTime
-            , lastTriangleCount  = -1 -- sum $! map (triCount . model) $ entities scene
-            , loadedShadersCount = shCount
-            , loadedMeshesCount  = mshCount
-            }
-    logRenderM $ show stats
+    --let stats = RenderStatistics
+    --        { lastObjectCount    = -1
+    --        , lastRenderDuration = renderTime
+    --        , lastTriangleCount  = -1 -- sum $! map (triCount . model) $ entities scene
+    --        , loadedShadersCount = shCount
+    --        , loadedMeshesCount  = mshCount
+    --        }
+    --logRenderM $ show stats
 
     afterRender
 
 
-doRender :: RenderScene -> Renderer Int
+doRender :: RenderScene -> Renderer ()
 doRender scene@RenderScene{..} =
-    let batches = createShaderBatches scene entities
-    in sum `liftM` mapM renderBatch batches
+    mapM_ renderBatch $ createShaderBatches scene entities
 
 
 renderWithData :: RenderScene -> SomeRenderable -> Renderer ()
 renderWithData scene r = requestRenderData r >>= \rdata -> render scene rdata r
 
 
-renderBatch :: RenderBatch SomeRenderable -> Renderer Int
-renderBatch RenderBatch{..} = preBatchAction batch >> length `liftM` mapM perItemAction batch
+renderBatch :: RenderBatch SomeRenderable -> Renderer ()
+renderBatch RenderBatch{..} = withBatch $ \rs -> mapM_ perItemAction rs
 
 
 createShaderBatches :: RenderScene -> [SomeRenderable] -> [RenderBatch SomeRenderable]
@@ -97,9 +99,7 @@ createShaderBatches scene rs =
         mkShaderBatch rs =
             let batchShader = programSrc $ renderProgram . head $ rs
             in RenderBatch
-                { preBatchAction = \_ -> do
-                    shader <- requestShader batchShader 
-                    io $! GL.currentProgram $= Just (program shader)
+                { withBatch = \m -> requestShader batchShader >>= \s -> withShader s (\_s -> m rs)
                 , perItemAction = renderWithData scene
                 , batch = rs
                 }
@@ -145,12 +145,13 @@ afterRender = return ()
 ---------------------------------------------------------------------------------------------------
 
 render :: RenderScene -> RenderData -> SomeRenderable -> Renderer ()
-render scene RenderData{..} r =
-    io $! withVAO vao $! do
-        let udef = uniform'def . programDef  . renderProgram $ r
-        runUniform udef r scene shaderProgram
+render scene RenderData{..} r = do
+    io $! withVAO vao . withTexturesAt GL.Texture2D texObjs $! do
+        let udefs = uniform'def . programDef  . renderProgram $ r
+        runUniform udefs r scene shaderProgram
         drawIndexedTris . fromIntegral $ triangleCount
-
+    logCountObj
+    logCountTriangles triangleCount
 
 ---------------------------------------------------------------------------------------------------
 
@@ -164,10 +165,15 @@ runRenderer renderer state env = runRWST renderer env state
 
 requestRenderData :: SomeRenderable -> Renderer RenderData
 requestRenderData r = do
+    let rdef = renderDefinition r
+        tris = triCount . def'data $ rdef
     sh       <- requestShader . programSrc . renderProgram $ r
-    vao      <- requestVAO $ renderDefinition r
-    let tris = triCount . def'data . renderDefinition $ r
-    return $ RenderData vao sh tris
+    vao      <- requestVAO rdef
+    texs     <- loadTexs (def'textures rdef)
+    return $ RenderData vao sh texs tris
+    where
+        loadTexs :: [(TextureResource, Int)] -> Renderer [(GL.TextureObject, GLuint)]
+        loadTexs = mapM (\(n, i) -> (, fromIntegral i) <$> requestTexture n)
 
 
 requestRenderResource :: (Eq a, Show b)
@@ -194,9 +200,9 @@ requestVAO = requestRenderResource loadedDefinitions loadDefinition addDefinitio
     where
         loadDefinition :: RenderDefinition -> Renderer VAO
         loadDefinition RenderDefinition{..} = do
-            (vbo, ebo) <- requestMesh def'data
-            sProg      <- requestShader . programSrc $ def'program
-            let mapping = attrib'def . programDef $ def'program
+            (vbo, ebo) <- requestMesh     $ def'data
+            sProg      <- requestShader   $ programSrc def'program
+            let mapping = attrib'def      $ programDef def'program 
                 vert    = head . vertices $ def'data
                 defs    = define mapping vert
 
@@ -204,7 +210,6 @@ requestVAO = requestRenderResource loadedDefinitions loadDefinition addDefinitio
                 GL.bindBuffer GL.ArrayBuffer        $= Just vbo
                 setVertexAttributes sProg defs
                 GL.bindBuffer GL.ElementArrayBuffer $= Just ebo
-
 
 setVertexAttributes :: ShaderProgram -> VertexDef -> IO ()
 setVertexAttributes prog vdef = 
@@ -223,8 +228,7 @@ setVertexAttributes prog vdef =
                 t = GL.Float
                 s = fromIntegral stride
                 o = (offsetPtr off)
-            in GL.VertexArrayDescriptor n t s o 
-
+            in GL.VertexArrayDescriptor n t s o
 
 requestShader :: ShaderResource -> Renderer ShaderProgram
 requestShader = requestRenderResource loadedShaders loadShaders addShader
@@ -236,28 +240,43 @@ requestShader = requestRenderResource loadedShaders loadShaders addShader
             return $! sProg
 
 
-requestMesh :: Mesh Vertex434 -> Renderer (VBO, EBO)
+requestMesh :: Mesh Vertex4342 -> Renderer (VBO, EBO)
 requestMesh = requestRenderResource loadedMeshes loadMesh addMesh
     where
-        loadMesh :: Mesh Vertex434 -> Renderer (VBO, EBO)
+        loadMesh :: Mesh Vertex4342 -> Renderer (VBO, EBO)
         loadMesh mesh = io $ do
             vbo <- makeBuffer GL.ArrayBuffer $ vertices $ mesh
             ebo <- bufferIndices $ map fromIntegral $ indices mesh
             return $! (vbo, ebo)
 
+
+requestTexture :: TextureResource -> Renderer (GL.TextureObject)
+requestTexture = requestRenderResource loadedTextures loadTexture' addTexture
+    where
+        loadTexture' :: TextureResource -> Renderer (GL.TextureObject)
+        loadTexture' tex = io $ do
+            res <- Tex.readTexture . encodeString $ tex
+            GL.textureFilter GL.Texture2D $= ((GL.Linear', Nothing), GL.Linear') -- TODO Def
+            printErrorMsg $ "tex: " ++ (show res )
+            case res of
+                Left msg  -> error msg
+                Right obj -> return obj
+
 ---------------------------------------------------------------------------------------------------
 
-addMesh :: (Mesh Vertex434, (VBO, EBO)) -> Renderer ()
+addMesh :: (Mesh Vertex4342, (VBO, EBO)) -> Renderer ()
 addMesh m = modify $! \st -> st{ loadedMeshes = m:(loadedMeshes st) }
-
 
 addShader :: (ShaderResource, ShaderProgram) -> Renderer ()
 addShader s = modify $! \st -> st{ loadedShaders = s:(loadedShaders st) }
 
+addTexture :: (TextureResource, GL.TextureObject) -> Renderer ()
+addTexture t = modify $! \st -> st{ loadedTextures = t:(loadedTextures st) }
 
 addDefinition :: (RenderDefinition, VAO) -> Renderer ()
 addDefinition d = modify $ \st -> st{ loadedDefinitions = d:(loadedDefinitions st) }
 
+---------------------------------------------------------------------------------------------------
 
 (!=) :: (AsUniform u) => GL.UniformLocation -> u -> IO ()
 (!=) = flip asUniform

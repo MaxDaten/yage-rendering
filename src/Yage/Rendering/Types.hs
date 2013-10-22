@@ -9,8 +9,24 @@
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE UndecidableInstances       #-}
-{-# LANGUAGE DeriveDataTypeable, DeriveTraversable #-}
-module Yage.Rendering.Types where
+{-# LANGUAGE DeriveDataTypeable         #-}
+{-# LANGUAGE DeriveTraversable          #-}
+module Yage.Rendering.Types
+    (Renderer, RenderEnv(..), RenderState(..), RenderLog(..)
+    , RenderConfig(..), RenderStatistics(..), FBO, VBO, VAO, EBO
+    , RenderTarget(..)
+    , Renderable(..), SomeRenderable(..)
+    , RenderBatch(..)
+    , RenderData(..), RenderDefinition(..)
+    , RenderScene(..), emptyRenderScene, entitiesCount
+    , RenderEntity(..), mkRenderEntity
+    , renderProgram, renderData, programDef, programSrc
+    , ShaderResource(..), ShaderProgram(..), ShaderUniformDef(..), ShaderDefinition(..)
+    , Mesh(..), mkMesh, Index, Position, Orientation, Scale
+    , TextureResource
+    , toIndex1
+    , module GLRawTypes
+    ) where
 
 import             Yage.Prelude                    hiding (log)
 
@@ -28,6 +44,7 @@ import             Linear                          (Quaternion, M22, M33, M44, V
 import             Graphics.GLUtil
 import qualified   Graphics.GLUtil.Camera3D        as Cam
 import qualified   Graphics.Rendering.OpenGL       as GL
+import             Graphics.Rendering.OpenGL.Raw.Types as GLRawTypes
 ---------------------------------------------------------------------------------------------------
 import             Yage.Rendering.VertexSpec
 -- =================================================================================================
@@ -46,7 +63,8 @@ data RenderEnv = RenderEnv
     }
 
 data RenderLog = RenderLog 
-    { rlog'objcount :: !Integer
+    { rlog'objcount :: !Int
+    , rlog'tricount :: !Int
     , rlog'log      :: ![String]
     } deriving (Show, Eq)
 
@@ -59,8 +77,9 @@ data RenderConfig = RenderConfig
 
 data RenderState = RenderState
     { loadedShaders         :: ![(ShaderResource, ShaderProgram)]
-    , loadedMeshes          :: ![(Mesh Vertex434, (VBO, EBO))] -- TODO better Key, better structure
+    , loadedMeshes          :: ![(Mesh Vertex4342, (VBO, EBO))] -- TODO better Key, better structure
     , loadedDefinitions     :: ![(RenderDefinition, VAO)] -- BETTER KEY!!
+    , loadedTextures        :: ![(TextureResource, GL.TextureObject)]
     --, renderStatistics      :: !RenderStatistics
     }
 
@@ -78,10 +97,9 @@ type FBO = GL.FramebufferObject
 
 
 ---------------------------------------------------------------------------------------------------
-
 instance Monoid RenderLog where
-    mempty = RenderLog 0 []
-    mappend (RenderLog ca la) (RenderLog cb lb) = RenderLog (ca + cb) (mappend la lb)
+    mempty = RenderLog 0 0 []
+    mappend (RenderLog ca ta la) (RenderLog cb tb lb) = RenderLog (ca + cb) (ta + tb) (mappend la lb)
 
 ---------------------------------------------------------------------------------------------------
 
@@ -110,7 +128,7 @@ programSrc = fst
 programDef :: Program -> ShaderDefinition
 programDef = snd
 
-renderData :: (Renderable r) => r -> Mesh Vertex434
+renderData :: (Renderable r) => r -> Mesh Vertex4342
 renderData = def'data . renderDefinition
 
 
@@ -123,7 +141,7 @@ instance Renderable SomeRenderable where
 
 
 data Renderable r => RenderBatch r = RenderBatch
-    { preBatchAction    :: [r] -> Renderer ()
+    { withBatch         :: ([r] -> Renderer ()) -> Renderer ()
     , perItemAction     :: r -> Renderer ()
     , batch             :: [r]
     }
@@ -173,15 +191,16 @@ mkRenderEntity def = RenderEntity
 data RenderData = RenderData
     { vao           :: GL.VertexArrayObject
     , shaderProgram :: ShaderProgram
+    , texObjs       :: [(GL.TextureObject, GLuint)]
     , triangleCount :: !Int
-    }
+    } deriving Show
 
 instance Renderable RenderEntity where
     renderDefinition = renderDef
 
 
-from1 :: GL.UniformComponent a => a -> GL.Index1 a
-from1 = GL.Index1
+toIndex1 :: a -> GL.Index1 a
+toIndex1 = GL.Index1
 
 ---------------------------------------------------------------------------------------------------
 
@@ -202,9 +221,9 @@ instance Eq (Mesh v) where
 instance Ord (Mesh v) where
     compare a b = compare (ident a) (ident b)
 
-mkTriMesh :: String -> [v] -> [Index] -> Mesh v
+mkMesh :: String -> [v] -> [Index] -> Mesh v
 -- TODO some assertions for invalid meshes
-mkTriMesh ident vs ixs = Mesh ident vs ixs $ (length ixs) `quot` 3
+mkMesh ident vs ixs = Mesh ident vs ixs $ (length ixs) `quot` 3
 
 ---------------------------------------------------------------------------------------------------
 
@@ -217,7 +236,7 @@ data ShaderResource = ShaderResource
 data ShaderUniformDef r s = ShaderUniformDef { runUniform :: r -> s -> ShaderProgram -> IO () }
 
 data ShaderDefinition = ShaderDefinition
-    { attrib'def  :: [VertexMapDef Vertex434]
+    { attrib'def  :: [VertexMapDef Vertex4342]
     , uniform'def :: ShaderUniformDef SomeRenderable RenderScene
     }
 
@@ -225,8 +244,9 @@ type Program = (ShaderResource, ShaderDefinition)
 
 data RenderDefinition = RenderDefinition
     { def'ident     :: String
-    , def'data      :: Mesh Vertex434
+    , def'data      :: Mesh Vertex4342
     , def'program   :: Program
+    , def'textures  :: [(TextureResource, Int)] -- | (Resource, Shader TextureUnit)
     }
 
 instance Eq RenderDefinition where
@@ -238,7 +258,9 @@ instance Ord RenderDefinition where
 instance Show RenderDefinition where
     show = show . def'ident 
 
+
 ---------------------------------------------------------------------------------------------------
+
 instance AsUniform Float where
     asUniform = asUniform . CFloat
 
@@ -250,3 +272,7 @@ instance AsUniform (M33 Float) where
 
 instance AsUniform (M22 Float) where
     asUniform m = asUniform $ over (mapped.mapped) CFloat m
+
+---------------------------------------------------------------------------------------------------
+
+type TextureResource = FilePath
