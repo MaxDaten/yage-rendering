@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
+{-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE ExistentialQuantification  #-}
 {-# LANGUAGE RecordWildCards            #-}
 {-# LANGUAGE DeriveFunctor              #-}
@@ -23,7 +24,7 @@ module Yage.Rendering.Types
     , renderProgram, renderData, programDef, programSrc
     , ShaderResource(..), ShaderProgram(..), UniShader, ShaderEnv(..), ShaderDefinition(..)
     , Mesh(..), mkMesh, Index, Position, Orientation, Scale
-    , TextureResource
+    , TextureDefinition(..), _texChannel, _texResource, TextureResource
     , toIndex1
     , module GLRawTypes
     ) where
@@ -192,7 +193,7 @@ mkRenderEntity def = RenderEntity
 data RenderData = RenderData
     { vao           :: GL.VertexArrayObject
     , shaderProgram :: ShaderProgram
-    , texObjs       :: [(GL.TextureObject, GLuint)]
+    , texObjs       :: [(GL.TextureObject, (GLuint, String))]
     , triangleCount :: !Int
     } deriving Show
 
@@ -254,7 +255,7 @@ data RenderDefinition = RenderDefinition
     { def'ident     :: String
     , def'data      :: Mesh Vertex4342
     , def'program   :: Program
-    , def'textures  :: [(TextureResource, Int)] -- | (Resource, Shader TextureUnit)
+    , def'textures  :: [TextureDefinition] -- | (Resource, Shader TextureUnit)
     }
 
 instance Eq RenderDefinition where
@@ -284,3 +285,11 @@ instance AsUniform (M22 Float) where
 ---------------------------------------------------------------------------------------------------
 
 type TextureResource = FilePath
+
+data TextureDefinition = TextureDefinition
+    { __texChannel  :: (Int, String)
+    , __texResource :: TextureResource
+    } deriving (Typeable, Show, Eq)
+
+makeLenses ''TextureDefinition
+
