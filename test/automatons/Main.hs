@@ -4,7 +4,7 @@
 
 module Main where
 import Test.Hspec (hspec, describe)
-import StorableVertex
+import StorableVertexTest
 
 main :: IO ()
 main = do

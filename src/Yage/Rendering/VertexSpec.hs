@@ -10,9 +10,9 @@
 {-# LANGUAGE NoMonomorphismRestriction  #-} -- evil but just for _offset _count _stride
 
 module Yage.Rendering.VertexSpec
-    ( Vertex(..), _position, _normal, _color
-    , Position4f, Normal3f, Color4f
-    , Vertex434
+    ( Vertex(..), _position, _normal, _color, _texture
+    , Position4f, Normal3f, Color4f, Texture2f
+    , Vertex4342
     , VertexSize
     , VertexMapDef
     , VertexDef, _vertMap, _vertSize
@@ -29,37 +29,41 @@ import             Data.List                       (map)
 ---------------------------------------------------------------------------------------------------
 import             Foreign.Storable
 ---------------------------------------------------------------------------------------------------
-import             Linear                          (V3(..), V4(..))
+import             Linear                          (V2(..), V3(..), V4(..))
 import             Graphics.Rendering.OpenGL       (GLfloat)
 {-=================================================================================================-}
 
 type Position4f = V4 GLfloat
 type Normal3f   = V3 GLfloat
 type Color4f    = V4 GLfloat
-type Vertex434  = Vertex Position4f Normal3f Color4f
+type Texture2f  = V2 GLfloat
+type Vertex4342 = Vertex Position4f Normal3f Color4f Texture2f
 
-data Vertex p n c = Vertex 
+data Vertex p n c t = Vertex 
     { __position      :: p
     , __normal        :: n
     , __color         :: c
+    , __texture       :: t
     } deriving (Show, Eq, Data, Typeable)
 
 makeLenses ''Vertex
 
 
-instance (Storable p, Storable n, Storable c) => Storable (Vertex p n c) where
-    sizeOf _    = sizeOf (undefined::p) + sizeOf (undefined::n) + sizeOf (undefined::c)
+instance (Storable p, Storable n, Storable c, Storable t) => Storable (Vertex p n c t) where
+    sizeOf _    = sizeOf (undefined::p) + sizeOf (undefined::n) + sizeOf (undefined::c)+ sizeOf (undefined::t)
     alignment _ = alignment (undefined::p)
     peek ptr = 
         Vertex 
             <$> peekByteOff ptr 0
             <*> peekByteOff ptr (sizeOf (undefined :: p))
             <*> peekByteOff ptr (sizeOf (undefined :: p) + sizeOf (undefined :: n))
+            <*> peekByteOff ptr (sizeOf (undefined :: p) + sizeOf (undefined :: n) + sizeOf (undefined :: c))
 
     poke ptr Vertex{..} = do
         pokeByteOff ptr 0 __position
         pokeByteOff ptr (sizeOf (undefined :: p)) __normal
         pokeByteOff ptr (sizeOf (undefined :: p) + sizeOf (undefined :: n)) __color
+        pokeByteOff ptr (sizeOf (undefined :: p) + sizeOf (undefined :: n) + sizeOf (undefined :: c)) __texture
 
 
 type VertexMapDef s      = Getting VertexAttribMapping s VertexAttribMapping
