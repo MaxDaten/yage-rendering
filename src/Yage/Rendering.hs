@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
-{-# LANGUAGE RecordWildCards, GeneralizedNewtypeDeriving, DeriveDataTypeable, ScopedTypeVariables #-}
+{-# LANGUAGE RecordWildCards, TupleSections, GeneralizedNewtypeDeriving, DeriveDataTypeable, ScopedTypeVariables #-}
 module Yage.Rendering (
       module GLReExports
     , runRenderer
@@ -13,10 +13,10 @@ module Yage.Rendering (
 import             Yage.Prelude                    hiding (log)
 import             Control.Lens                    hiding (indices)
 
-import             Data.List                       (length, head, sum, map, lookup, groupBy, zipWith, (++))
+import             Data.List                       (length, head, sum, map, lookup, groupBy, zipWith, unzip, zip, (++))
 
 import             Control.Monad.RWS.Strict        (gets, modify, asks, runRWST)
-import             Control.Monad                   (liftM, mapM, mapM_, sequence_)
+import             Control.Monad                   (liftM, mapM, mapM_, sequence_, sequence)
 import             Filesystem.Path.CurrentOS       (encodeString)
 
 import             Graphics.GLUtil                 hiding (makeVAO, offset0)
@@ -146,7 +146,7 @@ afterRender = return ()
 
 render :: RenderScene -> RenderData -> SomeRenderable -> Renderer ()
 render scene RenderData{..} r = do
-    io $! withVAO vao . withTextures GL.Texture2D texObjs $! do
+    io $! withVAO vao . withTexturesAt GL.Texture2D texObjs $! do
         let udefs = uniform'def . programDef  . renderProgram $ r
         runUniform udefs r scene shaderProgram
         drawIndexedTris . fromIntegral $ triangleCount
@@ -169,8 +169,11 @@ requestRenderData r = do
         tris = triCount . def'data $ rdef
     sh       <- requestShader . programSrc . renderProgram $ r
     vao      <- requestVAO rdef
-    texs     <- mapM requestTexture $ def'textures rdef 
+    texs     <- loadTexs (def'textures rdef)
     return $ RenderData vao sh texs tris
+    where
+        loadTexs :: [(TextureResource, Int)] -> Renderer [(GL.TextureObject, GLuint)]
+        loadTexs = mapM (\(n, i) -> (, fromIntegral i) <$> requestTexture n)
 
 
 requestRenderResource :: (Eq a, Show b)

@@ -191,7 +191,7 @@ mkRenderEntity def = RenderEntity
 data RenderData = RenderData
     { vao           :: GL.VertexArrayObject
     , shaderProgram :: ShaderProgram
-    , texObjs       :: [GL.TextureObject]
+    , texObjs       :: [(GL.TextureObject, GLuint)]
     , triangleCount :: !Int
     } deriving Show
 
@@ -246,7 +246,7 @@ data RenderDefinition = RenderDefinition
     { def'ident     :: String
     , def'data      :: Mesh Vertex4342
     , def'program   :: Program
-    , def'textures  :: [TextureResource]
+    , def'textures  :: [(TextureResource, Int)] -- | (Resource, Shader TextureUnit)
     }
 
 instance Eq RenderDefinition where
