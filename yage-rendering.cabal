@@ -3,7 +3,7 @@
 
 name:                yage-rendering
 version:             0.0.3.0
-synopsis:            yet another graphics engine
+synopsis:            render framework for yet another graphics engine
 -- description:         
 license:             MIT
 license-file:        LICENSE
