@@ -5,7 +5,7 @@ module Yage.Rendering (
     , runRenderer
     , renderScene
     , initialRenderState
-    , (!=)
+    , (!=), shaderEnv
     , logRenderM
     , version
     ) where
@@ -16,6 +16,7 @@ import             Control.Lens                    hiding (indices)
 import             Data.List                       (length, head, sum, map, lookup, groupBy, zipWith, unzip, zip, (++))
 
 import             Control.Monad.RWS.Strict        (gets, modify, asks, runRWST)
+import             Control.Monad.Reader            (runReaderT, ask)
 import             Control.Monad                   (liftM, mapM, mapM_, sequence_, sequence)
 import             Filesystem.Path.CurrentOS       (encodeString)
 
@@ -148,10 +149,16 @@ render :: RenderScene -> RenderData -> SomeRenderable -> Renderer ()
 render scene RenderData{..} r = do
     io $! withVAO vao . withTexturesAt GL.Texture2D texObjs $! do
         let udefs = uniform'def . programDef  . renderProgram $ r
-        runUniform udefs r scene shaderProgram
+        runUniform udefs shaderEnv
         drawIndexedTris . fromIntegral $ triangleCount
     logCountObj
     logCountTriangles triangleCount
+    where 
+        shaderEnv = ShaderEnv 
+            { shaderEnv'Program           = shaderProgram
+            , shaderEnv'CurrentRenderable = r
+            , shaderEnv'CurrentScene      = scene
+            }
 
 ---------------------------------------------------------------------------------------------------
 
@@ -160,6 +167,9 @@ render scene RenderData{..} r = do
 -- TODO :: combine this with the scene setup
 runRenderer :: Renderer a -> RenderState -> RenderEnv -> IO (a, RenderState, RenderLog)
 runRenderer renderer state env = runRWST renderer env state
+
+runUniform :: UniShader a -> ShaderEnv -> IO a
+runUniform u env = runReaderT u env
 
 ---------------------------------------------------------------------------------------------------
 
@@ -278,6 +288,10 @@ addDefinition d = modify $ \st -> st{ loadedDefinitions = d:(loadedDefinitions s
 
 ---------------------------------------------------------------------------------------------------
 
-(!=) :: (AsUniform u) => GL.UniformLocation -> u -> IO ()
-(!=) = flip asUniform
+(!=) :: (AsUniform u) => String -> u -> UniShader ()
+name != uni = do
+    sp <- asks shaderEnv'Program
+    io $ uni `asUniform` getUniform sp name
 
+shaderEnv :: UniShader (ShaderEnv)
+shaderEnv = ask

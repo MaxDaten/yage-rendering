@@ -21,7 +21,7 @@ module Yage.Rendering.Types
     , RenderScene(..), emptyRenderScene, entitiesCount
     , RenderEntity(..), mkRenderEntity
     , renderProgram, renderData, programDef, programSrc
-    , ShaderResource(..), ShaderProgram(..), ShaderUniformDef(..), ShaderDefinition(..)
+    , ShaderResource(..), ShaderProgram(..), UniShader, ShaderEnv(..), ShaderDefinition(..)
     , Mesh(..), mkMesh, Index, Position, Orientation, Scale
     , TextureResource
     , toIndex1
@@ -36,7 +36,7 @@ import             Foreign.C.Types                 (CFloat(..))
 import             Data.Typeable
 import             Control.Monad.RWS.Strict        (RWST)
 import             Control.Monad.Writer            ()
-import             Control.Monad.Reader            ()
+import             Control.Monad.Reader            (ReaderT)
 import             Control.Monad.State             ()
 import             Control.Lens                    hiding (Index)
 import             Linear                          (Quaternion, M22, M33, M44, V3(..), zero, axisAngle)
@@ -138,6 +138,7 @@ data SomeRenderable = forall r. (Typeable r, Renderable r) => SomeRenderable r
 instance Renderable SomeRenderable where
     --render scene res (SomeRenderable r) = render scene res r
     renderDefinition (SomeRenderable r) = renderDefinition r
+    toRenderable = id
 
 
 data Renderable r => RenderBatch r = RenderBatch
@@ -227,17 +228,24 @@ mkMesh ident vs ixs = Mesh ident vs ixs $ (length ixs) `quot` 3
 
 ---------------------------------------------------------------------------------------------------
 
+type UniShader = ReaderT ShaderEnv IO
+
+data ShaderEnv = ShaderEnv
+    { shaderEnv'Program             :: ShaderProgram
+    , shaderEnv'CurrentRenderable   :: SomeRenderable
+    , shaderEnv'CurrentScene        :: RenderScene 
+    } deriving (Typeable)
 
 data ShaderResource = ShaderResource
     { vert'src   :: FilePath
     , frag'src   :: FilePath
     } deriving (Show, Eq, Ord)
 
-data ShaderUniformDef r s = ShaderUniformDef { runUniform :: r -> s -> ShaderProgram -> IO () }
+--data ShaderUniformDef r s = ShaderUniformDef { runUniform :: r -> s -> ShaderProgram -> IO () }
 
 data ShaderDefinition = ShaderDefinition
     { attrib'def  :: [VertexMapDef Vertex4342]
-    , uniform'def :: ShaderUniformDef SomeRenderable RenderScene
+    , uniform'def :: UniShader ()
     }
 
 type Program = (ShaderResource, ShaderDefinition)
