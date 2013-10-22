@@ -5,7 +5,7 @@ module Yage.Rendering (
     , runRenderer
     , renderScene
     , initialRenderState
-    , (!=)
+    , (!=), shaderEnv
     , logRenderM
     , version
     ) where
@@ -16,6 +16,7 @@ import             Control.Lens                    hiding (indices)
 import             Data.List                       (length, head, sum, map, lookup, groupBy, zipWith, unzip, zip, (++))
 
 import             Control.Monad.RWS.Strict        (gets, modify, asks, runRWST)
+import             Control.Monad.Reader            (runReaderT, ask)
 import             Control.Monad                   (liftM, mapM, mapM_, sequence_, sequence)
 import             Filesystem.Path.CurrentOS       (encodeString)
 
@@ -146,12 +147,19 @@ afterRender = return ()
 
 render :: RenderScene -> RenderData -> SomeRenderable -> Renderer ()
 render scene RenderData{..} r = do
-    io $! withVAO vao . withTexturesAt GL.Texture2D texObjs $! do
+    io $! withVAO vao . withTexturesAt GL.Texture2D tUnits $! do
         let udefs = uniform'def . programDef  . renderProgram $ r
-        runUniform udefs r scene shaderProgram
+        runUniform (udefs >> mapTextureSamplers texObjs) shaderEnv
         drawIndexedTris . fromIntegral $ triangleCount
     logCountObj
     logCountTriangles triangleCount
+    where
+        tUnits = over (mapped._2) (^._1) texObjs
+        shaderEnv = ShaderEnv 
+            { shaderEnv'Program           = shaderProgram
+            , shaderEnv'CurrentRenderable = r
+            , shaderEnv'CurrentScene      = scene
+            }
 
 ---------------------------------------------------------------------------------------------------
 
@@ -160,6 +168,9 @@ render scene RenderData{..} r = do
 -- TODO :: combine this with the scene setup
 runRenderer :: Renderer a -> RenderState -> RenderEnv -> IO (a, RenderState, RenderLog)
 runRenderer renderer state env = runRWST renderer env state
+
+runUniform :: UniShader a -> ShaderEnv -> IO a
+runUniform u env = runReaderT u env
 
 ---------------------------------------------------------------------------------------------------
 
@@ -172,8 +183,10 @@ requestRenderData r = do
     texs     <- loadTexs (def'textures rdef)
     return $ RenderData vao sh texs tris
     where
-        loadTexs :: [(TextureResource, Int)] -> Renderer [(GL.TextureObject, GLuint)]
-        loadTexs = mapM (\(n, i) -> (, fromIntegral i) <$> requestTexture n)
+        loadTexs :: [TextureDefinition] -> Renderer [(GL.TextureObject, (GLuint, String))]
+        loadTexs = let chId td = fromIntegral $ td^._texChannel._1
+                       chName td = td^._texChannel._2
+                   in mapM $ \td -> (, (chId td, chName td)) <$> requestTexture (td^._texResource)
 
 
 requestRenderResource :: (Eq a, Show b)
@@ -278,6 +291,17 @@ addDefinition d = modify $ \st -> st{ loadedDefinitions = d:(loadedDefinitions s
 
 ---------------------------------------------------------------------------------------------------
 
-(!=) :: (AsUniform u) => GL.UniformLocation -> u -> IO ()
-(!=) = flip asUniform
+(!=) :: (AsUniform u) => String -> u -> UniShader ()
+name != uni = do
+    sp <- asks shaderEnv'Program
+    io $ uni `asUniform` getUniform sp name
 
+shaderEnv :: UniShader (ShaderEnv)
+shaderEnv = ask
+
+mapTextureSamplers :: [(GL.TextureObject, (GLuint, String))] -> UniShader ()
+mapTextureSamplers texObjs = 
+    let texUnitToUniform = texObjs^..traverse._2
+    in do
+        sp <- asks shaderEnv'Program
+        io $ mapM_ (\(i, n) -> i `asUniform` getUniform sp n) texUnitToUniform

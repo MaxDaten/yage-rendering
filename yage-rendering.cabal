@@ -2,8 +2,8 @@
 -- see http://haskell.org/cabal/users-guide/
 
 name:                yage-rendering
-version:             0.0.2.0
-synopsis:            yet another graphics engine
+version:             0.0.3.0
+synopsis:            render framework for yet another graphics engine
 -- description:         
 license:             MIT
 license-file:        LICENSE

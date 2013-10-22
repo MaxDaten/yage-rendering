@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
+{-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE ExistentialQuantification  #-}
 {-# LANGUAGE RecordWildCards            #-}
 {-# LANGUAGE DeriveFunctor              #-}
@@ -21,9 +22,9 @@ module Yage.Rendering.Types
     , RenderScene(..), emptyRenderScene, entitiesCount
     , RenderEntity(..), mkRenderEntity
     , renderProgram, renderData, programDef, programSrc
-    , ShaderResource(..), ShaderProgram(..), ShaderUniformDef(..), ShaderDefinition(..)
+    , ShaderResource(..), ShaderProgram(..), UniShader, ShaderEnv(..), ShaderDefinition(..)
     , Mesh(..), mkMesh, Index, Position, Orientation, Scale
-    , TextureResource
+    , TextureDefinition(..), _texChannel, _texResource, TextureResource
     , toIndex1
     , module GLRawTypes
     ) where
@@ -36,7 +37,7 @@ import             Foreign.C.Types                 (CFloat(..))
 import             Data.Typeable
 import             Control.Monad.RWS.Strict        (RWST)
 import             Control.Monad.Writer            ()
-import             Control.Monad.Reader            ()
+import             Control.Monad.Reader            (ReaderT)
 import             Control.Monad.State             ()
 import             Control.Lens                    hiding (Index)
 import             Linear                          (Quaternion, M22, M33, M44, V3(..), zero, axisAngle)
@@ -138,6 +139,7 @@ data SomeRenderable = forall r. (Typeable r, Renderable r) => SomeRenderable r
 instance Renderable SomeRenderable where
     --render scene res (SomeRenderable r) = render scene res r
     renderDefinition (SomeRenderable r) = renderDefinition r
+    toRenderable = id
 
 
 data Renderable r => RenderBatch r = RenderBatch
@@ -191,7 +193,7 @@ mkRenderEntity def = RenderEntity
 data RenderData = RenderData
     { vao           :: GL.VertexArrayObject
     , shaderProgram :: ShaderProgram
-    , texObjs       :: [(GL.TextureObject, GLuint)]
+    , texObjs       :: [(GL.TextureObject, (GLuint, String))]
     , triangleCount :: !Int
     } deriving Show
 
@@ -227,17 +229,24 @@ mkMesh ident vs ixs = Mesh ident vs ixs $ (length ixs) `quot` 3
 
 ---------------------------------------------------------------------------------------------------
 
+type UniShader = ReaderT ShaderEnv IO
+
+data ShaderEnv = ShaderEnv
+    { shaderEnv'Program             :: ShaderProgram
+    , shaderEnv'CurrentRenderable   :: SomeRenderable
+    , shaderEnv'CurrentScene        :: RenderScene 
+    } deriving (Typeable)
 
 data ShaderResource = ShaderResource
     { vert'src   :: FilePath
     , frag'src   :: FilePath
     } deriving (Show, Eq, Ord)
 
-data ShaderUniformDef r s = ShaderUniformDef { runUniform :: r -> s -> ShaderProgram -> IO () }
+--data ShaderUniformDef r s = ShaderUniformDef { runUniform :: r -> s -> ShaderProgram -> IO () }
 
 data ShaderDefinition = ShaderDefinition
     { attrib'def  :: [VertexMapDef Vertex4342]
-    , uniform'def :: ShaderUniformDef SomeRenderable RenderScene
+    , uniform'def :: UniShader ()
     }
 
 type Program = (ShaderResource, ShaderDefinition)
@@ -246,7 +255,7 @@ data RenderDefinition = RenderDefinition
     { def'ident     :: String
     , def'data      :: Mesh Vertex4342
     , def'program   :: Program
-    , def'textures  :: [(TextureResource, Int)] -- | (Resource, Shader TextureUnit)
+    , def'textures  :: [TextureDefinition] -- | (Resource, Shader TextureUnit)
     }
 
 instance Eq RenderDefinition where
@@ -276,3 +285,11 @@ instance AsUniform (M22 Float) where
 ---------------------------------------------------------------------------------------------------
 
 type TextureResource = FilePath
+
+data TextureDefinition = TextureDefinition
+    { __texChannel  :: (Int, String)
+    , __texResource :: TextureResource
+    } deriving (Typeable, Show, Eq)
+
+makeLenses ''TextureDefinition
+
