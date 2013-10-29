@@ -16,7 +16,7 @@ module Yage.Rendering.Types
     (Renderer, RenderEnv(..), RenderState(..), RenderLog(..)
     , RenderConfig(..), RenderStatistics(..), FBO, VBO, VAO, EBO
     , RenderTarget(..)
-    , Renderable(..), SomeRenderable(..)
+    , Renderable(..), SomeRenderable(..), renderableType, fromRenderable, toRenderable
     , RenderBatch(..)
     , RenderData(..), RenderDefinition(..)
     , RenderScene(..), emptyRenderScene, entitiesCount
@@ -110,15 +110,19 @@ class Typeable r => Renderable r where
     --   this definition will be used to generate the resources for a
     --   'render'-call. If the 'Renderable' leaves the 'RenderScene'
     --   the resources will be freed
-    renderDefinition :: r -> RenderDefinition
+    renderDefinition :: r -> RenderDefinition    
 
-    fromRenderable :: SomeRenderable -> Maybe r
-    fromRenderable (SomeRenderable r) = cast r
-    
-    toRenderable :: r -> SomeRenderable
-    toRenderable = SomeRenderable
-            
 
+toRenderable :: (Renderable r) => r -> SomeRenderable
+toRenderable r | r `eqType` (undefined :: SomeRenderable) = error "already a SomeRenderable"
+               | otherwise = SomeRenderable r
+
+
+fromRenderable :: (Typeable r) => SomeRenderable -> Maybe r
+fromRenderable (SomeRenderable r) = cast r
+
+renderableType :: SomeRenderable -> TypeRep
+renderableType (SomeRenderable r) = typeOf r 
    
 renderProgram :: (Renderable r) => r -> Program
 renderProgram = def'program . renderDefinition
@@ -136,10 +140,10 @@ renderData = def'data . renderDefinition
 data SomeRenderable = forall r. (Typeable r, Renderable r) => SomeRenderable r
     deriving (Typeable)
 
+
 instance Renderable SomeRenderable where
     --render scene res (SomeRenderable r) = render scene res r
     renderDefinition (SomeRenderable r) = renderDefinition r
-    toRenderable = id
 
 
 data Renderable r => RenderBatch r = RenderBatch
@@ -199,7 +203,6 @@ data RenderData = RenderData
 
 instance Renderable RenderEntity where
     renderDefinition = renderDef
-
 
 toIndex1 :: a -> GL.Index1 a
 toIndex1 = GL.Index1
