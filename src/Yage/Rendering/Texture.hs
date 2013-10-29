@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
 {-# LANGUAGE RecordWildCards            #-}
 module Yage.Rendering.Texture (
       TexColor(), TexInfo()

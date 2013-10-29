@@ -13,11 +13,11 @@ module Yage.Rendering (
 import             Yage.Prelude                    hiding (log)
 import             Control.Lens                    hiding (indices)
 
-import             Data.List                       (length, head, sum, map, lookup, groupBy, zipWith, unzip, zip, (++))
+import             Data.List                       (length, head, map, lookup, groupBy, (++))
 
 import             Control.Monad.RWS.Strict        (gets, modify, asks, runRWST)
 import             Control.Monad.Reader            (runReaderT, ask)
-import             Control.Monad                   (liftM, mapM, mapM_, sequence_, sequence)
+import             Control.Monad                   (mapM, mapM_,)
 import             Filesystem.Path.CurrentOS       (encodeString)
 
 import             Graphics.GLUtil                 hiding (makeVAO, offset0)
@@ -61,8 +61,8 @@ renderFrame scene = do
     
     (_, renderTime) <- ioTime $ doRender scene
 
-    shCount <- gets $! length . loadedShaders
-    mshCount <- gets $! length . loadedMeshes
+    shCount         <- gets $! length . loadedShaders
+    mshCount        <- gets $! length . loadedMeshes
     --let stats = RenderStatistics
     --        { lastObjectCount    = -1
     --        , lastRenderDuration = renderTime
