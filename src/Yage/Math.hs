@@ -1,13 +1,31 @@
+{-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 module Yage.Math
     (fromTransformation
     , (><)
     , normal, normals
+    , uv00, uv01, uv10, uv11, xAxis, yAxis, zAxis
     , plainNormalForm) where
 
 import Yage.Prelude
 import Control.Lens
-import Data.List ((++), map)
-import Linear (V3(..), V4(..), M33, M44, cross, normalize, Epsilon)
+import Data.List (map)
+import Linear (V2(..), V3(..), V4(..), M33, M44, cross, normalize, Epsilon)
+import Yage.Rendering.Types
+
+zero, one :: (Floating a) => a
+zero = 0.0
+one  = 1.0
+
+uv00, uv01, uv10, uv11 :: (Floating a) => V2 a
+uv00  = V2 zero zero 
+uv01  = V2 zero one
+uv10  = V2 one zero
+uv11  = V2 one one
+
+xAxis, yAxis, zAxis :: (Floating a) => V3 a
+xAxis = V3 one zero zero
+yAxis = V3 zero one zero
+zAxis = V3 zero zero one
 
 type Normal a = V3 a
 -- | a plain in 3d space in plain normal form 

@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
+{-# OPTIONS_GHC -fno-warn-name-shadowing -fno-warn-missing-signatures #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveTraversable #-}
@@ -14,7 +14,7 @@ module Yage.Rendering.Primitives
 import Yage.Prelude -- hiding (id)
 import Control.Lens hiding (Index, indices)
 
-import Data.List ((++), reverse, map, take, length, (!!), concat, replicate, repeat, zipWith4, unzip)
+import Data.List ((++), map, take, length, (!!), repeat, zipWith4, unzip)
 import Data.Foldable
 
 import Linear (V2(..), V3(..), V4(..), R3(_xyz), point)
@@ -23,16 +23,14 @@ import Yage.Rendering.Types
 import Yage.Rendering.VertexSpec
 import Yage.Math
 
-one, zero :: GLfloat
-one  = 1.0
-zero = 0.0
+white = V4 1.0 1.0 1.0 1.0
 -- f = front; h = hidden; t = top; b = bottom; r = right; l = left
-f     =  one
-h     = -one
-t     =  one
-b     = -one
-r     =  one
-l     = -one
+f     =  1.0
+h     = -1.0
+t     =  1.0
+b     = -1.0
+r     =  1.0
+l     = -1.0
 tlf   = V3 l t f
 trf   = V3 r t f
 brf   = V3 r b f
@@ -43,15 +41,6 @@ trh   = V3 r t h
 brh   = V3 r b h
 blh   = V3 l b h
 
-uv00  = V2 zero zero 
-uv01  = V2 zero one
-uv10  = V2 one zero 
-uv11  = V2 one one 
-white = (V4 1.0 1.0 1.0 1.0)
-
-xAxis = V3 one zero zero
-yAxis = V3 zero one zero
-zAxis = V3 zero zero one
 
 -------------------------------------------------------------------------------
 
@@ -93,10 +82,10 @@ cubeMesh = cubeMesh' defaultCubeDef
 
 quadMesh :: Mesh Vertex4342
 quadMesh = 
-    let tl    = (V3 (-one)   one  zero, uv10)
-        tr    = (V3   one    one  zero, uv11)
-        br    = (V3   one  (-one) zero, uv01)
-        bl    = (V3 (-one) (-one) zero, uv00)
+    let tl    = (V3 (-1.0)   1.0  0.0, uv10)
+        tr    = (V3   1.0    1.0  0.0, uv11)
+        br    = (V3   1.0  (-1.0) 0.0, uv01)
+        bl    = (V3 (-1.0) (-1.0) 0.0, uv00)
         verts = over (mapped._1) point [tl, bl, br, tr]
         ixs   = [ 0, 1, 2
                 , 2, 3, 0
