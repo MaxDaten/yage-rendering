@@ -22,7 +22,7 @@ module Yage.Rendering.VertexSpec
     ) where
 ---------------------------------------------------------------------------------------------------
 import             Yage.Prelude
-import             Control.Lens
+import             Control.Lens                    
 ---------------------------------------------------------------------------------------------------
 import             Data.Data
 import             Data.List                       (map)
@@ -65,7 +65,6 @@ instance (Storable p, Storable n, Storable c, Storable t) => Storable (Vertex p 
         pokeByteOff ptr (sizeOf (undefined :: p)) __normal
         pokeByteOff ptr (sizeOf (undefined :: p) + sizeOf (undefined :: n)) __color
         pokeByteOff ptr (sizeOf (undefined :: p) + sizeOf (undefined :: n) + sizeOf (undefined :: c)) __texture
-
 
 type VertexMapDef s      = Getting VertexAttribMapping s VertexAttribMapping
 type VertexSize          = Int

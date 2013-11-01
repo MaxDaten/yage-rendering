@@ -7,7 +7,7 @@
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeSynonymInstances       #-}
-{-# LANGUAGE RankNTypes                 #-}
+-- {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE UndecidableInstances       #-}
 {-# LANGUAGE DeriveDataTypeable         #-}
