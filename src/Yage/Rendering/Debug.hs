@@ -9,7 +9,7 @@ import Yage.Rendering.Types
 
 type DebugRenderable = SomeRenderable
 
-
+{--
 data LineDebug = LineDebug
     { 
 
@@ -33,3 +33,4 @@ genNormalRenderable r =
         mkNormalVerts :: Vertex -> [Vertex]
         mkNormalVerts v@(Vertex position normal color) = 
             [v, Vertex (position + (vector normal)) normal color]
+--}

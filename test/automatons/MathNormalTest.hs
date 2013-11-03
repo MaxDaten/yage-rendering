@@ -3,7 +3,7 @@ module MathNormalTest where
 import Test.Hspec
 
 import Linear (V3(..))
-import Yage.Math
+import Yage.Math hiding (xAxis, yAxis, zAxis)
 
 xAxis, yAxis, zAxis :: V3 Float
 xAxis = V3 1 0 0

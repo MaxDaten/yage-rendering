@@ -17,7 +17,7 @@ fixureVertex = Vertex
                 { __position  = V4 2.0 3.0 5.0 7.0 
                 , __normal    = V3 11.0 13.0 17.0
                 , __color     = V4 19.0 23.0 29.0 31.0
-                , __texture   = V2 0.0 0.0 -- TODO
+                , __texture   = V2 1.0 0.0
                 }
 
 vertexSpecs :: Spec
