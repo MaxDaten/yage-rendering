@@ -16,15 +16,17 @@ module Yage.Rendering.Types
     (Renderer, RenderEnv(..), RenderState(..), RenderLog(..)
     , RenderConfig(..), RenderStatistics(..), FBO, VBO, VAO, EBO
     , RenderTarget(..)
+    
     , Renderable(..), SomeRenderable(..), renderableType, fromRenderable, toRenderable
     , RenderBatch(..)
     , RenderData(..), RenderDefinition(..)
     , RenderScene(..), emptyRenderScene, entitiesCount
     , RenderEntity(..), mkRenderEntity
-    , renderProgram, renderData, programDef, programSrc
-    , ShaderResource(..), ShaderProgram(..), UniShader, ShaderEnv(..), ShaderDefinition(..)
     , Mesh(..), mkMesh, Index, Position, Orientation, Scale
+    , ShaderResource(..), ShaderProgram(..), UniShader, ShaderEnv(..), ShaderDefinition(..)
     , TextureDefinition(..), _texChannel, _texResource, TextureResource
+    
+    , renderProgram, renderData, programDef, programSrc
     , toIndex1
     , module GLRawTypes
     ) where
@@ -32,7 +34,10 @@ module Yage.Rendering.Types
 import             Yage.Prelude                    hiding (log)
 
 import             Data.List                       (length)
+import             Data.Hashable                   ()
+import qualified   Data.HashMap.Strict             as M
 import             Foreign.C.Types                 (CFloat(..))
+import             Filesystem.Path.CurrentOS       (encode)
 
 import             Data.Typeable
 import             Control.Monad.RWS.Strict        (RWST)
@@ -77,10 +82,10 @@ data RenderConfig = RenderConfig
 
 
 data RenderState = RenderState
-    { loadedShaders         :: ![(ShaderResource, ShaderProgram)]
-    , loadedMeshes          :: ![(Mesh Vertex4342, (VBO, EBO))] -- TODO better Key, better structure
-    , loadedDefinitions     :: ![(RenderDefinition, VAO)] -- BETTER KEY!!
-    , loadedTextures        :: ![(TextureResource, GL.TextureObject)]
+    { loadedShaders         :: !(M.HashMap ShaderResource ShaderProgram)
+    , loadedMeshes          :: !(M.HashMap (Mesh Vertex4342) (VBO, EBO))
+    , loadedDefinitions     :: !(M.HashMap RenderDefinition VAO)
+    , loadedTextures        :: !(M.HashMap TextureResource GL.TextureObject)
     --, renderStatistics      :: !RenderStatistics
     }
 
@@ -294,5 +299,20 @@ data TextureDefinition = TextureDefinition
     , __texResource :: TextureResource
     } deriving (Typeable, Show, Eq)
 
+---------------------------------------------------------------------------------------------------
 makeLenses ''TextureDefinition
+
+instance Hashable (Mesh v) where
+    hashWithSalt salt = hashWithSalt salt . ident
+
+instance Hashable RenderDefinition where
+    hashWithSalt salt = hashWithSalt salt . def'ident
+
+instance Hashable FilePath where
+    hashWithSalt salt = hashWithSalt salt . encode
+
+instance Hashable ShaderResource where
+    hashWithSalt salt ShaderResource{..} = 
+        salt     `hashWithSalt`
+        vert'src `hashWithSalt` frag'src
 

@@ -65,6 +65,8 @@ library
 
                         , mtl                     >= 2.1
                         , containers              >= 0.5
+                        , unordered-containers    >= 0.2
+                        , hashable                >= 1
                         , bytestring              >= 0.10
                         , transformers            >= 0.3
                         , tuple                   >= 0.2

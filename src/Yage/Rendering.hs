@@ -13,11 +13,12 @@ module Yage.Rendering (
 import             Yage.Prelude                    hiding (log)
 import             Control.Lens                    hiding (indices)
 
-import             Data.List                       (length, head, map, lookup, groupBy, (++))
+import             Data.List                       (head, map, groupBy, (++))
+import qualified   Data.HashMap.Strict             as M
 
 import             Control.Monad.RWS.Strict        (gets, modify, asks, runRWST)
 import             Control.Monad.Reader            (runReaderT, ask)
-import             Control.Monad                   (mapM, mapM_,)
+import             Control.Monad                   (mapM, mapM_, liftM3, (=<<))
 import             Filesystem.Path.CurrentOS       (encodeString)
 
 import             Graphics.GLUtil                 hiding (makeVAO, offset0)
@@ -38,10 +39,10 @@ import Paths_yage_rendering
 
 initialRenderState :: RenderState
 initialRenderState = RenderState 
-    { loadedShaders         = []
-    , loadedMeshes          = []
-    , loadedDefinitions     = []
-    , loadedTextures        = []
+    { loadedShaders         = M.empty
+    , loadedMeshes          = M.empty
+    , loadedDefinitions     = M.empty
+    , loadedTextures        = M.empty
     }
 
 
@@ -61,8 +62,8 @@ renderFrame scene = do
     
     (_, renderTime) <- ioTime $ doRender scene
 
-    shCount         <- gets $! length . loadedShaders
-    mshCount        <- gets $! length . loadedMeshes
+    shCount         <- gets $! M.size . loadedShaders
+    mshCount        <- gets $! M.size . loadedMeshes
     --let stats = RenderStatistics
     --        { lastObjectCount    = -1
     --        , lastRenderDuration = renderTime
@@ -189,23 +190,23 @@ requestRenderData r = do
                    in mapM $ \td -> (, (chId td, chName td)) <$> requestTexture (td^._texResource)
 
 
-requestRenderResource :: (Eq a, Show b)
-                  => (RenderState -> [(a, b)])              -- ^ accassor function for state
+requestRenderResource :: (Eq a, Hashable a, Show b)
+                  => (RenderState -> M.HashMap a b)         -- ^ accassor function for state
                   -> (a -> Renderer b)                      -- ^ load function for resource
                   -> ((a,b) -> Renderer ())                 -- ^ function to add loaded resource to state
                   -> a                                      -- ^ the value to load resource from
                   -> Renderer b                             -- ^ the loaded resource
 requestRenderResource accessor loadResource addResource a = do
-    rs <- gets accessor
-    r  <- case lookup a rs of
-        Just res ->
-            return res
-        Nothing  -> do
-            loaded <- loadResource a
-            logRenderMf "loaded resource: {0}" [show loaded]
-            addResource (a, loaded)
-            return $! loaded
-    return r 
+    rs <- gets accessor 
+    case M.lookup a rs of
+        Just r -> return r
+        _      -> load a
+    where
+    load a = do
+        loaded <- loadResource a
+        logRenderMf "loaded resource: {0}" [show loaded]
+        addResource (a, loaded)
+        return $! loaded 
 
 
 requestVAO :: RenderDefinition -> Renderer VAO
@@ -278,16 +279,16 @@ requestTexture = requestRenderResource loadedTextures loadTexture' addTexture
 ---------------------------------------------------------------------------------------------------
 
 addMesh :: (Mesh Vertex4342, (VBO, EBO)) -> Renderer ()
-addMesh m = modify $! \st -> st{ loadedMeshes = m:(loadedMeshes st) }
+addMesh (m, d) = modify $! \st -> st{ loadedMeshes = M.insert m d (loadedMeshes st) }
 
 addShader :: (ShaderResource, ShaderProgram) -> Renderer ()
-addShader s = modify $! \st -> st{ loadedShaders = s:(loadedShaders st) }
+addShader (s, p) = modify $! \st -> st{ loadedShaders = M.insert s p (loadedShaders st) }
 
 addTexture :: (TextureResource, GL.TextureObject) -> Renderer ()
-addTexture t = modify $! \st -> st{ loadedTextures = t:(loadedTextures st) }
+addTexture (t, o) = modify $! \st -> st{ loadedTextures = M.insert t o (loadedTextures st) }
 
 addDefinition :: (RenderDefinition, VAO) -> Renderer ()
-addDefinition d = modify $ \st -> st{ loadedDefinitions = d:(loadedDefinitions st) }
+addDefinition (d, o) = modify $ \st -> st{ loadedDefinitions = M.insert d o (loadedDefinitions st) }
 
 ---------------------------------------------------------------------------------------------------
 
