@@ -31,8 +31,7 @@ Flag perf
 
 library
   hs-source-dirs:       src
-  exposed-modules:      Yage.Math
-                        Yage.Core.OpenGL
+  exposed-modules:      Yage.Core.OpenGL
                         Yage.Rendering
                         Yage.Rendering.Types
                         Yage.Rendering.Texture

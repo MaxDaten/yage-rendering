@@ -12,6 +12,3 @@ main = do
     hspec $ do
         describe "storable vertex" $ do
             vertexSpecs
-
-        describe "calculate correct normals" $ do
-            normalCalculation
