@@ -5,7 +5,6 @@
 module Main where
 import Test.Hspec (hspec, describe)
 import StorableVertexTest
-import MathNormalTest
 
 main :: IO ()
 main = do
