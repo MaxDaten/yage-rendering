@@ -17,7 +17,7 @@ import Control.Lens hiding (Index, indices)
 import Data.List ((++), map, take, length, (!!), repeat, zipWith4, unzip)
 import Data.Foldable
 
-import Linear (V2(..), V3(..), V4(..), R3(_xyz), point)
+import Linear (V3(..), V4(..), R3(_xyz), point)
 
 import Yage.Rendering.Types
 import Yage.Rendering.VertexSpec
@@ -114,13 +114,13 @@ processSpareVerts vs' ixs color =
       extract :: [(Position4f, Texture2f)] -> [Index] -> [(Position4f, Texture2f)]
       extract vs = map (vs!!)
 
-addFaceToMesh :: Face -> Mesh Vertex4342 -> Mesh Vertex4342
-addFaceToMesh face@(v0:v1:v2:v3:[]) mesh@Mesh{..} = 
-  let (normal, _, _) = plainNormalForm (v2^._1) (v1^._1) (v0^._1)
-  in mesh { vertices = map (\(p, c, t) -> Vertex (point p) normal c t) face ++ vertices 
-          , indices  = [0, 1, 2, 2, 3, 0] ++ map (+4) indices
-          , triCount = triCount + 2
-          }
 
-combineFacesToMesh :: Face -> Face -> Mesh Vertex4342
-combineFacesToMesh = undefined
+addFaceToMesh :: Face -> Mesh Vertex4342 -> Mesh Vertex4342
+addFaceToMesh face@(v0:v1:v2:_:[]) mesh@Mesh{..} = 
+  let (normal, _, _)  = plainNormalForm (v2^._1) (v1^._1) (v0^._1)
+  in mesh 
+        { vertices  = map (\(p, c, t) -> Vertex (point p) normal c t) face ++ vertices 
+        , indices   = [0, 1, 2, 2, 3, 0] ++ map (+4) indices
+        , triCount  = triCount + 2
+        }
+addFaceToMesh _ _     = error "invalid face" 
