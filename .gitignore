@@ -19,4 +19,5 @@ cabal.sandbox.config
 *.sublime-project
 *.sublime-workspace
 enumartion-record.hs
-generic-test.hs
+generic-test.hscabal.config
+cabal.config
