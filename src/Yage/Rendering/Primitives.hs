@@ -7,8 +7,8 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
 module Yage.Rendering.Primitives
-  (cubeMesh, quadMesh
-  , makeMeshfromSpare, processSpareVerts
+  ( cubeMesh, quadMesh
+  , makeMeshfromSpare, processSpareVerts, pushToBack
   ) where
 
 import Yage.Prelude -- hiding (id)
@@ -65,15 +65,8 @@ defaultCubeDef = SimpleCubeDef
     , hidden  = [(trh, white, uv01), (brh, white, uv00), (blh, white, uv10), (tlh, white, uv11)]
     }
 
-emptyMesh = Mesh
-  { ident    = "empytMesh"
-  , vertices = []
-  , indices  = []
-  , triCount = 0
-  }
-
 cubeMesh' :: SimpleCubeDef Face -> Mesh Vertex4342
-cubeMesh' def@SimpleCubeDef{..} = (foldr addFaceToMesh emptyMesh def){ ident = "cubeMesh" }
+cubeMesh' def@SimpleCubeDef{..} = (foldr addFaceToMesh (emptyMesh "") def){ ident = "cubeMesh" }
 
 cubeMesh :: Mesh Vertex4342
 cubeMesh = cubeMesh' defaultCubeDef
@@ -98,7 +91,7 @@ quadMesh =
 
 makeMeshfromSpare :: String -> [(Position4f, Texture2f)] -> [Index] -> Color4f -> Mesh Vertex4342
 makeMeshfromSpare id verts ixs color =
-    mkMesh id (processSpareVerts verts ixs color) $ take (length ixs) [0..]
+    makeMesh id (processSpareVerts verts ixs color) $ take (length ixs) [0..]
 
 
 
@@ -124,3 +117,12 @@ addFaceToMesh face@(v0:v1:v2:_:[]) mesh@Mesh{..} =
         , triCount  = triCount + 2
         }
 addFaceToMesh _ _     = error "invalid face" 
+
+
+pushToBack :: Mesh v -> Mesh v -> Mesh v
+pushToBack to from =
+  let indexCount = length $ indices to
+  in to{ vertices  = vertices to ++ vertices from
+       , indices   = indices to  ++ map (+indexCount) (indices from)
+       , triCount  = triCount to + triCount from
+       }

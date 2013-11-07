@@ -16,15 +16,17 @@ module Yage.Rendering.Types
     (Renderer, RenderEnv(..), RenderState(..), RenderLog(..)
     , RenderConfig(..), RenderStatistics(..), FBO, VBO, VAO, EBO
     , RenderTarget(..)
-    
+    , Program
+
     , Renderable(..), SomeRenderable(..), renderableType, fromRenderable, toRenderable
     , RenderBatch(..)
     , RenderData(..), RenderDefinition(..)
     , RenderScene(..), emptyRenderScene, entitiesCount
     , RenderEntity(..), mkRenderEntity
-    , Mesh(..), mkMesh, Index, Position, Orientation, Scale
+    , Mesh(..), makeMesh, emptyMesh
+    , Index, Position, Orientation, Scale
     , ShaderResource(..), ShaderProgram(..), UniShader, ShaderEnv(..), ShaderDefinition(..)
-    , TextureDefinition(..), _texChannel, _texResource, TextureResource
+    , TextureDefinition(..), _texChannel, _texResource, TextureResource(..)
     
     , renderProgram, renderData, programDef, programSrc
     , toIndex1
@@ -52,6 +54,7 @@ import qualified   Graphics.GLUtil.Camera3D        as Cam
 import qualified   Graphics.Rendering.OpenGL       as GL
 import             Graphics.Rendering.OpenGL.Raw.Types as GLRawTypes
 ---------------------------------------------------------------------------------------------------
+import             Yage.Rendering.Texture
 import             Yage.Rendering.VertexSpec
 -- =================================================================================================
 
@@ -231,9 +234,12 @@ instance Eq (Mesh v) where
 instance Ord (Mesh v) where
     compare a b = compare (ident a) (ident b)
 
-mkMesh :: String -> [v] -> [Index] -> Mesh v
+makeMesh :: String -> [v] -> [Index] -> Mesh v
 -- TODO some assertions for invalid meshes
-mkMesh ident vs ixs = Mesh ident vs ixs $ (length ixs) `quot` 3
+makeMesh ident vs ixs = Mesh ident vs ixs $ (length ixs) `quot` 3
+
+emptyMesh :: String -> Mesh v
+emptyMesh ident = Mesh ident [] [] 0
 
 ---------------------------------------------------------------------------------------------------
 
@@ -292,15 +298,28 @@ instance AsUniform (M22 Float) where
 
 ---------------------------------------------------------------------------------------------------
 
-type TextureResource = FilePath
+data TextureResource = 
+      TextureFile FilePath
+    | TextureImage String DynamicImage
+    deriving (Typeable)
+
+instance Show TextureResource where
+    show (TextureFile name) = show name
+    show (TextureImage name _ ) = show name
+
+instance Eq TextureResource where
+    (==) (TextureFile name1) (TextureFile name2) = name1 == name2
+    (==) (TextureImage name1 _ ) (TextureImage name2 _ ) = name1 == name2
+    (==) _ _ = False
 
 data TextureDefinition = TextureDefinition
     { __texChannel  :: (Int, String)
     , __texResource :: TextureResource
     } deriving (Typeable, Show, Eq)
 
----------------------------------------------------------------------------------------------------
 makeLenses ''TextureDefinition
+
+---------------------------------------------------------------------------------------------------
 
 instance Hashable (Mesh v) where
     hashWithSalt salt = hashWithSalt salt . ident
@@ -316,3 +335,8 @@ instance Hashable ShaderResource where
         salt     `hashWithSalt`
         vert'src `hashWithSalt` frag'src
 
+instance Hashable TextureResource where
+    hashWithSalt salt (TextureFile file) =
+        salt `hashWithSalt` file
+    hashWithSalt salt (TextureImage name _) =
+        salt `hashWithSalt` name

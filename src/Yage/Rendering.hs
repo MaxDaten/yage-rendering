@@ -2,6 +2,7 @@
 {-# LANGUAGE RecordWildCards, TupleSections, GeneralizedNewtypeDeriving, DeriveDataTypeable, ScopedTypeVariables #-}
 module Yage.Rendering (
       module GLReExports
+    , module Types
     , runRenderer
     , renderScene
     , initialRenderState
@@ -18,15 +19,14 @@ import qualified   Data.HashMap.Strict             as M
 
 import             Control.Monad.RWS.Strict        (gets, modify, asks, runRWST)
 import             Control.Monad.Reader            (runReaderT, ask)
-import             Control.Monad                   (mapM, mapM_, liftM3, (=<<))
-import             Filesystem.Path.CurrentOS       (encodeString)
+import             Control.Monad                   (mapM, mapM_)
 
 import             Graphics.GLUtil                 hiding (makeVAO, offset0)
 import qualified   Graphics.Rendering.OpenGL       as GL
 import             Graphics.Rendering.OpenGL.GL    (($=))
 import             Graphics.Rendering.OpenGL.GL    as GLReExports (Color4(..))
 ---------------------------------------------------------------------------------------------------
-import             Yage.Rendering.Types
+import             Yage.Rendering.Types            as Types
 import qualified   Yage.Rendering.Texture          as Tex
 import             Yage.Rendering.Shader
 import             Yage.Rendering.VertexSpec
@@ -268,13 +268,17 @@ requestTexture :: TextureResource -> Renderer (GL.TextureObject)
 requestTexture = requestRenderResource loadedTextures loadTexture' addTexture
     where
         loadTexture' :: TextureResource -> Renderer (GL.TextureObject)
-        loadTexture' tex = io $ do
-            res <- Tex.readTexture . encodeString $ tex
+        loadTexture' (TextureImage _ img) = io $
+            handleTexObj =<< Tex.readTextureImg img
+        loadTexture' (TextureFile texFile) = io $
+            handleTexObj =<< (Tex.readTexture . encodeString $ texFile)
+        handleTexObj res = do
             GL.textureFilter GL.Texture2D $= ((GL.Linear', Nothing), GL.Linear') -- TODO Def
             printErrorMsg $ "tex: " ++ (show res )
             case res of
                 Left msg  -> error msg
                 Right obj -> return obj
+            
 
 ---------------------------------------------------------------------------------------------------
 

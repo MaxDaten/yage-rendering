@@ -61,6 +61,7 @@ library
                         , OpenGLRaw               >= 1.4
                         , OpenGL                  >= 2.9     &&   < 3
                         , GLUtil                  >= 0.7
+                        , JuicyPixels             >= 3
 
                         , mtl                     >= 2.1
                         , containers              >= 0.5
