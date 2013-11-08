@@ -12,6 +12,7 @@
 {-# LANGUAGE UndecidableInstances       #-}
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE DeriveTraversable          #-}
+{-# LANGUAGE NamedFieldPuns             #-}
 module Yage.Rendering.Types
     (Renderer, RenderEnv(..), RenderState(..), RenderLog(..)
     , RenderConfig(..), RenderStatistics(..), FBO, VBO, VAO, EBO
@@ -21,7 +22,7 @@ module Yage.Rendering.Types
     , Renderable(..), SomeRenderable(..), renderableType, fromRenderable, toRenderable
     , RenderBatch(..)
     , RenderData(..), RenderDefinition(..)
-    , RenderScene(..), emptyRenderScene, entitiesCount
+    , RenderScene(..), emptyRenderScene, entitiesCount, addEntity
     , RenderEntity(..), mkRenderEntity
     , Mesh(..), makeMesh, emptyMesh
     , Index, Position, Orientation, Scale
@@ -177,6 +178,8 @@ data RenderScene = RenderScene
 emptyRenderScene :: RenderScene
 emptyRenderScene = RenderScene [] 0.0 (Cam.camMatrix Cam.fpsCamera) (Cam.projectionMatrix (Cam.deg2rad 60) 1 1 45)
 
+addEntity :: (Renderable r) =>  r -> RenderScene -> RenderScene
+addEntity r scene@RenderScene{entities} = scene{ entities = (SomeRenderable r):entities }
 
 entitiesCount :: RenderScene -> Int
 entitiesCount = length . entities

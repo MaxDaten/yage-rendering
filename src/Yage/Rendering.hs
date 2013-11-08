@@ -148,13 +148,23 @@ afterRender = return ()
 
 render :: RenderScene -> RenderData -> SomeRenderable -> Renderer ()
 render scene RenderData{..} r = do
+    checkErr "start rendering"
     io $! withVAO vao . withTexturesAt GL.Texture2D tUnits $! do
         let udefs = uniform'def . programDef  . renderProgram $ r
-        runUniform (udefs >> mapTextureSamplers texObjs) shaderEnv
+        
+        checkErr "preuniform"
+        -- runUniform (udefs >> mapTextureSamplers texObjs) shaderEnv -- why no texture samplers anymore?
+        runUniform (udefs) shaderEnv
+        
+        checkErr "postuniform"
+        
         drawIndexedTris . fromIntegral $ triangleCount
+        checkErr "after draw"
     logCountObj
     logCountTriangles triangleCount
+    checkErr "end render"
     where
+        checkErr msg = io $ throwErrorMsg $ msg ++ (show $ (fromRenderable r :: Maybe RenderEntity))
         tUnits = over (mapped._2) (^._1) texObjs
         shaderEnv = ShaderEnv 
             { shaderEnv'Program           = shaderProgram
@@ -182,6 +192,7 @@ requestRenderData r = do
     sh       <- requestShader . programSrc . renderProgram $ r
     vao      <- requestVAO rdef
     texs     <- loadTexs (def'textures rdef)
+    
     return $ RenderData vao sh texs tris
     where
         loadTexs :: [TextureDefinition] -> Renderer [(GL.TextureObject, (GLuint, String))]
@@ -235,6 +246,7 @@ setVertexAttributes prog vdef =
             let vad = makeVAD layout stride
             setAttrib prog name GL.ToFloat vad
             enableAttrib prog name
+            printErrorMsg "setAttribute-"
         
         makeVAD :: VertexAttribDef -> VertexSize -> GL.VertexArrayDescriptor a
         makeVAD (off, count, _size) stride =
@@ -270,8 +282,10 @@ requestTexture = requestRenderResource loadedTextures loadTexture' addTexture
         loadTexture' :: TextureResource -> Renderer (GL.TextureObject)
         loadTexture' (TextureImage _ img) = io $
             handleTexObj =<< Tex.readTextureImg img
+        
         loadTexture' (TextureFile texFile) = io $
             handleTexObj =<< (Tex.readTexture . encodeString $ texFile)
+        
         handleTexObj res = do
             GL.textureFilter GL.Texture2D $= ((GL.Linear', Nothing), GL.Linear') -- TODO Def
             printErrorMsg $ "tex: " ++ (show res )

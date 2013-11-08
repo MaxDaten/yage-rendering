@@ -28,9 +28,9 @@ readTexInfoImg img k = getTexInfo img
     where
         getTexInfo (ImageY8    (Image w h p)) = Right <$> (k $ texInfo w h TexMono p)
         getTexInfo (ImageYF    (Image w h p)) = Right <$> (k $ texInfo w h TexMono p)
-        getTexInfo (ImageRGB8  (Image w h p)) = Right <$> (k $ texInfo w h TexMono p)
-        getTexInfo (ImageRGBF  (Image w h p)) = Right <$> (k $ texInfo w h TexMono p)
-        getTexInfo (ImageRGBA8 (Image w h p)) = Right <$> (k $ texInfo w h TexMono p)
+        getTexInfo (ImageRGB8  (Image w h p)) = Right <$> (k $ texInfo w h TexRGB p)
+        getTexInfo (ImageRGBF  (Image w h p)) = Right <$> (k $ texInfo w h TexRGB p)
+        getTexInfo (ImageRGBA8 (Image w h p)) = Right <$> (k $ texInfo w h TexRGBA p)
         getTexInfo (ImageYCbCr8 img'        ) = getTexInfo . ImageRGB8 $ convertImage img'
         getTexInfo (ImageYA8    _           ) = return $ Left "YA format not supported"
         getTexInfo _                          = return $ Left "Unsupported image format"
@@ -38,3 +38,4 @@ readTexInfoImg img k = getTexInfo img
 
 readTextureImg :: DynamicImage -> IO (Either String TextureObject)
 readTextureImg img = readTexInfoImg img loadTexture
+

@@ -8,7 +8,7 @@
 {-# LANGUAGE TypeFamilies #-}
 module Yage.Rendering.Primitives
   ( cubeMesh, quadMesh
-  , makeMeshfromSpare, processSpareVerts, pushToBack
+  , makeMeshfromSpare, processSpareVerts, pushToBack, extractMeshByIndices
   ) where
 
 import Yage.Prelude -- hiding (id)
@@ -121,8 +121,15 @@ addFaceToMesh _ _     = error "invalid face"
 
 pushToBack :: Mesh v -> Mesh v -> Mesh v
 pushToBack to from =
-  let indexCount = length $ indices to
+  let vertexCount = length $ vertices to
   in to{ vertices  = vertices to ++ vertices from
-       , indices   = indices to  ++ map (+indexCount) (indices from)
+       , indices   = indices to  ++ map (+vertexCount) (indices from)
        , triCount  = triCount to + triCount from
        }
+
+extractMeshByIndices :: Mesh v -> Mesh v
+extractMeshByIndices m@Mesh{..} = 
+  let verts'  = map (vertices!!) indices
+      count   = length verts'
+      ixs'    = [0..count]
+  in m{vertices = verts', indices = ixs', triCount = count `div` 3}
