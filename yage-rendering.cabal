@@ -60,7 +60,7 @@ library
                         , system-filepath         >= 0.4
                         , OpenGLRaw               >= 1.4
                         , OpenGL                  >= 2.9     &&   < 3
-                        , GLUtil                  >= 0.7
+                        , GLUtil                  >= 0.7.1
                         , JuicyPixels             >= 3
 
                         , mtl                     >= 2.1
@@ -77,6 +77,8 @@ library
 -------------------------------------------------------------------------------
 
 test-suite test
+    if flag(library-only)
+      Buildable: False
     type:              exitcode-stdio-1.0
     hs-source-dirs:    test/automatons
     main-is:           Main.hs

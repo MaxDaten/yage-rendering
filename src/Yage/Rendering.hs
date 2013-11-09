@@ -122,6 +122,8 @@ setupFrame = do
         GL.clearColor $= fmap realToFrac clearC
         GL.depthFunc $= Just GL.Less    -- TODO to init
         GL.depthMask $= GL.Enabled      -- TODO to init
+        GL.blend     $= GL.Enabled      -- TODO to init/render target
+        GL.blendFunc $= (GL.SrcAlpha, GL.OneMinusSrcAlpha) -- TODO to init/render target
         
         GL.clear [GL.ColorBuffer, GL.DepthBuffer]
 
@@ -271,7 +273,7 @@ requestMesh = requestRenderResource loadedMeshes loadMesh addMesh
     where
         loadMesh :: Mesh Vertex4342 -> Renderer (VBO, EBO)
         loadMesh mesh = io $ do
-            vbo <- makeBuffer GL.ArrayBuffer $ vertices $ mesh
+            vbo <- makeBuffer GL.ArrayBuffer $ vertices mesh
             ebo <- bufferIndices $ map fromIntegral $ indices mesh
             return $! (vbo, ebo)
 
