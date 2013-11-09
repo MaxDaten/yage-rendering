@@ -60,10 +60,10 @@ renderFrame :: RenderScene -> Renderer ()
 renderFrame scene = do
     beforeRender
     
-    (_, renderTime) <- ioTime $ doRender scene
+    (_, _) <- ioTime $ doRender scene
 
-    shCount         <- gets $! M.size . loadedShaders
-    mshCount        <- gets $! M.size . loadedMeshes
+    _         <- gets $! M.size . loadedShaders
+    _        <- gets $! M.size . loadedMeshes
     --let stats = RenderStatistics
     --        { lastObjectCount    = -1
     --        , lastRenderDuration = renderTime
@@ -117,6 +117,7 @@ beforeRender = do
 setupFrame :: Renderer ()
 setupFrame = do
     clearC <- asks $ confClearColor . envConfig
+    wire   <- asks $ confWireframe . envConfig
     target <- asks renderTarget
     io $! do
         GL.clearColor $= fmap realToFrac clearC
@@ -124,6 +125,7 @@ setupFrame = do
         GL.depthMask $= GL.Enabled      -- TODO to init
         GL.blend     $= GL.Enabled      -- TODO to init/render target
         GL.blendFunc $= (GL.SrcAlpha, GL.OneMinusSrcAlpha) -- TODO to init/render target
+        GL.polygonMode $= if wire then (GL.Line, GL.Line) else (GL.Fill, GL.Fill)
         
         GL.clear [GL.ColorBuffer, GL.DepthBuffer]
 

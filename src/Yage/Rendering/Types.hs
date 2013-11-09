@@ -82,6 +82,7 @@ data RenderLog = RenderLog
 data RenderConfig = RenderConfig
     { confClearColor        :: !(GL.Color4 Double)
     , confDebugNormals      :: !Bool
+    , confWireframe         :: !Bool
     }
 
 
