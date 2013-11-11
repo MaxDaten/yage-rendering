@@ -37,7 +37,6 @@ library
                         Yage.Rendering.Texture
                         Yage.Rendering.Shader
                         Yage.Rendering.VertexSpec
-                        Yage.Rendering.WorldState
                         Yage.Rendering.Primitives
                         Yage.Rendering.Logging
   other-modules:
