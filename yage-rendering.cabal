@@ -36,6 +36,7 @@ library
                         Yage.Rendering.Types
                         Yage.Rendering.Texture
                         Yage.Rendering.Shader
+                        Yage.Rendering.RenderWorld
                         Yage.Rendering.VertexSpec
                         Yage.Rendering.Primitives
                         Yage.Rendering.Logging

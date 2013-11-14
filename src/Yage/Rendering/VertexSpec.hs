@@ -12,13 +12,14 @@
 module Yage.Rendering.VertexSpec
     ( Vertex(..), _position, _normal, _color, _texture
     , Position4f, Position3f, Normal3f, Color4f, Texture2f
-    , Vertex4342
     , VertexSize
     , VertexMapDef
     , VertexDef, _vertMap, _vertSize
     , VertexAttribMapping, _attrName, _attrDef
     , VertexAttribDef, _attrOffset, _attrCount, _attrSize
     , define, toDef, (^:=)
+    
+    , Vertex4342, Vertex2P2T4C
     ) where
 ---------------------------------------------------------------------------------------------------
 import             Yage.Prelude
@@ -35,10 +36,12 @@ import             Graphics.Rendering.OpenGL       (GLfloat)
 
 type Position4f = V4 GLfloat
 type Position3f = V3 GLfloat
+type Position2f = V2 GLfloat
 type Normal3f   = V3 GLfloat
 type Color4f    = V4 GLfloat
 type Texture2f  = V2 GLfloat
 type Vertex4342 = Vertex Position4f Normal3f Color4f Texture2f
+type Vertex2P2T4C = Vertex Position2f () Color4f Texture2f
 
 data Vertex p n c t = Vertex 
     { __position      :: p

@@ -3,28 +3,28 @@
 {-# LANGUAGE ExistentialQuantification  #-}
 {-# LANGUAGE RecordWildCards            #-}
 {-# LANGUAGE DeriveFunctor              #-}
+{-# LANGUAGE DeriveGeneric              #-}
+{-# LANGUAGE DeriveDataTypeable         #-}
+{-# LANGUAGE DeriveTraversable          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeSynonymInstances       #-}
--- {-# LANGUAGE RankNTypes                 #-}
+{-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE UndecidableInstances       #-}
-{-# LANGUAGE DeriveDataTypeable         #-}
-{-# LANGUAGE DeriveTraversable          #-}
 {-# LANGUAGE NamedFieldPuns             #-}
 module Yage.Rendering.Types
-    (Renderer, RenderEnv(..), RenderState(..), RenderLog(..)
+    ( Renderer, RenderEnv(..), RenderLog(..)
     , RenderConfig(..), RenderStatistics(..), FBO, VBO, VAO, EBO
     , RenderTarget(..)
     , Program
 
     , Renderable(..), SomeRenderable(..), renderableType, fromRenderable, toRenderable
-    , RenderBatch(..)
     , RenderData(..), RenderDefinition(..)
     , RenderScene(..), emptyRenderScene, entitiesCount, addEntity
     , RenderEntity(..), mkRenderEntity
-    , Mesh(..), makeMesh, emptyMesh
+    , Mesh(..), MeshData(..), makeMesh, emptyMeshData
     , Index, Position, Orientation, Scale
     , ShaderResource(..), ShaderProgram(..), UniShader, ShaderEnv(..), ShaderDefinition(..)
     , TextureDefinition(..), _texChannel, _texResource, TextureResource(..)
@@ -38,11 +38,12 @@ import             Yage.Prelude                    hiding (log)
 
 import             Data.List                       (length)
 import             Data.Hashable                   ()
-import qualified   Data.HashMap.Strict             as M
 import             Foreign.C.Types                 (CFloat(..))
 import             Filesystem.Path.CurrentOS       (encode)
 
 import             Data.Typeable
+import             GHC.Generics                    (Generic)
+
 import             Control.Monad.RWS.Strict        (RWST)
 import             Control.Monad.Writer            ()
 import             Control.Monad.Reader            (ReaderT)
@@ -56,10 +57,9 @@ import qualified   Graphics.Rendering.OpenGL       as GL
 import             Graphics.Rendering.OpenGL.Raw.Types as GLRawTypes
 ---------------------------------------------------------------------------------------------------
 import             Yage.Rendering.Texture
-import             Yage.Rendering.VertexSpec
 -- =================================================================================================
 
-type Renderer = RWST RenderEnv RenderLog RenderState IO
+type Renderer = RWST RenderEnv RenderLog () IO
     --deriving (Functor, Applicative, Monad, MonadIO, MonadReader YageRenderEnv, MonadWriter RenderLog MonadState RenderState, Typeable)
 
 data RenderTarget = RenderTarget
@@ -83,15 +83,6 @@ data RenderConfig = RenderConfig
     { confClearColor        :: !(GL.Color4 Double)
     , confDebugNormals      :: !Bool
     , confWireframe         :: !Bool
-    }
-
-
-data RenderState = RenderState
-    { loadedShaders         :: !(M.HashMap ShaderResource ShaderProgram)
-    , loadedMeshes          :: !(M.HashMap (Mesh Vertex4342) (VBO, EBO))
-    , loadedDefinitions     :: !(M.HashMap RenderDefinition VAO)
-    , loadedTextures        :: !(M.HashMap TextureResource GL.TextureObject)
-    --, renderStatistics      :: !RenderStatistics
     }
 
 data RenderStatistics = RenderStatistics
@@ -143,7 +134,7 @@ programSrc = fst
 programDef :: Program -> ShaderDefinition
 programDef = snd
 
-renderData :: (Renderable r) => r -> Mesh Vertex4342
+renderData :: (Renderable r) => r -> Mesh
 renderData = def'data . renderDefinition
 
 
@@ -156,12 +147,6 @@ instance Renderable SomeRenderable where
     renderDefinition (SomeRenderable r) = renderDefinition r
 
 
-data Renderable r => RenderBatch r = RenderBatch
-    { withBatch         :: ([r] -> Renderer ()) -> Renderer ()
-    , perItemAction     :: r -> Renderer ()
-    , batch             :: [r]
-    }
-    
 
 ---------------------------------------------------------------------------------------------------
 
@@ -196,7 +181,7 @@ data RenderEntity = RenderEntity
     , eOrientation :: !Orientation
     , eScale       :: !Scale
     , renderDef    :: RenderDefinition
-    } deriving (Typeable, Show)
+    } deriving (Typeable)
 
 mkRenderEntity :: RenderDefinition -> RenderEntity
 mkRenderEntity def = RenderEntity
@@ -206,7 +191,7 @@ mkRenderEntity def = RenderEntity
     , renderDef     = def
     }
 
-data RenderData = RenderData
+data RenderData = RenderData -- TODO rename RenderResource
     { vao           :: GL.VertexArrayObject
     , shaderProgram :: ShaderProgram
     , texObjs       :: [(GL.TextureObject, (GLuint, String))]
@@ -224,26 +209,36 @@ toIndex1 = GL.Index1
 deriving instance Show ShaderProgram
 type Index     = Int
 
-data Mesh v = 
-    Mesh
-    { ident    :: !String
-    , vertices :: ![v]
+data Mesh = forall v. Mesh
+    { meshId   :: Int
+    , meshName :: String
+    , meshData :: MeshData v
+    , dirty    :: Bool
+    } deriving (Typeable)
+
+data MeshData v = MeshData
+    { vertices :: ![v]
     , indices  :: ![Index]
     , triCount :: !Int
-    } deriving (Show)
+    } deriving (Show, Generic)
 
-instance Eq (Mesh v) where
-    a == b = ident a == ident b
+instance Show Mesh where
+    show = show . meshName -- TODO
 
-instance Ord (Mesh v) where
-    compare a b = compare (ident a) (ident b)
+instance Eq Mesh where
+    a == b = meshId a == meshId b
 
-makeMesh :: String -> [v] -> [Index] -> Mesh v
+instance Ord Mesh where
+    compare a b = compare (meshId a) (meshId b)
+
+makeMesh :: Int -> String -> [v] -> [Index] -> Mesh
 -- TODO some assertions for invalid meshes
-makeMesh ident vs ixs = Mesh ident vs ixs $ (length ixs) `quot` 3
+makeMesh ident name vs ixs = 
+    let meshdata = MeshData vs ixs $ (length ixs) `quot` 3
+    in Mesh ident name meshdata True
 
-emptyMesh :: String -> Mesh v
-emptyMesh ident = Mesh ident [] [] 0
+emptyMeshData :: MeshData v
+emptyMeshData = MeshData [] [] 0
 
 ---------------------------------------------------------------------------------------------------
 
@@ -263,28 +258,15 @@ data ShaderResource = ShaderResource
 --data ShaderUniformDef r s = ShaderUniformDef { runUniform :: r -> s -> ShaderProgram -> IO () }
 
 data ShaderDefinition = ShaderDefinition
-    { attrib'def  :: [VertexMapDef Vertex4342]
-    , uniform'def :: UniShader ()
-    }
+    { uniform'def :: UniShader () }
 
 type Program = (ShaderResource, ShaderDefinition)
 
 data RenderDefinition = RenderDefinition
-    { def'ident     :: String
-    , def'data      :: Mesh Vertex4342
+    { def'data      :: Mesh
     , def'program   :: Program
     , def'textures  :: [TextureDefinition] -- | (Resource, Shader TextureUnit)
     }
-
-instance Eq RenderDefinition where
-    a == b = def'ident a == def'ident b
-
-instance Ord RenderDefinition where
-    compare a b = compare (def'ident a) (def'ident b)
-
-instance Show RenderDefinition where
-    show = show . def'ident 
-
 
 ---------------------------------------------------------------------------------------------------
 
@@ -307,6 +289,9 @@ data TextureResource =
     | TextureImage String DynamicImage
     deriving (Typeable)
 
+-- TODO
+instance Ord TextureResource
+
 instance Show TextureResource where
     show (TextureFile name) = show name
     show (TextureImage name _ ) = show name
@@ -319,17 +304,13 @@ instance Eq TextureResource where
 data TextureDefinition = TextureDefinition
     { __texChannel  :: (Int, String)
     , __texResource :: TextureResource
-    } deriving (Typeable, Show, Eq)
+    } deriving (Typeable, Show, Eq, Ord)
 
 makeLenses ''TextureDefinition
 
 ---------------------------------------------------------------------------------------------------
 
-instance Hashable (Mesh v) where
-    hashWithSalt salt = hashWithSalt salt . ident
-
-instance Hashable RenderDefinition where
-    hashWithSalt salt = hashWithSalt salt . def'ident
+instance (Hashable v) => Hashable (MeshData v)
 
 instance Hashable FilePath where
     hashWithSalt salt = hashWithSalt salt . encode

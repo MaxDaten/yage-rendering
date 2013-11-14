@@ -4,8 +4,7 @@ module Yage.Rendering (
       module GLReExports
     , module Types
     , runRenderer
-    , renderScene
-    , initialRenderState
+    , renderView
     , (!=), shaderEnv
     , logRenderM
     , version
@@ -19,13 +18,14 @@ import qualified   Data.HashMap.Strict             as M
 
 import             Control.Monad.RWS.Strict        (gets, modify, asks, runRWST)
 import             Control.Monad.Reader            (runReaderT, ask)
-import             Control.Monad                   (mapM, mapM_)
+import             Control.Monad                   (mapM, mapM_, forM_)
 
 import             Graphics.GLUtil                 hiding (makeVAO, offset0)
 import qualified   Graphics.Rendering.OpenGL       as GL
 import             Graphics.Rendering.OpenGL.GL    (($=))
 import             Graphics.Rendering.OpenGL.GL    as GLReExports (Color4(..))
 ---------------------------------------------------------------------------------------------------
+import             Yage.Rendering.RenderWorld
 import             Yage.Rendering.Types            as Types
 import qualified   Yage.Rendering.Texture          as Tex
 import             Yage.Rendering.Shader
@@ -37,17 +37,15 @@ import             Yage.Rendering.Logging
 import Paths_yage_rendering
 
 
-initialRenderState :: RenderState
-initialRenderState = RenderState 
-    { loadedShaders         = M.empty
-    , loadedMeshes          = M.empty
-    , loadedDefinitions     = M.empty
-    , loadedTextures        = M.empty
+data RenderBatch r = RenderBatch
+    { withBatch         :: ([r] -> Renderer ()) -> Renderer ()
+    , perItemAction     :: r -> Renderer ()
+    , batch             :: [r]
     }
 
 
-renderScene :: RenderScene -> Renderer ()
-renderScene scene = renderFrame scene >> afterFrame
+renderView :: RenderView -> [ViewDefinition] -> Renderer ()
+renderView view vdefs = renderFrame view vdefs >> afterFrame
 
 
 
@@ -56,14 +54,12 @@ afterFrame = io $ do
     return ()
 
 
-renderFrame :: RenderScene -> Renderer ()
-renderFrame scene = do
+renderFrame :: RenderView -> [ViewDefinition] -> Renderer ()
+renderFrame view vdefs = do
     beforeRender
     
-    (_, _) <- ioTime $ doRender scene
+    (_, _) <- ioTime $ doRender view vdefs
 
-    _         <- gets $! M.size . loadedShaders
-    _        <- gets $! M.size . loadedMeshes
     --let stats = RenderStatistics
     --        { lastObjectCount    = -1
     --        , lastRenderDuration = renderTime
@@ -76,34 +72,33 @@ renderFrame scene = do
     afterRender
 
 
-doRender :: RenderScene -> Renderer ()
-doRender scene@RenderScene{..} =
-    mapM_ renderBatch $ createShaderBatches scene entities
+doRender :: RenderView -> [ViewDefinition] -> Renderer ()
+doRender view vdefs =
+    let batches = createShaderBatches view vdefs
+    in forM_ batches $ renderBatch view 
 
 
-renderWithData :: RenderScene -> SomeRenderable -> Renderer ()
-renderWithData scene r = requestRenderData r >>= \rdata -> render scene rdata r
+
+renderBatch :: RenderView -> RenderBatch ViewDefinition -> Renderer ()
+renderBatch view RenderBatch{..} = withBatch $
+    mapM_ (perItemAction >> renderViewDefinition view)
 
 
-renderBatch :: RenderBatch SomeRenderable -> Renderer ()
-renderBatch RenderBatch{..} = withBatch $ \rs -> mapM_ perItemAction rs
-
-
-createShaderBatches :: RenderScene -> [SomeRenderable] -> [RenderBatch SomeRenderable]
-createShaderBatches scene rs = 
-    let shaderGroups = groupBy sameShader rs
+createShaderBatches :: RenderView -> [ViewDefinition] -> [RenderBatch ViewDefinition]
+createShaderBatches view vdefs = 
+    let shaderGroups = groupBy sameShader vdefs
     in map mkShaderBatch shaderGroups
     where
-        sameShader :: SomeRenderable -> SomeRenderable -> Bool
-        sameShader a b = (programSrc $ renderProgram a) == (programSrc $ renderProgram b)
+        sameShader :: ViewDefinition -> ViewDefinition -> Bool
+        sameShader a b = (a^.vdRenderData.to (program . shaderProgram)) == (b^.vdRenderData.to (program . shaderProgram))
 
-        mkShaderBatch :: [SomeRenderable] -> RenderBatch SomeRenderable
-        mkShaderBatch rs =
-            let batchShader = programSrc $ renderProgram . head $ rs
+        mkShaderBatch :: [ViewDefinition] -> RenderBatch ViewDefinition
+        mkShaderBatch defs@(v:vs) =
+            let batchShader = v^.vdRenderData.to shaderProgram
             in RenderBatch
-                { withBatch = \m -> requestShader batchShader >>= \s -> withShader s (\_s -> m rs)
-                , perItemAction = renderWithData scene
-                , batch = rs
+                { withBatch     = \m -> withShader batchShader (const $ m defs)
+                , perItemAction = \_ -> return ()
+                , batch         = defs
                 }
 
 
@@ -111,7 +106,6 @@ createShaderBatches scene rs =
 beforeRender :: Renderer ()
 beforeRender = do
     setupFrame
-    prepareResources
 
 
 setupFrame :: Renderer ()
@@ -135,10 +129,6 @@ setupFrame = do
         GL.viewport $= ((GL.Position 0 0), (GL.Size (fromIntegral (r * w)) (fromIntegral (r * h))) )
 
 
--- | Unloads unneeded render-resources and loads needed resources
-prepareResources :: Renderer ()
-prepareResources = return ()
-
 ---------------------------------------------------------------------------------------------------
 
 
@@ -150,30 +140,34 @@ afterRender = return ()
 
 ---------------------------------------------------------------------------------------------------
 
-render :: RenderScene -> RenderData -> SomeRenderable -> Renderer ()
-render scene RenderData{..} r = do
-    checkErr "start rendering"
-    io $! withVAO vao . withTexturesAt GL.Texture2D tUnits $! do
-        let udefs = uniform'def . programDef  . renderProgram $ r
-        
-        checkErr "preuniform"
-        -- runUniform (udefs >> mapTextureSamplers texObjs) shaderEnv -- why no texture samplers anymore?
-        runUniform (udefs) shaderEnv
-        
-        checkErr "postuniform"
-        
-        drawIndexedTris . fromIntegral $ triangleCount
-        checkErr "after draw"
-    logCountObj
-    logCountTriangles triangleCount
-    checkErr "end render"
+renderViewDefinition :: RenderView -> ViewDefinition -> Renderer ()
+renderViewDefinition view vdef = 
+    let rdata = vdef^.vdRenderData
+    in do
+        checkErr "start rendering"
+        io $! withVAO (rdata^.to vao) . withTexturesAt GL.Texture2D (tUnits rdata) $! do
+            
+            checkErr "preuniform"
+            let uniDef = uniform'def $ vdef^.vdUniformDef
+            -- runUniform (udefs >> mapTextureSamplers texObjs) shaderEnv -- why no texture samplers anymore?
+            runUniform uniDef shaderEnv
+            
+            checkErr "postuniform"
+            
+            drawIndexedTris . fromIntegral $ triangleCount rdata
+            checkErr "after draw"
+        logCountObj
+        logCountTriangles (triangleCount rdata)
+        checkErr "end render"
     where
-        checkErr msg = io $ throwErrorMsg $ msg ++ (show $ (fromRenderable r :: Maybe RenderEntity))
-        tUnits = over (mapped._2) (^._1) texObjs
+        checkErr msg = io $ throwErrorMsg $ msg -- ++ (show $ (fromRenderable r :: Maybe RenderEntity))
+            
+        tUnits d = over (mapped._2) (^._1) (texObjs d)
+            
         shaderEnv = ShaderEnv 
-            { shaderEnv'Program           = shaderProgram
-            , shaderEnv'CurrentRenderable = r
-            , shaderEnv'CurrentScene      = scene
+            { shaderEnv'Program           = shaderProgram $ vdef^.vdRenderData
+            , shaderEnv'CurrentRenderable = undefined
+            , shaderEnv'CurrentScene      = undefined -- scene
             }
 
 ---------------------------------------------------------------------------------------------------
@@ -181,136 +175,11 @@ render scene RenderData{..} r = do
 
 -- | runs the renderer in the given environment to render one frame.
 -- TODO :: combine this with the scene setup
-runRenderer :: Renderer a -> RenderState -> RenderEnv -> IO (a, RenderState, RenderLog)
-runRenderer renderer state env = runRWST renderer env state
+runRenderer :: Renderer a -> RenderEnv -> IO (a, (), RenderLog)
+runRenderer renderer env = runRWST renderer env ()
 
 runUniform :: UniShader a -> ShaderEnv -> IO a
 runUniform u env = runReaderT u env
-
----------------------------------------------------------------------------------------------------
-
-requestRenderData :: SomeRenderable -> Renderer RenderData
-requestRenderData r = do
-    let rdef = renderDefinition r
-        tris = triCount . def'data $ rdef
-    sh       <- requestShader . programSrc . renderProgram $ r
-    vao      <- requestVAO rdef
-    texs     <- loadTexs (def'textures rdef)
-    
-    return $ RenderData vao sh texs tris
-    where
-        loadTexs :: [TextureDefinition] -> Renderer [(GL.TextureObject, (GLuint, String))]
-        loadTexs = let chId td = fromIntegral $ td^._texChannel._1
-                       chName td = td^._texChannel._2
-                   in mapM $ \td -> (, (chId td, chName td)) <$> requestTexture (td^._texResource)
-
-
-requestRenderResource :: (Eq a, Hashable a, Show b)
-                  => (RenderState -> M.HashMap a b)         -- ^ accassor function for state
-                  -> (a -> Renderer b)                      -- ^ load function for resource
-                  -> ((a,b) -> Renderer ())                 -- ^ function to add loaded resource to state
-                  -> a                                      -- ^ the value to load resource from
-                  -> Renderer b                             -- ^ the loaded resource
-requestRenderResource accessor loadResource addResource a = do
-    rs <- gets accessor 
-    case M.lookup a rs of
-        Just r -> return r
-        _      -> load a
-    where
-    load a = do
-        loaded <- loadResource a
-        logRenderMf "loaded resource: {0}" [show loaded]
-        addResource (a, loaded)
-        return $! loaded 
-
-
-requestVAO :: RenderDefinition -> Renderer VAO
-requestVAO = requestRenderResource loadedDefinitions loadDefinition addDefinition
-    where
-        loadDefinition :: RenderDefinition -> Renderer VAO
-        loadDefinition RenderDefinition{..} = do
-            (vbo, ebo) <- requestMesh     $ def'data
-            sProg      <- requestShader   $ programSrc def'program
-            let mapping = attrib'def      $ programDef def'program 
-                vert    = head . vertices $ def'data
-                defs    = define mapping vert
-
-            io $ makeVAO $ do
-                GL.bindBuffer GL.ArrayBuffer        $= Just vbo
-                setVertexAttributes sProg defs
-                GL.bindBuffer GL.ElementArrayBuffer $= Just ebo
-
-setVertexAttributes :: ShaderProgram -> VertexDef -> IO ()
-setVertexAttributes prog vdef = 
-    let stride = vdef^._vertSize
-    in vdef^._vertMap & mapM_ (setAttribute prog stride) 
-    where
-        setAttribute :: ShaderProgram -> VertexSize -> VertexAttribMapping -> IO ()
-        setAttribute prog stride (name, layout) = do
-            let vad = makeVAD layout stride
-            setAttrib prog name GL.ToFloat vad
-            enableAttrib prog name
-            printErrorMsg "setAttribute-"
-        
-        makeVAD :: VertexAttribDef -> VertexSize -> GL.VertexArrayDescriptor a
-        makeVAD (off, count, _size) stride =
-            let n = fromIntegral count
-                t = GL.Float
-                s = fromIntegral stride
-                o = (offsetPtr off)
-            in GL.VertexArrayDescriptor n t s o
-
-requestShader :: ShaderResource -> Renderer ShaderProgram
-requestShader = requestRenderResource loadedShaders loadShaders addShader
-    where
-        loadShaders :: ShaderResource -> Renderer ShaderProgram
-        loadShaders shader = do
-            logRenderMf "loadShader: {0}" [show shader]
-            sProg <- io $! simpleShaderProgram (encodeString $ vert'src shader) (encodeString $ frag'src shader)
-            return $! sProg
-
-
-requestMesh :: Mesh Vertex4342 -> Renderer (VBO, EBO)
-requestMesh = requestRenderResource loadedMeshes loadMesh addMesh
-    where
-        loadMesh :: Mesh Vertex4342 -> Renderer (VBO, EBO)
-        loadMesh mesh = io $ do
-            vbo <- makeBuffer GL.ArrayBuffer $ vertices mesh
-            ebo <- bufferIndices $ map fromIntegral $ indices mesh
-            return $! (vbo, ebo)
-
-
-requestTexture :: TextureResource -> Renderer (GL.TextureObject)
-requestTexture = requestRenderResource loadedTextures loadTexture' addTexture
-    where
-        loadTexture' :: TextureResource -> Renderer (GL.TextureObject)
-        loadTexture' (TextureImage _ img) = io $
-            handleTexObj =<< Tex.readTextureImg img
-        
-        loadTexture' (TextureFile texFile) = io $
-            handleTexObj =<< (Tex.readTexture . encodeString $ texFile)
-        
-        handleTexObj res = do
-            GL.textureFilter GL.Texture2D $= ((GL.Linear', Nothing), GL.Linear') -- TODO Def
-            printErrorMsg $ "tex: " ++ (show res )
-            case res of
-                Left msg  -> error msg
-                Right obj -> return obj
-            
-
----------------------------------------------------------------------------------------------------
-
-addMesh :: (Mesh Vertex4342, (VBO, EBO)) -> Renderer ()
-addMesh (m, d) = modify $! \st -> st{ loadedMeshes = M.insert m d (loadedMeshes st) }
-
-addShader :: (ShaderResource, ShaderProgram) -> Renderer ()
-addShader (s, p) = modify $! \st -> st{ loadedShaders = M.insert s p (loadedShaders st) }
-
-addTexture :: (TextureResource, GL.TextureObject) -> Renderer ()
-addTexture (t, o) = modify $! \st -> st{ loadedTextures = M.insert t o (loadedTextures st) }
-
-addDefinition :: (RenderDefinition, VAO) -> Renderer ()
-addDefinition (d, o) = modify $ \st -> st{ loadedDefinitions = M.insert d o (loadedDefinitions st) }
 
 ---------------------------------------------------------------------------------------------------
 
