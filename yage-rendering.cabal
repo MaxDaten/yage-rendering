@@ -44,6 +44,8 @@ library
                         Paths_yage_rendering
                         Yage.Rendering.Utils
 
+                        Yage.Rendering.Internal.RenderWorldTypes
+
   --If flag(perf)
   --  ghc-options:        -threaded -O2
   --Else

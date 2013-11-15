@@ -24,10 +24,10 @@ module Yage.Rendering.Types
     , RenderData(..), RenderDefinition(..)
     , RenderScene(..), emptyRenderScene, entitiesCount, addEntity
     , RenderEntity(..), mkRenderEntity
-    , Mesh(..), MeshData(..), makeMesh, emptyMeshData
+    , Mesh(..), MeshData(..), makeMesh, makeMeshFromVerts, emptyMeshData
     , Index, Position, Orientation, Scale
     , ShaderResource(..), ShaderProgram(..), UniShader, ShaderEnv(..), ShaderDefinition(..)
-    , TextureDefinition(..), _texChannel, _texResource, TextureResource(..)
+    , TextureDefinition(..), texChannel, texResource, TextureResource(..)
     
     , renderProgram, renderData, programDef, programSrc
     , toIndex1
@@ -39,6 +39,7 @@ import             Yage.Prelude                    hiding (log)
 import             Data.List                       (length)
 import             Data.Hashable                   ()
 import             Foreign.C.Types                 (CFloat(..))
+import             Foreign                         (Storable)
 import             Filesystem.Path.CurrentOS       (encode)
 
 import             Data.Typeable
@@ -57,6 +58,7 @@ import qualified   Graphics.Rendering.OpenGL       as GL
 import             Graphics.Rendering.OpenGL.Raw.Types as GLRawTypes
 ---------------------------------------------------------------------------------------------------
 import             Yage.Rendering.Texture
+import             Yage.Rendering.VertexSpec       (VertexAttribute)
 -- =================================================================================================
 
 type Renderer = RWST RenderEnv RenderLog () IO
@@ -209,11 +211,13 @@ toIndex1 = GL.Index1
 deriving instance Show ShaderProgram
 type Index     = Int
 
-data Mesh = forall v. Mesh
-    { meshId   :: Int
-    , meshName :: String
-    , meshData :: MeshData v
-    , dirty    :: Bool
+data Mesh = forall v. (Storable v) =>
+    Mesh
+    { meshId       :: Int
+    , meshName     :: String
+    , meshData     :: MeshData v
+    , meshAttr     :: [VertexAttribute]
+    , dirty        :: Bool
     } deriving (Typeable)
 
 data MeshData v = MeshData
@@ -231,11 +235,14 @@ instance Eq Mesh where
 instance Ord Mesh where
     compare a b = compare (meshId a) (meshId b)
 
-makeMesh :: Int -> String -> [v] -> [Index] -> Mesh
+makeMeshFromVerts :: (Storable v) => Int -> String -> [v] -> [Index] -> [VertexAttribute] -> Mesh
 -- TODO some assertions for invalid meshes
-makeMesh ident name vs ixs = 
+makeMeshFromVerts ident name vs ixs attribs = 
     let meshdata = MeshData vs ixs $ (length ixs) `quot` 3
-    in Mesh ident name meshdata True
+    in Mesh ident name meshdata attribs True
+
+makeMesh :: (Storable v) => Int -> String -> MeshData v -> [VertexAttribute] -> Mesh
+makeMesh ident name meshdata attribs = Mesh ident name meshdata attribs True
 
 emptyMeshData :: MeshData v
 emptyMeshData = MeshData [] [] 0
@@ -302,8 +309,8 @@ instance Eq TextureResource where
     (==) _ _ = False
 
 data TextureDefinition = TextureDefinition
-    { __texChannel  :: (Int, String)
-    , __texResource :: TextureResource
+    { _texChannel  :: (Int, String)
+    , _texResource :: TextureResource
     } deriving (Typeable, Show, Eq, Ord)
 
 makeLenses ''TextureDefinition

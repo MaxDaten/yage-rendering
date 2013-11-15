@@ -8,30 +8,40 @@
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE TupleSections              #-}
 {-# LANGUAGE NoMonomorphismRestriction  #-} -- evil but just for _offset _count _stride
+{-# LANGUAGE GADTs                      #-}
+{-# LANGUAGE RankNTypes                 #-}
 
 module Yage.Rendering.VertexSpec
-    ( Vertex(..), _position, _normal, _color, _texture
+    ( Vertex(..), vPosition, vNormal, vColor, vTexture
     , Position4f, Position3f, Normal3f, Color4f, Texture2f
-    , VertexSize
-    , VertexMapDef
-    , VertexDef, _vertMap, _vertSize
-    , VertexAttribMapping, _attrName, _attrDef
-    , VertexAttribDef, _attrOffset, _attrCount, _attrSize
-    , define, toDef, (^:=)
     
     , Vertex4342, Vertex2P2T4C
+
+    , VertexBufferObject(..), VertexAttribute, (@=), VertexDescriptor(..)
+    , makeVertexBufferF
     ) where
+
+
+
+
 ---------------------------------------------------------------------------------------------------
 import             Yage.Prelude
 import             Control.Lens                    
 ---------------------------------------------------------------------------------------------------
 import             Data.Data
-import             Data.List                       (map)
+import             Data.List                       (map, scanl, length, scanl1, sum, concat, head, transpose)
+import             Data.Traversable
+---------------------------------------------------------------------------------------------------
+import             Control.Applicative
+import             Control.Monad
 ---------------------------------------------------------------------------------------------------
 import             Foreign.Storable
+import             Foreign
 ---------------------------------------------------------------------------------------------------
 import             Linear                          (V2(..), V3(..), V4(..))
 import             Graphics.Rendering.OpenGL       (GLfloat)
+import qualified   Graphics.Rendering.OpenGL       as GL
+import             Graphics.GLUtil
 {-=================================================================================================-}
 
 type Position4f = V4 GLfloat
@@ -44,13 +54,19 @@ type Vertex4342 = Vertex Position4f Normal3f Color4f Texture2f
 type Vertex2P2T4C = Vertex Position2f () Color4f Texture2f
 
 data Vertex p n c t = Vertex 
-    { __position      :: p
-    , __normal        :: n
-    , __color         :: c
-    , __texture       :: t
+    { _vPosition      :: p
+    , _vNormal        :: n
+    , _vColor         :: c
+    , _vTexture       :: t
     } deriving (Show, Eq, Data, Typeable)
 
 makeLenses ''Vertex
+
+instance Storable () where
+    sizeOf _ = 0
+    peek _ = return ()
+    alignment _ = 0
+    poke _ _ = return () 
 
 
 instance (Storable p, Storable n, Storable c, Storable t) => Storable (Vertex p n c t) where
@@ -64,39 +80,105 @@ instance (Storable p, Storable n, Storable c, Storable t) => Storable (Vertex p 
             <*> peekByteOff ptr (sizeOf (undefined :: p) + sizeOf (undefined :: n) + sizeOf (undefined :: c))
 
     poke ptr Vertex{..} = do
-        pokeByteOff ptr 0 __position
-        pokeByteOff ptr (sizeOf (undefined :: p)) __normal
-        pokeByteOff ptr (sizeOf (undefined :: p) + sizeOf (undefined :: n)) __color
-        pokeByteOff ptr (sizeOf (undefined :: p) + sizeOf (undefined :: n) + sizeOf (undefined :: c)) __texture
+        pokeByteOff ptr 0 _vPosition
+        pokeByteOff ptr (sizeOf (undefined :: p)) _vNormal
+        pokeByteOff ptr (sizeOf (undefined :: p) + sizeOf (undefined :: n)) _vColor
+        pokeByteOff ptr (sizeOf (undefined :: p) + sizeOf (undefined :: n) + sizeOf (undefined :: c)) _vTexture
 
-type VertexMapDef s      = Getting VertexAttribMapping s VertexAttribMapping
-type VertexSize          = Int
-type VertexDef           = ([VertexAttribMapping], VertexSize)
-type VertexAttribMapping = (String, VertexAttribDef)
-type VertexAttribDef     = (Int, Int, Int) -- | (offset, count, size)
 
-_attrName   = _1
-_attrDef    = _2
 
-_vertMap    = _1
-_vertSize   = _2
 
-_attrOffset = _1
-_attrCount  = _2
-_attrSize   = _3
 
-define :: (Storable s) => [VertexMapDef s] -> s -> VertexDef
-define defs datum = (, sizeOf datum) $ map (\g -> datum^.g) defs & scanl1Of (traverse._2) offsetPlus
+-- the main reason for this box is to transpose the attribute-list with the data list
+-- to write the data in a sequence
+data ToGLBuffer = forall t a. (Show (t a), Traversable t, Storable (t a), HasVariableType (t a)) 
+                => ToGLBuffer (t a)
+
+
+data VertexDescriptor = forall a. VertexDescriptor
+    { attrName :: String
+    , vad      :: GL.VertexArrayDescriptor a
+    }
+
+data VertexAttribute = VertexAttribute
+    { attributeName    :: String
+    , attributeData    :: [ToGLBuffer]
+    }
+
+makeLenses ''VertexAttribute
+
+data VertexBufferObject = forall a. VertexBufferObject
+    { attribVADs  :: [VertexDescriptor] 
+    , vbo         :: GL.BufferObject
+    }
+
+makeVertexAttribute :: (Show (t a), Traversable t, Storable (t a), HasVariableType (t a)) 
+                    => String -> [t a] -> VertexAttribute
+makeVertexAttribute name aData = VertexAttribute name (map ToGLBuffer aData)
+
+infixr 2 @=
+(@=) :: (Show (t a), Traversable t, Storable (t a), HasVariableType (t a)) 
+     => String -> [t a] -> VertexAttribute
+(@=) = makeVertexAttribute
+
+
+makeVertexBufferF :: [VertexAttribute] -> IO VertexBufferObject
+makeVertexBufferF attrs = 
+    let sizes       = map attribSize attrs
+        offsets     = scanl1 (+) sizes
+        stride      = sum sizes
+        elems       = vertexCount . head $ attrs
+        vadMapping  = map (toVAD stride) $ zip offsets attrs
+    in allocaBytes (stride * elems) $ \ptr -> do
+            _ <- makeComposition ptr attrs
+            VertexBufferObject vadMapping <$> fromPtr GL.ArrayBuffer (stride * elems) ptr
+
     where
-        offsetPlus :: VertexAttribDef -> VertexAttribDef -> VertexAttribDef 
-        offsetPlus l1 l2 = set _attrOffset (l1^._attrOffset + l1^._attrSize + l2^._attrOffset) l2
+        attribSize :: VertexAttribute -> Int
+        attribSize (VertexAttribute _ (ToGLBuffer a:_)) = sizeOf a
+        attribSize (VertexAttribute _ []) = error "missing attribute data"
+
+        vertexCount :: VertexAttribute -> Int
+        vertexCount (VertexAttribute _ as) = length as 
+        
+        toVAD :: Int -> (Int, VertexAttribute) -> VertexDescriptor
+        toVAD stride (off, VertexAttribute name (ToGLBuffer a:_)) =
+            let num     = fromIntegral $ lengthOf traverse a
+                dType   = variableDataType . variableType $ a
+                vad     = GL.VertexArrayDescriptor num dType (fromIntegral stride) (offsetPtr off) 
+            in VertexDescriptor name vad
+        toVAD _      (_, VertexAttribute _ []) = error "missing attribute data"
+
+        -- group the seperated vertex data together
+        -- [[v0..vn], [c0..cn]] -> [[v0, c0]..[vn, cn]]
+        -- this is the reason we need the ToGLBuffer type
+        makeComposition :: Ptr a -> [VertexAttribute] -> IO (Ptr a)
+        makeComposition ptr attrs = 
+            let grouped = concat . transpose $ map attributeData attrs
+            in foldM pokeElem ptr grouped
+
+        -- pokeElem :: Ptr a -> ToGLBuffer -> IO (Ptr a)
+        pokeElem ptr (ToGLBuffer a) = do
+            print a
+            poke (castPtr ptr) a
+            return $ traceShow ptr $ ptr `plusPtr` sizeOf a
 
 
-toDef :: (Typeable (t s), Traversable t, Storable (t s)) => String -> Getter (t s) VertexAttribMapping
-toDef name = to $ \s -> (name, memoryLayout s)
-    where 
-        memoryLayout :: (Traversable t, Storable (t s)) => t s -> VertexAttribDef
-        memoryLayout s = (0, lengthOf traverse s, sizeOf s)
+{--
+verts :: [V3 GL.GLfloat]
+verts = [V3 0 0 0]
 
-(^:=) :: (Typeable (t a), Traversable t, Storable (t a)) => String -> Getter s (t a) -> Getter s VertexAttribMapping
-s ^:= l = l.toDef s
+texs :: [V2 GL.GLfloat]
+texs  = [V2 0 0]
+
+color :: [V4 GL.GLfloat]
+color = [V4 0 0 0 0]
+
+main = do
+    vbo <- makeVertexBufferF
+                [ "position" @= (verts :: [V3 GL.GLfloat])
+                , "texture"  @= (texs  :: [V2 GL.GLfloat])
+                , "color"    @= (color :: [V4 GL.GLfloat])
+                ]
+    vbo `seq` print "end"
+--}

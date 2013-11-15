@@ -25,13 +25,12 @@ import qualified   Graphics.Rendering.OpenGL       as GL
 import             Graphics.Rendering.OpenGL.GL    (($=))
 import             Graphics.Rendering.OpenGL.GL    as GLReExports (Color4(..))
 ---------------------------------------------------------------------------------------------------
-import             Yage.Rendering.RenderWorld
 import             Yage.Rendering.Types            as Types
-import qualified   Yage.Rendering.Texture          as Tex
 import             Yage.Rendering.Shader
 import             Yage.Rendering.VertexSpec
 import             Yage.Rendering.Utils
 import             Yage.Rendering.Logging
+import             Yage.Rendering.Internal.RenderWorldTypes
 {-=================================================================================================-}
 
 import Paths_yage_rendering
