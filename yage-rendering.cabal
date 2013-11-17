@@ -40,6 +40,8 @@ library
                         Yage.Rendering.VertexSpec
                         Yage.Rendering.Primitives
                         Yage.Rendering.Logging
+                        Yage.Rendering.Backend.Renderer
+                        Yage.Rendering.Backend.Renderer.Types
   other-modules:
                         Paths_yage_rendering
                         Yage.Rendering.Utils

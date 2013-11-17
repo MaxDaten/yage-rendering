@@ -27,7 +27,7 @@ import           Graphics.GLUtil
 import           Graphics.Rendering.OpenGL                (($=))
 import qualified Graphics.Rendering.OpenGL                as GL
 
-import           Yage.Rendering
+import           Yage.Rendering.Backend.Renderer
 import           Yage.Rendering.Internal.RenderWorldTypes as RenderWorldTypes
 import qualified Yage.Rendering.Texture                   as Tex
 import           Yage.Rendering.Types
@@ -36,15 +36,7 @@ import           Yage.Rendering.VertexSpec
 
 ---------------------------------------------------------------------------------------------------
 
-main' :: IO ()
-main' = do
-    let wview  = undefined :: RenderView
-        wenv   = undefined :: RenderWorldEnv
-        wstate = undefined :: RenderWorldState
-        renv   = undefined :: RenderEnv
-    (vdefs, st') <- runRenderWorld wview wenv wstate
-    (_, _, l) <- runRenderer (renderView wview vdefs) renv
-    print l
+
 
 runRenderWorld :: RenderView -> RenderWorldEnv -> RenderWorldState -> IO ([ViewDefinition], RenderWorldState)
 runRenderWorld view env st =
@@ -67,7 +59,7 @@ processRenderView renderview = do
 
 
 findContributingEntities :: RenderWorld [RenderEntity]
-findContributingEntities = views worldEntities S.toList
+findContributingEntities = view worldEntities
 
 
 
@@ -101,7 +93,7 @@ toViewDefinition RenderView{..} RenderWorldResources{..} RenderEntity{..} =
 
 
 prepareResources :: RenderWorld ()
-prepareResources = view worldEntities >>= mapM_ (loadRenderResourcesFor . renderDef) . S.toList
+prepareResources = view worldEntities >>= mapM_ (loadRenderResourcesFor . renderDef)
 
 
 

@@ -5,6 +5,7 @@ import Yage.Prelude
 import Yage.Math
 
 import Control.Monad.RWS.Strict
+import Data.Map.Lazy
 import Control.Lens
 
 import Linear
@@ -22,7 +23,7 @@ data RenderWorldResources = RenderWorldResources
     }
 
 data RenderWorldEnv = RenderWorldEnv
-    { _worldEntities :: Set RenderEntity }
+    { _worldEntities :: [RenderEntity] }
 
 data RenderWorldState = RenderWorldState
     { _renderResources :: RenderWorldResources }
@@ -51,3 +52,10 @@ makeLenses ''ViewDefinition
 
 
 type RenderWorld = RWST RenderWorldEnv () RenderWorldState IO
+
+instance Monoid RenderWorldResources where
+    mappend (RenderWorldResources sA vA tA) (RenderWorldResources sB vB tB) 
+        = RenderWorldResources (union sA sB) (union vA vB) (union tA tB)
+    mempty = RenderWorldResources mempty mempty mempty
+
+initialRenderWorldState = RenderWorldState mempty

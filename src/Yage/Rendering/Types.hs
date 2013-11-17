@@ -15,12 +15,10 @@
 {-# LANGUAGE UndecidableInstances       #-}
 {-# LANGUAGE NamedFieldPuns             #-}
 module Yage.Rendering.Types
-    ( Renderer, RenderEnv(..), RenderLog(..)
-    , RenderConfig(..), RenderStatistics(..), FBO, VBO, VAO, EBO
-    , RenderTarget(..)
-    , Program
+    ( Program
+    , VBO, EBO, FBO, VAO
 
-    , Renderable(..), SomeRenderable(..), renderableType, fromRenderable, toRenderable
+    , Renderable(..), SomeRenderable(..), renderableType, fromRenderable, toRenderable, toRenderEntity
     , RenderData(..), RenderDefinition(..)
     , RenderScene(..), emptyRenderScene, entitiesCount, addEntity
     , RenderEntity(..), mkRenderEntity
@@ -31,7 +29,9 @@ module Yage.Rendering.Types
     
     , renderProgram, renderData, programDef, programSrc
     , toIndex1
+    , Color, Color3, Color4
     , module GLRawTypes
+    , module RendererTypes
     ) where
 
 import             Yage.Prelude                    hiding (log)
@@ -45,7 +45,6 @@ import             Filesystem.Path.CurrentOS       (encode)
 import             Data.Typeable
 import             GHC.Generics                    (Generic)
 
-import             Control.Monad.RWS.Strict        (RWST)
 import             Control.Monad.Writer            ()
 import             Control.Monad.Reader            (ReaderT)
 import             Control.Monad.State             ()
@@ -55,45 +54,13 @@ import             Linear                          (Quaternion, M22, M33, M44, V
 import             Graphics.GLUtil
 import qualified   Graphics.GLUtil.Camera3D        as Cam
 import qualified   Graphics.Rendering.OpenGL       as GL
+import             Graphics.Rendering.OpenGL       (Color, Color3, Color4)
 import             Graphics.Rendering.OpenGL.Raw.Types as GLRawTypes
 ---------------------------------------------------------------------------------------------------
 import             Yage.Rendering.Texture
 import             Yage.Rendering.VertexSpec       (VertexAttribute)
+import             Yage.Rendering.Backend.Renderer.Types as RendererTypes
 -- =================================================================================================
-
-type Renderer = RWST RenderEnv RenderLog () IO
-    --deriving (Functor, Applicative, Monad, MonadIO, MonadReader YageRenderEnv, MonadWriter RenderLog MonadState RenderState, Typeable)
-
-data RenderTarget = RenderTarget
-    { target'size   :: !(Int, Int)
-    , target'ratio  :: !Double
-    }
-
-data RenderEnv = RenderEnv
-    { envConfig         :: !RenderConfig    -- ^ The current settings for the frame
-    , renderTarget      :: !RenderTarget
-    }
-
-data RenderLog = RenderLog 
-    { rlog'objcount :: !Int
-    , rlog'tricount :: !Int
-    , rlog'log      :: ![String]
-    } deriving (Show, Eq)
-
-
-data RenderConfig = RenderConfig
-    { confClearColor        :: !(GL.Color4 Double)
-    , confDebugNormals      :: !Bool
-    , confWireframe         :: !Bool
-    }
-
-data RenderStatistics = RenderStatistics
-    { lastObjectCount       :: !Int
-    , lastTriangleCount     :: !Int
-    , lastRenderDuration    :: !Double
-    , loadedShadersCount    :: !Int
-    , loadedMeshesCount     :: !Int
-    } deriving Show
 
 type VBO = GL.BufferObject
 type EBO = GL.BufferObject
@@ -101,19 +68,13 @@ type FBO = GL.FramebufferObject
 
 
 ---------------------------------------------------------------------------------------------------
-instance Monoid RenderLog where
-    mempty = RenderLog 0 0 []
-    mappend (RenderLog ca ta la) (RenderLog cb tb lb) = RenderLog (ca + cb) (ta + tb) (mappend la lb)
-
----------------------------------------------------------------------------------------------------
 
 class Typeable r => Renderable r where
 
-    -- | resources required by the 'Renderable'
-    --   this definition will be used to generate the resources for a
-    --   'render'-call. If the 'Renderable' leaves the 'RenderScene'
-    --   the resources will be freed
-    renderDefinition :: r -> RenderDefinition    
+    renderDefinition      :: r -> RenderDefinition   
+    renderPosition        :: r -> Position
+    renderOrientation     :: r -> Orientation
+    renderScale           :: r -> Scale 
 
 
 toRenderable :: (Renderable r) => r -> SomeRenderable
@@ -146,7 +107,10 @@ data SomeRenderable = forall r. (Typeable r, Renderable r) => SomeRenderable r
 
 instance Renderable SomeRenderable where
     --render scene res (SomeRenderable r) = render scene res r
-    renderDefinition (SomeRenderable r) = renderDefinition r
+    renderDefinition  (SomeRenderable r) = renderDefinition r
+    renderPosition    (SomeRenderable r) = renderPosition r
+    renderOrientation (SomeRenderable r) = renderOrientation r
+    renderScale       (SomeRenderable r) = renderScale r 
 
 
 
@@ -201,10 +165,18 @@ data RenderData = RenderData -- TODO rename RenderResource
     } deriving Show
 
 instance Renderable RenderEntity where
-    renderDefinition = renderDef
+    renderDefinition  = renderDef
+    renderPosition    = ePosition
+    renderOrientation = eOrientation
+    renderScale       = eScale
 
-toIndex1 :: a -> GL.Index1 a
-toIndex1 = GL.Index1
+toRenderEntity :: SomeRenderable -> RenderEntity
+toRenderEntity (SomeRenderable r) = RenderEntity
+    { ePosition    = renderPosition r
+    , eOrientation = renderOrientation r
+    , eScale       = renderScale r
+    , renderDef    = renderDefinition r
+    }
 
 ---------------------------------------------------------------------------------------------------
 
@@ -248,6 +220,9 @@ emptyMeshData :: MeshData v
 emptyMeshData = MeshData [] [] 0
 
 ---------------------------------------------------------------------------------------------------
+
+toIndex1 :: a -> GL.Index1 a
+toIndex1 = GL.Index1
 
 type UniShader = ReaderT ShaderEnv IO
 

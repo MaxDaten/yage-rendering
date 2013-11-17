@@ -19,10 +19,8 @@ module Yage.Rendering.VertexSpec
 
     , VertexBufferObject(..), VertexAttribute, (@=), VertexDescriptor(..)
     , makeVertexBufferF
+    , module Foreign.Storable.Utils
     ) where
-
-
-
 
 ---------------------------------------------------------------------------------------------------
 import             Yage.Prelude
@@ -36,6 +34,7 @@ import             Control.Applicative
 import             Control.Monad
 ---------------------------------------------------------------------------------------------------
 import             Foreign.Storable
+import             Foreign.Storable.Utils
 import             Foreign
 ---------------------------------------------------------------------------------------------------
 import             Linear                          (V2(..), V3(..), V4(..))
@@ -62,11 +61,6 @@ data Vertex p n c t = Vertex
 
 makeLenses ''Vertex
 
-instance Storable () where
-    sizeOf _ = 0
-    peek _ = return ()
-    alignment _ = 0
-    poke _ _ = return () 
 
 
 instance (Storable p, Storable n, Storable c, Storable t) => Storable (Vertex p n c t) where
