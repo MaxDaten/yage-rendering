@@ -5,7 +5,7 @@ import Yage.Prelude
 import Yage.Math
 
 import Control.Monad.RWS.Strict
-import Data.Map.Lazy
+import Data.Map.Strict
 import Control.Lens
 
 import Linear
@@ -55,7 +55,7 @@ type RenderWorld = RWST RenderWorldEnv () RenderWorldState IO
 
 instance Monoid RenderWorldResources where
     mappend (RenderWorldResources sA vA tA) (RenderWorldResources sB vB tB) 
-        = RenderWorldResources (union sA sB) (union vA vB) (union tA tB)
+           = RenderWorldResources (union sA sB) (union vA vB) (union tA tB)
     mempty = RenderWorldResources mempty mempty mempty
 
 initialRenderWorldState = RenderWorldState mempty

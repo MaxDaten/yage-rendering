@@ -163,7 +163,7 @@ renderViewDefinition view vdef =
             
         tUnits d = over (mapped._2) (^._1) (texObjs d)
             
-        shaderEnv = ShaderEnv 
+        shaderEnv = ShaderEnv --- PARAMETERIZE SHADER/SHADERENV CAST HERE
             { shaderEnv'Program           = shaderProgram $ vdef^.vdRenderData
             , shaderEnv'CurrentRenderable = undefined
             , shaderEnv'CurrentScene      = undefined -- scene

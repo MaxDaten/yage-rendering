@@ -272,7 +272,11 @@ data TextureResource =
     deriving (Typeable)
 
 -- TODO
-instance Ord TextureResource
+instance Ord TextureResource where
+    compare (TextureFile pathA) (TextureFile pathB) = compare pathA pathB
+    compare (TextureImage nameA _) (TextureImage nameB _) = compare nameA nameB
+    compare (TextureFile _) _ = GT
+    compare _ _ = LT
 
 instance Show TextureResource where
     show (TextureFile name) = show name

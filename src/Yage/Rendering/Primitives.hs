@@ -83,7 +83,7 @@ quadMesh =
         ixs   = [ 0, 1, 2
                 , 2, 3, 0
                 ]
-    in traceShow' $ makeMeshfromSpare verts ixs white
+    in makeMeshfromSpare verts ixs white
 
 
 -------------------------------------------------------------------------------

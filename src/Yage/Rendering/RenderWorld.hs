@@ -13,7 +13,7 @@ import           Yage.Math
 import           Yage.Prelude
 
 import           Data.List
-import           Data.Map                                 as M hiding (map)
+import           Data.Map.Strict                          as M hiding (map)
 import           Data.Maybe                               (fromJust)
 import           Data.Set                                 as S hiding (map)
 
@@ -68,7 +68,7 @@ toViewDefinition RenderView{..} RenderWorldResources{..} RenderEntity{..} =
     let scaleM       = kronecker . point $ eScale
         transM       = mkTransformation eOrientation ePosition
         modelM       = transM !*! scaleM
-        normalM      = (adjoint <$> (inv33 . fromTransformation $ modelM))^?!_Just
+        normalM      = (adjoint <$> (inv33 . fromTransformation $ modelM)) ^?!_Just
     in ViewDefinition
         { _vdViewMatrix        = _rvViewMatrix
         , _vdProjectionMatrix  = _rvProjectionMatrix
@@ -80,13 +80,13 @@ toViewDefinition RenderView{..} RenderWorldResources{..} RenderEntity{..} =
     where
         getRenderData RenderDefinition{..} =
             RenderData
-                { vao           = undefined -- fromJust $ loadedVertexBuffer^.at def'data
+                { vao           = _loadedVertexBuffer^.at (def'data, def'program^._1) ^?!_Just
                 , shaderProgram = _loadedShaders^.at (def'program^._1) ^?!_Just
                 , texObjs       = map makeTexObj def'textures
                 , triangleCount = 0
                 }
         makeTexObj tex =
-            let obj = (_loadedTextures^.at (tex^.texResource))^?!_Just
+            let obj = _loadedTextures^.at (tex^.texResource) ^?!_Just
                 ch  = tex^.texChannel & _1 %~ fromIntegral
             in (obj, ch)
 
@@ -102,27 +102,42 @@ loadRenderResourcesFor RenderDefinition{..} = do
     res <- use renderResources
     let shaderRes = def'program^._1
 
-    unless (res^.loadedShaders.contains shaderRes) $ do
-        shaderProg <- loadShader $ shaderRes
-        renderResources.loadedShaders.at shaderRes ?= shaderProg
+    -- Shader on demand loading
+    requestShader shaderRes
 
+    -- VertexBuffer on demand with shader prog for vertex attributes    
+    requestVertexBuffer def'data shaderRes
 
-    unless (res^.loadedVertexBuffer.contains (def'data, shaderRes)) $ do
-        let shaderProg = res^.loadedShaders.at shaderRes ^?!_Just
-        vao            <- loadVertexBuffer def'data shaderProg
-        renderResources.loadedVertexBuffer.at (def'data, shaderRes) ?= vao
-
-
-    forM_ (def'textures^..traverse.texResource) $ \tex ->
-        unless (res^.loadedTextures.contains tex) $ do
-            texture <- loadTexture tex
-            renderResources.loadedTextures.at tex ?= texture
+    -- TextureObjects on demand
+    forM_ (def'textures^..traverse.texResource) $ requestTexture
     where
+        requestShader :: ShaderResource -> RenderWorld ()
+        requestShader shaderRes = do
+            res <- use renderResources
+            unless (res^.loadedShaders.contains shaderRes) $ do
+                shaderProg <- loadShader $ shaderRes
+                renderResources.loadedShaders.at shaderRes ?= traceShow' shaderProg
+
+        requestVertexBuffer :: Mesh -> ShaderResource -> RenderWorld ()
+        requestVertexBuffer def'data shaderRes = do
+            res <- use renderResources
+            unless (res^.loadedVertexBuffer.contains (def'data, shaderRes)) $ do
+                let shaderProg = res^.loadedShaders.at shaderRes ^?!_Just
+                vao            <- loadVertexBuffer def'data shaderProg
+                renderResources.loadedVertexBuffer.at (def'data, shaderRes) ?= vao
+
+        requestTexture :: TextureResource -> RenderWorld ()
+        requestTexture texture = do
+            res <- use renderResources
+            unless (res^.loadedTextures.contains texture) $ do
+                texObj <- loadTexture texture
+                renderResources.loadedTextures.at texture ?= texObj
+
         -- | creates vbo and ebo, sets shader attributes and creates finally a vao
         loadVertexBuffer :: Mesh -> ShaderProgram -> RenderWorld VAO
         loadVertexBuffer Mesh{meshData, meshAttr} shaderProg = do
             buff <- io $ makeVertexBufferF meshAttr
-            ebo <- io $ bufferIndices $ map fromIntegral $ indices meshData
+            ebo  <- io $ bufferIndices $ map fromIntegral $ indices meshData
             io $ makeVAO $ do
                 GL.bindBuffer GL.ArrayBuffer        $= Just (vbo buff)
                 mapM_ (setVertexAttribute shaderProg) (attribVADs buff)

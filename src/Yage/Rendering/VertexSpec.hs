@@ -106,6 +106,7 @@ data VertexBufferObject = forall a. VertexBufferObject
     , vbo         :: GL.BufferObject
     }
 
+
 makeVertexAttribute :: (Show (t a), Traversable t, Storable (t a), HasVariableType (t a)) 
                     => String -> [t a] -> VertexAttribute
 makeVertexAttribute name aData = VertexAttribute name (map ToGLBuffer aData)
@@ -153,9 +154,8 @@ makeVertexBufferF attrs =
 
         -- pokeElem :: Ptr a -> ToGLBuffer -> IO (Ptr a)
         pokeElem ptr (ToGLBuffer a) = do
-            print a
             poke (castPtr ptr) a
-            return $ traceShow ptr $ ptr `plusPtr` sizeOf a
+            return $ ptr `plusPtr` sizeOf a
 
 
 {--
@@ -176,3 +176,6 @@ main = do
                 ]
     vbo `seq` print "end"
 --}
+
+deriving instance Show VertexBufferObject
+deriving instance Show VertexDescriptor
