@@ -4,23 +4,26 @@
 {-# LANGUAGE TemplateHaskell            #-}
 module Yage.Rendering
     ( (!=), shaderEnv
+    , module Types
     , module Yage.Rendering
-    , module Yage.Rendering.Types
     , module Yage.Rendering.Lenses
+    , module RendererExports
     ) where
 
 import           Yage.Prelude
 
-import           Data.List                       (map)
+import           Data.List                             (map)
 
 import           Control.Lens
 
 import           Linear
 
 import           Yage.Rendering.Backend.Renderer
+import           Yage.Rendering.Backend.Renderer.Types as RendererExports 
+                                                          (RenderConfig (..), RenderTarget (..), RenderLog (..))
 import           Yage.Rendering.Lenses
-import           Yage.Rendering.RenderWorld      hiding (renderResources)
-import           Yage.Rendering.Types
+import           Yage.Rendering.RenderWorld            hiding (renderResources)
+import           Yage.Rendering.Types                  as Types
 
 
 data RenderUnit = RenderUnit
@@ -31,8 +34,9 @@ data RenderUnit = RenderUnit
 
 makeLenses ''RenderUnit
 
-initialRenderUnit :: RenderEnv -> RenderUnit
-initialRenderUnit env = RenderUnit initialRenderWorldState env emptyRenderLog
+initialRenderUnit :: RenderConfig -> RenderTarget -> RenderUnit
+initialRenderUnit rconf rtarget =
+    RenderUnit initialRenderWorldState (RenderEnv rconf rtarget) emptyRenderLog
 
 
 renderScene :: (MonadIO m) => RenderScene -> RenderUnit -> m RenderUnit
