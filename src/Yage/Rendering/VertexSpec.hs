@@ -81,7 +81,7 @@ instance (Storable p, Storable n, Storable c, Storable t) => Storable (Vertex p 
 -- to write the data in a sequence
 data ToGLBuffer = forall t a. (Show (t a), Traversable t, Storable (t a), HasVariableType (t a)) 
                 => ToGLBuffer (t a)
-
+deriving instance Show ToGLBuffer
 
 data VertexDescriptor = forall a. VertexDescriptor
     { attrName :: String
@@ -91,7 +91,7 @@ data VertexDescriptor = forall a. VertexDescriptor
 data VertexAttribute = VertexAttribute
     { attributeName    :: String
     , attributeData    :: [ToGLBuffer]
-    }
+    } deriving (Show)
 
 makeLenses ''VertexAttribute
 

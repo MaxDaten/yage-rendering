@@ -243,7 +243,9 @@ data MeshData v = MeshData
     } deriving (Show, Generic)
 
 instance Show Mesh where
-    show = show . meshName -- TODO
+    show Mesh{..} = 
+        format "Mesh {id = {0}, name = {1}, data = N/A, attribs = {2}, dirty = {3}}"
+               [     show meshId,    show meshName,        show meshAttr, show dirty]
 
 instance Eq Mesh where
     a == b = meshId a == meshId b
