@@ -68,9 +68,11 @@ toViewDefinition view@RenderView{..} RenderWorldResources{..} ent@RenderEntity{.
     let scaleM       = kronecker . point $ eScale
         transM       = mkTransformation eOrientation ePosition
         modelM       = transM !*! scaleM
-        normalM      = (adjoint <$> (inv33 . fromTransformation $ modelM)) ^?!_Just
+        -- TODO rethink the normal matrix here
+        normalM      = (adjoint <$> (inv33 . fromTransformation $ modelM) <|> Just eye3) ^?!_Just
     in ViewDefinition
-        { _vdModelMatrix       = modelM
+        { _vdMVPMatrix         = _rvProjectionMatrix !*! _rvViewMatrix !*! modelM
+        , _vdModelMatrix       = modelM
         , _vdNormalMatrix      = normalM
         , _vdRenderData        = getRenderData renderDef
         , _vdUniformDef        = (snd . def'program $ renderDef, uniformEnv)

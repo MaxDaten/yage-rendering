@@ -22,7 +22,7 @@ module Yage.Rendering.Types
     , RenderData(..), RenderDefinition(..)
 
     , RenderView(..), ViewDefinition(..)
-    , vdModelMatrix, vdNormalMatrix, vdRenderData, vdUniformDef
+    , vdMVPMatrix, vdModelMatrix, vdNormalMatrix, vdRenderData, vdUniformDef
     , rvViewMatrix, rvProjectionMatrix
     , RenderScene(..), emptyRenderScene, entitiesCount, addEntity
     , RenderEntity(..), mkRenderEntity
@@ -311,7 +311,8 @@ data RenderView = RenderView
 
 
 data ViewDefinition = ViewDefinition
-    { _vdModelMatrix           :: !(M44 Float)
+    { _vdMVPMatrix             :: !(M44 Float)
+    , _vdModelMatrix           :: !(M44 Float)
     , _vdNormalMatrix          :: !(M33 Float)
     , _vdRenderData            :: !RenderData
     , _vdUniformDef            :: !(ShaderDefinition, ShaderEnv)
