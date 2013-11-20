@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -fno-warn-missing-signatures #-}
+{-# OPTIONS_GHC -fno-warn-missing-signatures -fno-warn-name-shadowing #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE RecordWildCards            #-}
 {-# LANGUAGE DeriveDataTypeable         #-}
@@ -21,10 +21,8 @@ import             Yage.Prelude
 import             Control.Lens                    
 ---------------------------------------------------------------------------------------------------
 import             Data.Data
-import             Data.List                       (map, scanl, take, iterate, length, scanl1, sum, concat, head, transpose)
-import             Data.Traversable                hiding (mapM)
+import             Data.List                       (map, scanl, take, iterate, length, sum, concat, head, transpose)
 ---------------------------------------------------------------------------------------------------
-import             Control.Applicative
 import             Control.Monad
 ---------------------------------------------------------------------------------------------------
 import             Foreign.Storable
@@ -95,7 +93,7 @@ data VertexAttribute = VertexAttribute
 
 makeLenses ''VertexAttribute
 
-data VertexBufferObject = forall a. VertexBufferObject
+data VertexBufferObject = VertexBufferObject
     { attribVADs  :: [VertexDescriptor] 
     , vbo         :: GL.BufferObject
     }
@@ -113,7 +111,7 @@ infixr 2 @=
 
 makeVertexBufferF :: [VertexAttribute] -> IO VertexBufferObject
 makeVertexBufferF attrs = 
-    let (offsets, elems, stride) = attribsLayout attrs
+    let (_, elems, stride) = attribsLayout attrs
         vadMapping               = attribsToVAD attrs
     in allocaBytes (stride * elems) $ \ptr -> do
             pokeAttribs ptr attrs
@@ -122,7 +120,7 @@ makeVertexBufferF attrs =
 
 attribsToVAD :: [VertexAttribute] -> [VertexDescriptor]
 attribsToVAD attrs = 
-    let (offsets, elems, stride) = attribsLayout attrs
+    let (offsets, _, stride) = attribsLayout attrs
     in map (toVAD stride) $ zip offsets attrs
     where
         toVAD :: Int -> (Int, VertexAttribute) -> VertexDescriptor
@@ -175,6 +173,8 @@ attribsLayout attrs =
 
         vertexCount :: VertexAttribute -> Int
         vertexCount (VertexAttribute _ as) = length as 
+
+---------------------------------------------------------------------------------------------------
 
 deriving instance Show VertexBufferObject
 deriving instance Show VertexDescriptor

@@ -20,6 +20,7 @@ import Data.Foldable
 import Linear (V3(..), V4(..), R3(_xyz), point)
 
 import Yage.Rendering.Types
+import Yage.Rendering.Mesh
 import Yage.Rendering.VertexSpec
 import Yage.Math
 

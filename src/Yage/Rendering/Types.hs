@@ -1,69 +1,59 @@
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
-{-# LANGUAGE TemplateHaskell            #-}
-{-# LANGUAGE ExistentialQuantification  #-}
-{-# LANGUAGE RecordWildCards            #-}
+{-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE DeriveGeneric              #-}
-{-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE DeriveTraversable          #-}
+{-# LANGUAGE ExistentialQuantification  #-}
+{-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE DeriveDataTypeable         #-}
+{-# LANGUAGE NamedFieldPuns             #-}
+{-# LANGUAGE RankNTypes                 #-}
+{-# LANGUAGE RecordWildCards            #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeSynonymInstances       #-}
-{-# LANGUAGE RankNTypes                 #-}
-{-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE UndecidableInstances       #-}
-{-# LANGUAGE NamedFieldPuns             #-}
 module Yage.Rendering.Types
     ( Program
     , VBO, EBO, FBO, VAO
 
     , Renderable(..), SomeRenderable(..), renderableType, fromRenderable, toRenderable, toRenderEntity
-    , RenderData(..), RenderDefinition(..)
-
-    , RenderView(..), ViewDefinition(..)
-    , vdMVPMatrix, vdModelMatrix, vdNormalMatrix, vdRenderData, vdUniformDef
-    , rvViewMatrix, rvProjectionMatrix
+    , RenderDefinition(..)
     , RenderScene(..), emptyRenderScene, entitiesCount, addEntity
     , RenderEntity(..), mkRenderEntity
-    , Mesh(..), MeshData(..), makeMesh, makeMeshFromVerts, emptyMeshData, meshTriangleCount
+    , Mesh(..), MeshData(..)
     , Index, Position, Orientation, Scale
-    , ShaderResource(..), ShaderProgram(..), UniShader, ShaderEnv(..), ShaderDefinition(..)
-    , TextureDefinition(..), texChannel, texResource, TextureResource(..)
-    
-    , renderProgram, renderData, programDef, programSrc
+    , ShaderResource(..), ShaderProgram(..)
+    , TextureDefinition(..), TextureResource(..)
+
     , toIndex1
-    , Color, Color3, Color4
     , module GLRawTypes
-    , module RendererTypes
     ) where
 
-import             Yage.Prelude                    hiding (log)
+import           Yage.Prelude                        hiding (log)
 
-import             Data.List                       (length)
-import             Data.Hashable                   ()
-import             Foreign.C.Types                 (CFloat(..))
-import             Foreign                         (Storable)
-import             Filesystem.Path.CurrentOS       (encode)
+import           Data.Hashable                       ()
+import           Data.List                           (length)
+import           Filesystem.Path.CurrentOS           (encode)
+import           Foreign                             (Storable)
+import           Foreign.C.Types                     (CFloat (..))
 
-import             Data.Typeable
-import             GHC.Generics                    (Generic)
+import           Data.Typeable
+import           GHC.Generics                        (Generic)
 
-import             Control.Monad.Writer            ()
-import             Control.Monad.Reader            (ReaderT)
-import             Control.Monad.State             ()
-import             Control.Lens                    hiding (Index)
-import             Linear                          (Quaternion, M22, M33, M44, V3(..), zero, axisAngle)
+import           Control.Lens                        hiding (Index)
+import           Control.Monad.State                 ()
+import           Control.Monad.Writer                ()
+import           Linear                              (M22, M33, M44, Quaternion,
+                                                      V3 (..), axisAngle, zero)
 ---------------------------------------------------------------------------------------------------
-import             Graphics.GLUtil
-import qualified   Graphics.GLUtil.Camera3D        as Cam
-import qualified   Graphics.Rendering.OpenGL       as GL
-import             Graphics.Rendering.OpenGL       (Color, Color3, Color4)
-import             Graphics.Rendering.OpenGL.Raw.Types as GLRawTypes
+import           Graphics.GLUtil
+import qualified Graphics.GLUtil.Camera3D            as Cam
+import qualified Graphics.Rendering.OpenGL           as GL
+import           Graphics.Rendering.OpenGL.Raw.Types as GLRawTypes
 ---------------------------------------------------------------------------------------------------
-import             Yage.Rendering.Texture
-import             Yage.Rendering.VertexSpec       (VertexAttribute)
-import             Yage.Rendering.Backend.Renderer.Types as RendererTypes
+import           Yage.Rendering.Texture
+import           Yage.Rendering.VertexSpec           (VertexAttribute)
+import           Yage.Rendering.Backend.Renderer.Types as RendererTypes (ShaderDefinition)
 -- =================================================================================================
 
 type VBO = GL.BufferObject
@@ -72,7 +62,7 @@ type FBO = GL.FramebufferObject
 
 ---------------------------------------------------------------------------------------------------
 
-data TextureResource = 
+data TextureResource =
       TextureFile FilePath
     | TextureImage String DynamicImage
     deriving (Typeable)
@@ -102,26 +92,27 @@ data TextureDefinition = TextureDefinition
     , _texResource :: TextureResource
     } deriving (Typeable, Show, Eq, Ord)
 
-makeLenses ''TextureDefinition
 
 
 data RenderDefinition = RenderDefinition
-    { def'data      :: Mesh
-    , def'program   :: Program
-    , def'textures  :: [TextureDefinition] -- | (Resource, Shader TextureUnit)
+    { def'data     :: Mesh
+    , def'program  :: Program
+    , def'textures :: [TextureDefinition] -- | (Resource, Shader TextureUnit)
     }
 
 ---------------------------------------------------------------------------------------------------
 
 
----------------------------------------------------------------------------------------------------
 
 class Typeable r => Renderable r where
-
-    renderDefinition      :: r -> RenderDefinition   
+    renderDefinition      :: r -> RenderDefinition
     renderPosition        :: r -> Position
     renderOrientation     :: r -> Orientation
-    renderScale           :: r -> Scale 
+    renderScale           :: r -> Scale
+
+
+data SomeRenderable = forall r. (Typeable r, Renderable r) => SomeRenderable r
+    deriving (Typeable)
 
 
 toRenderable :: (Renderable r) => r -> SomeRenderable
@@ -133,23 +124,7 @@ fromRenderable :: (Typeable r) => SomeRenderable -> Maybe r
 fromRenderable (SomeRenderable r) = cast r
 
 renderableType :: SomeRenderable -> TypeRep
-renderableType (SomeRenderable r) = typeOf r 
-   
-renderProgram :: (Renderable r) => r -> Program
-renderProgram = def'program . renderDefinition
-
-programSrc :: Program -> ShaderResource
-programSrc = fst
-
-programDef :: Program -> ShaderDefinition
-programDef = snd
-
-renderData :: (Renderable r) => r -> Mesh
-renderData = def'data . renderDefinition
-
-
-data SomeRenderable = forall r. (Typeable r, Renderable r) => SomeRenderable r
-    deriving (Typeable)
+renderableType (SomeRenderable r) = typeOf r
 
 
 instance Renderable SomeRenderable where
@@ -157,17 +132,19 @@ instance Renderable SomeRenderable where
     renderDefinition  (SomeRenderable r) = renderDefinition r
     renderPosition    (SomeRenderable r) = renderPosition r
     renderOrientation (SomeRenderable r) = renderOrientation r
-    renderScale       (SomeRenderable r) = renderScale r 
+    renderScale       (SomeRenderable r) = renderScale r
 
+
+---------------------------------------------------------------------------------------------------
 
 
 -- how to add statics?!
 -- mark ents or seperate?
 data RenderScene = RenderScene
-    { entities            :: [SomeRenderable]
-    , sceneTime           :: !Float
-    , viewMatrix          :: !(M44 Float)
-    , projectionMatrix    :: !(M44 Float)
+    { entities         :: [SomeRenderable]
+    , sceneTime        :: !Float
+    , viewMatrix       :: !(M44 Float)
+    , projectionMatrix :: !(M44 Float)
     } deriving (Typeable)
 
 
@@ -201,13 +178,6 @@ mkRenderEntity def = RenderEntity
     , renderDef     = def
     }
 
-data RenderData = RenderData -- TODO rename RenderResource
-    { vao           :: GL.VertexArrayObject
-    , shaderProgram :: ShaderProgram
-    , texObjs       :: [(GL.TextureObject, (GLuint, String))]
-    , triangleCount :: !Int
-    } deriving Show
-
 instance Renderable RenderEntity where
     renderDefinition  = renderDef
     renderPosition    = ePosition
@@ -224,16 +194,15 @@ toRenderEntity (SomeRenderable r) = RenderEntity
 
 ---------------------------------------------------------------------------------------------------
 
-deriving instance Show ShaderProgram
 type Index     = Int
 
 data Mesh = forall v. (Storable v) =>
     Mesh
-    { meshId       :: Int
-    , meshName     :: String
-    , meshData     :: MeshData v
-    , meshAttr     :: [VertexAttribute]
-    , dirty        :: Bool
+    { meshId   :: Int
+    , meshName :: String
+    , meshData :: MeshData v
+    , meshAttr :: [VertexAttribute]
+    , dirty    :: Bool
     } deriving (Typeable)
 
 data MeshData v = MeshData
@@ -243,7 +212,7 @@ data MeshData v = MeshData
     } deriving (Show, Generic)
 
 instance Show Mesh where
-    show Mesh{..} = 
+    show Mesh{..} =
         format "Mesh {id = {0}, name = {1}, data = N/A, attribs = {2}, dirty = {3}}"
                [     show meshId,    show meshName,        show meshAttr, show dirty]
 
@@ -253,20 +222,6 @@ instance Eq Mesh where
 instance Ord Mesh where
     compare a b = compare (meshId a) (meshId b)
 
-makeMeshFromVerts :: (Storable v) => Int -> String -> [v] -> [Index] -> [VertexAttribute] -> Mesh
--- TODO some assertions for invalid meshes
-makeMeshFromVerts ident name vs ixs attribs = 
-    let meshdata = MeshData vs ixs $ (length ixs) `quot` 3
-    in Mesh ident name meshdata attribs True
-
-makeMesh :: (Storable v) => Int -> String -> MeshData v -> [VertexAttribute] -> Mesh
-makeMesh ident name meshdata attribs = Mesh ident name meshdata attribs True
-
-emptyMeshData :: MeshData v
-emptyMeshData = MeshData [] [] 0
-
-meshTriangleCount :: Mesh -> Int
-meshTriangleCount (Mesh _ _ (MeshData _ _ cnt) _ _) = cnt
 
 ---------------------------------------------------------------------------------------------------
 
@@ -275,52 +230,14 @@ toIndex1 = GL.Index1
 
 ---------------------------------------------------------------------------------------------------
 
-type UniShader = ReaderT ShaderEnv IO
-
-
-data ShaderDefinition = ShaderDefinition
-    { uniform'def :: UniShader () }
-
-instance Show ShaderDefinition where
-    show _ = show "ShaderDefinition"
-
-
-data ShaderEnv = ShaderEnv
-    { shaderEnv'Program             :: ShaderProgram
-    , shaderEnv'CurrentRenderable   :: ViewDefinition
-    , shaderEnv'CurrentScene        :: RenderView 
-    } deriving (Show, Typeable)
-
 data ShaderResource = ShaderResource
-    { vert'src   :: FilePath
-    , frag'src   :: FilePath
+    { vert'src :: FilePath
+    , frag'src :: FilePath
     } deriving (Show, Eq, Ord)
 
 
-type Program = (ShaderResource, ShaderDefinition)
+type Program = (ShaderResource, ShaderDefinition ())
 
-
-
----------------------------------------------------------------------------------------------------
-
--- TODO : RenderScene -- RenderView overlap
-data RenderView = RenderView
-    { _rvViewMatrix        :: !(M44 Float)
-    , _rvProjectionMatrix  :: !(M44 Float)
-    } deriving Show
-
-
-data ViewDefinition = ViewDefinition
-    { _vdMVPMatrix             :: !(M44 Float)
-    , _vdModelMatrix           :: !(M44 Float)
-    , _vdNormalMatrix          :: !(M33 Float)
-    , _vdRenderData            :: !RenderData
-    , _vdUniformDef            :: !(ShaderDefinition, ShaderEnv)
-    } deriving Show
-
-makeLenses ''ViewDefinition
-makeLenses ''RenderView
--- TODO END
 
 ---------------------------------------------------------------------------------------------------
 
@@ -345,7 +262,7 @@ instance Hashable FilePath where
     hashWithSalt salt = hashWithSalt salt . encode
 
 instance Hashable ShaderResource where
-    hashWithSalt salt ShaderResource{..} = 
+    hashWithSalt salt ShaderResource{..} =
         salt     `hashWithSalt`
         vert'src `hashWithSalt` frag'src
 

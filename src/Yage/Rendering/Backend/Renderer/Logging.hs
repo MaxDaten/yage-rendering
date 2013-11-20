@@ -1,10 +1,11 @@
-module Yage.Rendering.Logging where
+module Yage.Rendering.Backend.Renderer.Logging where
+
 
 import Yage.Prelude
 
 import Control.Monad.Writer (tell)
 
-import Yage.Rendering.Types
+import Yage.Rendering.Backend.Renderer.Types
 
 logRenderM :: String -> Renderer ()
 logRenderM msg = tell $ mempty{rlog'log = [msg]}

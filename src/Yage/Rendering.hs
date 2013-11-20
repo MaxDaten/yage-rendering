@@ -1,24 +1,26 @@
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE DeriveDataTypeable         #-}
+{-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE TemplateHaskell            #-}
 module Yage.Rendering
     ( (!=), shaderEnv
     , module Yage.Rendering
     , module Yage.Rendering.Types
+    , module Yage.Rendering.Lenses
     ) where
 
-import Yage.Prelude
+import           Yage.Prelude
 
-import Data.List (map)
+import           Data.List                       (map)
 
-import Control.Lens
+import           Control.Lens
 
-import Linear
+import           Linear
 
-import Yage.Rendering.Types
-import Yage.Rendering.RenderWorld hiding (renderResources)
-import Yage.Rendering.Backend.Renderer
+import           Yage.Rendering.Backend.Renderer
+import           Yage.Rendering.Lenses
+import           Yage.Rendering.RenderWorld      hiding (renderResources)
+import           Yage.Rendering.Types
 
 
 data RenderUnit = RenderUnit
@@ -56,12 +58,12 @@ instance Eq ZOrderedRenderable where
         in aZ == bZ
 
 instance Ord ZOrderedRenderable where
-    compare a b = 
+    compare a b =
         let aZ = (renderPosition a)^._z
             bZ = (renderPosition b)^._z
         in compare aZ bZ
 
-newtype PositionOrderedEntity = PositionOrderedEntity { unPositionOrderedEntity :: RenderEntity } 
+newtype PositionOrderedEntity = PositionOrderedEntity { unPositionOrderedEntity :: RenderEntity }
     deriving (Typeable, Renderable)
 
 

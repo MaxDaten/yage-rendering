@@ -6,30 +6,29 @@
 {-# LANGUAGE TemplateHaskell           #-}
 module Yage.Rendering.RenderWorld
     ( module Yage.Rendering.RenderWorld
-    , module RenderWorldTypes
+    , module Types
     ) where
 
 import           Yage.Math
 import           Yage.Prelude
 
 import           Data.List
-import           Data.Map.Strict                          as M hiding (map)
-import           Data.Maybe                               (fromJust)
-import           Data.Set                                 as S hiding (map)
 
-import           Control.Lens                             hiding (indices)
+import           Control.Lens                     hiding (indices)
 import           Control.Monad.RWS.Strict
-import           Control.Monad.State
 
 import           Linear
 
-import           Graphics.GLUtil
-import           Graphics.Rendering.OpenGL                (($=))
-import qualified Graphics.Rendering.OpenGL                as GL
+import           Graphics.GLUtil                  hiding (loadShader, loadTexture)
+import           Graphics.Rendering.OpenGL        (($=))
+import qualified Graphics.Rendering.OpenGL        as GL
 
 import           Yage.Rendering.Backend.Renderer
-import           Yage.Rendering.Internal.RenderWorldTypes as RenderWorldTypes
-import qualified Yage.Rendering.Texture                   as Tex
+import           Yage.Rendering.RenderWorld.Types as Types
+
+import           Yage.Rendering.Lenses
+import qualified Yage.Rendering.Texture           as Tex
+import           Yage.Rendering.Mesh              as Mesh
 import           Yage.Rendering.Types
 import           Yage.Rendering.VertexSpec
 
@@ -39,8 +38,8 @@ import           Yage.Rendering.VertexSpec
 
 
 runRenderWorld :: RenderView -> RenderWorldEnv -> RenderWorldState -> IO ([ViewDefinition], RenderWorldState)
-runRenderWorld view env st =
-    let theRun    = processRenderView view
+runRenderWorld rview env st =
+    let theRun    = processRenderView rview
     in do
         (a,st',_) <- runRWST theRun env st
         return (a,st')
@@ -64,7 +63,7 @@ findContributingEntities = view worldEntities
 
 
 toViewDefinition :: RenderView -> RenderWorldResources -> RenderEntity -> ViewDefinition
-toViewDefinition view@RenderView{..} RenderWorldResources{..} ent@RenderEntity{..} =
+toViewDefinition rview@RenderView{..} RenderWorldResources{..} RenderEntity{..} =
     let scaleM       = kronecker . point $ eScale
         transM       = mkTransformation eOrientation ePosition
         modelM       = transM !*! scaleM
@@ -92,7 +91,7 @@ toViewDefinition view@RenderView{..} RenderWorldResources{..} ent@RenderEntity{.
         uniformEnv = ShaderEnv
             { shaderEnv'Program           = _loadedShaders^.at ((def'program renderDef)^._1) ^?!_Just
             , shaderEnv'CurrentRenderable = undefined -- TODO init is currently in renderer (awkward!!)
-            , shaderEnv'CurrentScene      = view
+            , shaderEnv'CurrentScene      = rview
             }
 
 
@@ -104,13 +103,12 @@ prepareResources = view worldEntities >>= mapM_ (loadRenderResourcesFor . render
 
 loadRenderResourcesFor :: RenderDefinition -> RenderWorld ()
 loadRenderResourcesFor RenderDefinition{..} = do
-    res <- use renderResources
     let shaderRes = def'program^._1
 
     -- Shader on demand loading
     requestShader shaderRes
 
-    -- VertexBuffer on demand with shader prog for vertex attributes    
+    -- VertexBuffer on demand with shader prog for vertex attributes
     requestVertexBuffer def'data shaderRes
 
     -- TextureObjects on demand
@@ -124,13 +122,12 @@ loadRenderResourcesFor RenderDefinition{..} = do
                 renderResources.loadedShaders.at shaderRes ?= traceShow' shaderProg
 
         requestVertexBuffer :: Mesh -> ShaderResource -> RenderWorld ()
-        requestVertexBuffer def'data shaderRes = do
+        requestVertexBuffer mesh shaderRes = do
             res <- use renderResources
-            unless (res^.loadedVertexBuffer.contains (def'data, shaderRes)) $ do
+            unless (res^.loadedVertexBuffer.contains (mesh, shaderRes)) $ do
                 let shaderProg = res^.loadedShaders.at shaderRes ^?!_Just
-                io $ print "load VAO"
-                vao            <- loadVertexBuffer def'data shaderProg
-                renderResources.loadedVertexBuffer.at (def'data, shaderRes) ?= vao
+                vao            <- loadVertexBuffer mesh shaderProg
+                renderResources.loadedVertexBuffer.at (mesh, shaderRes) ?= vao
 
         requestTexture :: TextureResource -> RenderWorld ()
         requestTexture texture = do
@@ -173,4 +170,6 @@ loadRenderResourcesFor RenderDefinition{..} = do
                 Left msg  -> error msg
                 Right obj -> return obj
 
-
+---------------------------------------------------------------------------------------------------
+initialRenderWorldState :: RenderWorldState
+initialRenderWorldState = RenderWorldState mempty

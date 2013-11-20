@@ -1,8 +1,7 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# LANGUAGE RecordWildCards, TupleSections, GeneralizedNewtypeDeriving, DeriveDataTypeable, ScopedTypeVariables #-}
 module Yage.Rendering.Backend.Renderer (
-      module GLReExports
-    , module Types
+      module Types
     , runRenderer
     , renderView
     , (!=), shaderEnv
@@ -13,24 +12,21 @@ module Yage.Rendering.Backend.Renderer (
 import             Yage.Prelude                    hiding (log)
 import             Control.Lens                    hiding (indices)
 
-import             Data.List                       (head, map, groupBy, (++))
-import qualified   Data.HashMap.Strict             as M
+import             Data.List                       (map, groupBy)
 
-import             Control.Monad.RWS.Strict        (gets, modify, asks, runRWST)
+import             Control.Monad.RWS.Strict        (asks, runRWST)
 import             Control.Monad.Reader            (runReaderT, ask)
-import             Control.Monad                   (mapM, mapM_, forM_)
+import             Control.Monad                   (mapM_, forM_)
 
 import             Graphics.GLUtil                 hiding (makeVAO, offset0)
 import qualified   Graphics.Rendering.OpenGL       as GL
 import             Graphics.Rendering.OpenGL.GL    (($=))
-import             Graphics.Rendering.OpenGL.GL    as GLReExports (Color4(..))
 ---------------------------------------------------------------------------------------------------
-import             Yage.Rendering.Types            as Types
 import             Yage.Rendering.Shader
-import             Yage.Rendering.VertexSpec
-import             Yage.Rendering.Utils
-import             Yage.Rendering.Logging
-import             Yage.Rendering.Internal.RenderWorldTypes
+
+import             Yage.Rendering.Backend.Renderer.Logging
+import             Yage.Rendering.Backend.Renderer.Types            as Types
+import             Yage.Rendering.Backend.Renderer.Lenses           as Types
 {-=================================================================================================-}
 
 import Paths_yage_rendering
@@ -84,7 +80,7 @@ renderBatch view RenderBatch{..} = withBatch $
 
 
 createShaderBatches :: RenderView -> [ViewDefinition] -> [RenderBatch ViewDefinition]
-createShaderBatches view vdefs = 
+createShaderBatches _view vdefs = 
     let shaderGroups = groupBy sameShader vdefs
     in map mkShaderBatch shaderGroups
     where
@@ -92,7 +88,8 @@ createShaderBatches view vdefs =
         sameShader a b = (a^.vdRenderData.to (program . shaderProgram)) == (b^.vdRenderData.to (program . shaderProgram))
 
         mkShaderBatch :: [ViewDefinition] -> RenderBatch ViewDefinition
-        mkShaderBatch defs@(v:vs) =
+        mkShaderBatch []         = error "empty RenderBatch: should be at least one for all items"
+        mkShaderBatch defs@(v:_) =
             let batchShader = v^.vdRenderData.to shaderProgram
             in RenderBatch
                 { withBatch     = \m -> withShader batchShader (const $ m defs)
@@ -133,14 +130,13 @@ setupFrame = do
 
 afterRender :: Renderer ()
 afterRender = return ()
-    --withWindow $ \win -> io . endDraw $ win
     --updateStatistics
             
 
 ---------------------------------------------------------------------------------------------------
 
 renderViewDefinition :: RenderView -> ViewDefinition -> Renderer ()
-renderViewDefinition view vdef = 
+renderViewDefinition _view vdef = 
     let rdata = vdef^.vdRenderData
     in do
         checkErr "start rendering"
@@ -149,7 +145,7 @@ renderViewDefinition view vdef =
             checkErr "preuniform"
             let (uniDef, uniEnv) = vdef^.vdUniformDef
             -- runUniform (udefs >> mapTextureSamplers texObjs) shaderEnv -- why no texture samplers anymore?
-            runUniform (uniform'def uniDef) uniEnv{shaderEnv'CurrentRenderable = vdef}
+            runUniform uniDef uniEnv{shaderEnv'CurrentRenderable = vdef}
             
             checkErr "postuniform"
             
@@ -159,19 +155,20 @@ renderViewDefinition view vdef =
         logCountTriangles (triangleCount rdata)
         checkErr "end render"
     where
-        checkErr msg = io $ throwErrorMsg $ msg -- ++ (show $ (fromRenderable r :: Maybe RenderEntity))
+        checkErr msg = io $ throwErrorMsg $ msg
             
         tUnits d = over (mapped._2) (^._1) (texObjs d)
     
 
 ---------------------------------------------------------------------------------------------------
-
-mapTextureSamplers :: [(GL.TextureObject, (GLuint, String))] -> UniShader ()
+{--
+mapTextureSamplers :: [(GL.TextureObject, (GL.GLuint, String))] -> ShaderDefinition ()
 mapTextureSamplers texObjs = 
     let texUnitToUniform = texObjs^..traverse._2
     in do
         sp <- asks shaderEnv'Program
         io $ mapM_ (\(i, n) -> i `asUniform` getUniform sp n) texUnitToUniform
+--}
 
 ---------------------------------------------------------------------------------------------------
 
@@ -180,15 +177,15 @@ mapTextureSamplers texObjs =
 runRenderer :: Renderer a -> RenderEnv -> IO (a, (), RenderLog)
 runRenderer renderer env = runRWST renderer env ()
 
-runUniform :: UniShader a -> ShaderEnv -> IO a
+runUniform :: ShaderDefinition a -> ShaderEnv -> IO a
 runUniform u env = runReaderT u env
 
 ---------------------------------------------------------------------------------------------------
 
-(!=) :: (AsUniform u) => String -> u -> UniShader ()
+(!=) :: (AsUniform u) => String -> u -> ShaderDefinition ()
 name != uni = do
     sp <- asks shaderEnv'Program
     io $ uni `asUniform` getUniform sp name
 
-shaderEnv :: UniShader (ShaderEnv)
+shaderEnv :: ShaderDefinition ShaderEnv
 shaderEnv = ask
