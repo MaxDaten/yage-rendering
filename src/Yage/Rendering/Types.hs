@@ -20,9 +20,13 @@ module Yage.Rendering.Types
 
     , Renderable(..), SomeRenderable(..), renderableType, fromRenderable, toRenderable, toRenderEntity
     , RenderData(..), RenderDefinition(..)
+
+    , RenderView(..), ViewDefinition(..)
+    , vdModelMatrix, vdNormalMatrix, vdRenderData, vdUniformDef
+    , rvViewMatrix, rvProjectionMatrix
     , RenderScene(..), emptyRenderScene, entitiesCount, addEntity
     , RenderEntity(..), mkRenderEntity
-    , Mesh(..), MeshData(..), makeMesh, makeMeshFromVerts, emptyMeshData
+    , Mesh(..), MeshData(..), makeMesh, makeMeshFromVerts, emptyMeshData, meshTriangleCount
     , Index, Position, Orientation, Scale
     , ShaderResource(..), ShaderProgram(..), UniShader, ShaderEnv(..), ShaderDefinition(..)
     , TextureDefinition(..), texChannel, texResource, TextureResource(..)
@@ -65,6 +69,49 @@ import             Yage.Rendering.Backend.Renderer.Types as RendererTypes
 type VBO = GL.BufferObject
 type EBO = GL.BufferObject
 type FBO = GL.FramebufferObject
+
+---------------------------------------------------------------------------------------------------
+
+data TextureResource = 
+      TextureFile FilePath
+    | TextureImage String DynamicImage
+    deriving (Typeable)
+
+
+-- TODO
+instance Ord TextureResource where
+    compare (TextureFile pathA   ) (TextureFile pathB   ) = compare pathA pathB
+    compare (TextureImage nameA _) (TextureImage nameB _) = compare nameA nameB
+    compare (TextureFile _) _ = GT
+    compare _ _               = LT
+
+instance Show TextureResource where
+    show (TextureFile name)     = show name
+    show (TextureImage name _ ) = show name
+
+instance Eq TextureResource where
+    (==) (TextureFile name1) (TextureFile name2)         = name1 == name2
+    (==) (TextureImage name1 _ ) (TextureImage name2 _ ) = name1 == name2
+    (==) _ _ = False
+
+---------------------------------------------------------------------------------------------------
+
+
+data TextureDefinition = TextureDefinition
+    { _texChannel  :: (Int, String)
+    , _texResource :: TextureResource
+    } deriving (Typeable, Show, Eq, Ord)
+
+makeLenses ''TextureDefinition
+
+
+data RenderDefinition = RenderDefinition
+    { def'data      :: Mesh
+    , def'program   :: Program
+    , def'textures  :: [TextureDefinition] -- | (Resource, Shader TextureUnit)
+    }
+
+---------------------------------------------------------------------------------------------------
 
 
 ---------------------------------------------------------------------------------------------------
@@ -112,9 +159,6 @@ instance Renderable SomeRenderable where
     renderOrientation (SomeRenderable r) = renderOrientation r
     renderScale       (SomeRenderable r) = renderScale r 
 
-
-
----------------------------------------------------------------------------------------------------
 
 
 -- how to add statics?!
@@ -219,36 +263,61 @@ makeMesh ident name meshdata attribs = Mesh ident name meshdata attribs True
 emptyMeshData :: MeshData v
 emptyMeshData = MeshData [] [] 0
 
+meshTriangleCount :: Mesh -> Int
+meshTriangleCount (Mesh _ _ (MeshData _ _ cnt) _ _) = cnt
+
 ---------------------------------------------------------------------------------------------------
 
 toIndex1 :: a -> GL.Index1 a
 toIndex1 = GL.Index1
 
+---------------------------------------------------------------------------------------------------
+
 type UniShader = ReaderT ShaderEnv IO
+
+
+data ShaderDefinition = ShaderDefinition
+    { uniform'def :: UniShader () }
+
+instance Show ShaderDefinition where
+    show _ = show "ShaderDefinition"
+
 
 data ShaderEnv = ShaderEnv
     { shaderEnv'Program             :: ShaderProgram
-    , shaderEnv'CurrentRenderable   :: SomeRenderable
-    , shaderEnv'CurrentScene        :: RenderScene 
-    } deriving (Typeable)
+    , shaderEnv'CurrentRenderable   :: ViewDefinition
+    , shaderEnv'CurrentScene        :: RenderView 
+    } deriving (Show, Typeable)
 
 data ShaderResource = ShaderResource
     { vert'src   :: FilePath
     , frag'src   :: FilePath
     } deriving (Show, Eq, Ord)
 
---data ShaderUniformDef r s = ShaderUniformDef { runUniform :: r -> s -> ShaderProgram -> IO () }
-
-data ShaderDefinition = ShaderDefinition
-    { uniform'def :: UniShader () }
 
 type Program = (ShaderResource, ShaderDefinition)
 
-data RenderDefinition = RenderDefinition
-    { def'data      :: Mesh
-    , def'program   :: Program
-    , def'textures  :: [TextureDefinition] -- | (Resource, Shader TextureUnit)
-    }
+
+
+---------------------------------------------------------------------------------------------------
+
+-- TODO : RenderScene -- RenderView overlap
+data RenderView = RenderView
+    { _rvViewMatrix        :: !(M44 Float)
+    , _rvProjectionMatrix  :: !(M44 Float)
+    } deriving Show
+
+
+data ViewDefinition = ViewDefinition
+    { _vdModelMatrix           :: !(M44 Float)
+    , _vdNormalMatrix          :: !(M33 Float)
+    , _vdRenderData            :: !RenderData
+    , _vdUniformDef            :: !(ShaderDefinition, ShaderEnv)
+    } deriving Show
+
+makeLenses ''ViewDefinition
+makeLenses ''RenderView
+-- TODO END
 
 ---------------------------------------------------------------------------------------------------
 
@@ -266,35 +335,6 @@ instance AsUniform (M22 Float) where
 
 ---------------------------------------------------------------------------------------------------
 
-data TextureResource = 
-      TextureFile FilePath
-    | TextureImage String DynamicImage
-    deriving (Typeable)
-
--- TODO
-instance Ord TextureResource where
-    compare (TextureFile pathA) (TextureFile pathB) = compare pathA pathB
-    compare (TextureImage nameA _) (TextureImage nameB _) = compare nameA nameB
-    compare (TextureFile _) _ = GT
-    compare _ _ = LT
-
-instance Show TextureResource where
-    show (TextureFile name) = show name
-    show (TextureImage name _ ) = show name
-
-instance Eq TextureResource where
-    (==) (TextureFile name1) (TextureFile name2) = name1 == name2
-    (==) (TextureImage name1 _ ) (TextureImage name2 _ ) = name1 == name2
-    (==) _ _ = False
-
-data TextureDefinition = TextureDefinition
-    { _texChannel  :: (Int, String)
-    , _texResource :: TextureResource
-    } deriving (Typeable, Show, Eq, Ord)
-
-makeLenses ''TextureDefinition
-
----------------------------------------------------------------------------------------------------
 
 instance (Hashable v) => Hashable (MeshData v)
 
@@ -311,3 +351,4 @@ instance Hashable TextureResource where
         salt `hashWithSalt` file
     hashWithSalt salt (TextureImage name _) =
         salt `hashWithSalt` name
+

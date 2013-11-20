@@ -43,6 +43,7 @@ data RenderBatch r = RenderBatch
     }
 
 
+
 renderView :: RenderView -> [ViewDefinition] -> Renderer ()
 renderView view vdefs = renderFrame view vdefs >> afterFrame
 
@@ -57,8 +58,7 @@ renderFrame :: RenderView -> [ViewDefinition] -> Renderer ()
 renderFrame view vdefs = do
     beforeRender
     
-    (_, _) <- ioTime $ doRender view vdefs
-
+    (_a, _time) <- ioTime $ doRender view vdefs
     --let stats = RenderStatistics
     --        { lastObjectCount    = -1
     --        , lastRenderDuration = renderTime
@@ -147,9 +147,9 @@ renderViewDefinition view vdef =
         io $! withVAO (rdata^.to vao) . withTexturesAt GL.Texture2D (tUnits rdata) $! do
             
             checkErr "preuniform"
-            let uniDef = uniform'def $ vdef^.vdUniformDef
+            let (uniDef, uniEnv) = vdef^.vdUniformDef
             -- runUniform (udefs >> mapTextureSamplers texObjs) shaderEnv -- why no texture samplers anymore?
-            runUniform uniDef shaderEnv
+            runUniform (uniform'def uniDef) uniEnv{shaderEnv'CurrentRenderable = vdef}
             
             checkErr "postuniform"
             
@@ -162,12 +162,7 @@ renderViewDefinition view vdef =
         checkErr msg = io $ throwErrorMsg $ msg -- ++ (show $ (fromRenderable r :: Maybe RenderEntity))
             
         tUnits d = over (mapped._2) (^._1) (texObjs d)
-            
-        shaderEnv = ShaderEnv --- PARAMETERIZE SHADER/SHADERENV CAST HERE
-            { shaderEnv'Program           = shaderProgram $ vdef^.vdRenderData
-            , shaderEnv'CurrentRenderable = undefined
-            , shaderEnv'CurrentScene      = undefined -- scene
-            }
+    
 
 ---------------------------------------------------------------------------------------------------
 

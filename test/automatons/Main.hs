@@ -5,9 +5,13 @@
 module Main where
 import Test.Hspec (hspec, describe)
 import StorableVertexTest
+import VertexAttribTest
 
 main :: IO ()
 main = do
     hspec $ do
         describe "storable vertex" $ do
-            vertexSpecs
+            storableVertexSpecs
+
+        describe "vertex attribute specs" $ do
+            vertexAttribSpec

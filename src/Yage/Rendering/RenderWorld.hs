@@ -64,18 +64,16 @@ findContributingEntities = view worldEntities
 
 
 toViewDefinition :: RenderView -> RenderWorldResources -> RenderEntity -> ViewDefinition
-toViewDefinition RenderView{..} RenderWorldResources{..} RenderEntity{..} =
+toViewDefinition view@RenderView{..} RenderWorldResources{..} ent@RenderEntity{..} =
     let scaleM       = kronecker . point $ eScale
         transM       = mkTransformation eOrientation ePosition
         modelM       = transM !*! scaleM
         normalM      = (adjoint <$> (inv33 . fromTransformation $ modelM)) ^?!_Just
     in ViewDefinition
-        { _vdViewMatrix        = _rvViewMatrix
-        , _vdProjectionMatrix  = _rvProjectionMatrix
-        , _vdModelMatrix       = modelM
+        { _vdModelMatrix       = modelM
         , _vdNormalMatrix      = normalM
         , _vdRenderData        = getRenderData renderDef
-        , _vdUniformDef        = snd . def'program $ renderDef
+        , _vdUniformDef        = (snd . def'program $ renderDef, uniformEnv)
         }
     where
         getRenderData RenderDefinition{..} =
@@ -83,12 +81,17 @@ toViewDefinition RenderView{..} RenderWorldResources{..} RenderEntity{..} =
                 { vao           = _loadedVertexBuffer^.at (def'data, def'program^._1) ^?!_Just
                 , shaderProgram = _loadedShaders^.at (def'program^._1) ^?!_Just
                 , texObjs       = map makeTexObj def'textures
-                , triangleCount = 0
+                , triangleCount = meshTriangleCount def'data
                 }
         makeTexObj tex =
             let obj = _loadedTextures^.at (tex^.texResource) ^?!_Just
                 ch  = tex^.texChannel & _1 %~ fromIntegral
             in (obj, ch)
+        uniformEnv = ShaderEnv
+            { shaderEnv'Program           = _loadedShaders^.at ((def'program renderDef)^._1) ^?!_Just
+            , shaderEnv'CurrentRenderable = undefined -- TODO init is currently in renderer (awkward!!)
+            , shaderEnv'CurrentScene      = view
+            }
 
 
 
@@ -123,6 +126,7 @@ loadRenderResourcesFor RenderDefinition{..} = do
             res <- use renderResources
             unless (res^.loadedVertexBuffer.contains (def'data, shaderRes)) $ do
                 let shaderProg = res^.loadedShaders.at shaderRes ^?!_Just
+                io $ print "load VAO"
                 vao            <- loadVertexBuffer def'data shaderProg
                 renderResources.loadedVertexBuffer.at (def'data, shaderRes) ?= vao
 

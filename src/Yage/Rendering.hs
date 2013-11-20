@@ -42,6 +42,7 @@ renderScene scene rUnit =
     in io $ do
         (viewDefs, worldState')    <- runRenderWorld rView worldEnv worldState
         (_, __, rlog)              <- runRenderer (renderView rView viewDefs) renderEnv
+        print rlog
         return $ RenderUnit worldState' renderEnv rlog
 
 

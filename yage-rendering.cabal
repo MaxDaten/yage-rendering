@@ -40,6 +40,7 @@ library
                         Yage.Rendering.VertexSpec
                         Yage.Rendering.Primitives
                         Yage.Rendering.Logging
+                        Yage.Rendering.Backend.Shader
                         Yage.Rendering.Backend.Renderer
                         Yage.Rendering.Backend.Renderer.Types
   other-modules:
@@ -81,8 +82,8 @@ library
 -------------------------------------------------------------------------------
 
 test-suite test
-    if flag(library-only)
-      Buildable: False
+    -- if flag(library-only)
+    --  Buildable: False
     type:              exitcode-stdio-1.0
     hs-source-dirs:    test/automatons
     main-is:           Main.hs
@@ -94,3 +95,4 @@ test-suite test
                  , yage-rendering
                  , hspec
                  , linear
+                 , lens

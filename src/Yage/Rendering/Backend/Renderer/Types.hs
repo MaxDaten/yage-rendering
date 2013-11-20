@@ -7,7 +7,6 @@ import             Control.Monad.RWS.Strict        (RWST)
 import qualified   Graphics.Rendering.OpenGL       as GL
 
 
-
 type Renderer = RWST RenderEnv RenderLog () IO
     --deriving (Functor, Applicative, Monad, MonadIO, MonadReader YageRenderEnv, MonadWriter RenderLog MonadState RenderState, Typeable)
 
