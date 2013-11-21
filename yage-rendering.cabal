@@ -17,7 +17,7 @@ cabal-version:       >=1.18
 
 Flag dev
     Description:   Turn on development settings, logging and timing.
-    Default:       False
+    Default:       True
 
 Flag library-only
     Description:   Build only the yage-lib
@@ -25,7 +25,7 @@ Flag library-only
 
 Flag perf
     Description:   Perform a optimized build
-    Default:       False
+    Default:       True
 
 -------------------------------------------------------------------------------
 
@@ -34,20 +34,32 @@ library
   exposed-modules:      Yage.Core.OpenGL
                         Yage.Rendering
                         Yage.Rendering.Types
+                        Yage.Rendering.Lenses
                         Yage.Rendering.Texture
+                        Yage.Rendering.Mesh
                         Yage.Rendering.Shader
+                        Yage.Rendering.RenderWorld
+                        Yage.Rendering.RenderScene
+                        Yage.Rendering.RenderEntity
                         Yage.Rendering.VertexSpec
-                        Yage.Rendering.WorldState
                         Yage.Rendering.Primitives
-                        Yage.Rendering.Logging
+                        
+                        Yage.Rendering.Backend.Shader
+                        Yage.Rendering.Backend.Renderer
+                        Yage.Rendering.Backend.Renderer.Logging
   other-modules:
                         Paths_yage_rendering
                         Yage.Rendering.Utils
 
-  --If flag(perf)
-  --  ghc-options:        -threaded -O2
-  --Else
-  --  ghc-options:        -Wall -threaded
+                        Yage.Rendering.Backend.Renderer.Types
+                        Yage.Rendering.Backend.Renderer.Lenses
+                        Yage.Rendering.RenderWorld.Types
+
+  If flag(perf)
+    ghc-options:        -threaded -O2
+  
+  if flag(dev)
+    ghc-options:        -Wall -O0
 
   -- ghc-prof-options:     -rtsopts -prof -auto-all
   default-language:     Haskell2010
@@ -90,3 +102,4 @@ test-suite test
                  , yage-rendering
                  , hspec
                  , linear
+                 , lens

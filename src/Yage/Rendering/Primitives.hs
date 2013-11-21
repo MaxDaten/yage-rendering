@@ -1,7 +1,6 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing -fno-warn-missing-signatures #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE RankNTypes #-}
@@ -20,6 +19,8 @@ import Data.Foldable
 import Linear (V3(..), V4(..), R3(_xyz), point)
 
 import Yage.Rendering.Types
+import Yage.Rendering.Lenses
+import Yage.Rendering.Mesh
 import Yage.Rendering.VertexSpec
 import Yage.Math
 
@@ -65,15 +66,15 @@ defaultCubeDef = SimpleCubeDef
     , hidden  = [(trh, white, uv01), (brh, white, uv00), (blh, white, uv10), (tlh, white, uv11)]
     }
 
-cubeMesh' :: SimpleCubeDef Face -> Mesh Vertex4342
-cubeMesh' def@SimpleCubeDef{..} = (foldr addFaceToMesh (emptyMesh "") def){ ident = "cubeMesh" }
+cubeMesh' :: SimpleCubeDef Face -> MeshData Vertex4342
+cubeMesh' def@SimpleCubeDef{..} = foldr addFaceToMesh emptyMeshData def
 
-cubeMesh :: Mesh Vertex4342
+cubeMesh :: MeshData Vertex4342
 cubeMesh = cubeMesh' defaultCubeDef
 
 
 
-quadMesh :: Mesh Vertex4342
+quadMesh :: MeshData Vertex4342
 quadMesh = 
     let tl    = (V3 (-1.0)   1.0  0.0, uv10)
         tr    = (V3   1.0    1.0  0.0, uv11)
@@ -83,15 +84,18 @@ quadMesh =
         ixs   = [ 0, 1, 2
                 , 2, 3, 0
                 ]
-    in traceShow' $ makeMeshfromSpare "quad" verts ixs white
+    in makeMeshfromSpare verts ixs white
 
 
 -------------------------------------------------------------------------------
 
 
-makeMeshfromSpare :: String -> [(Position4f, Texture2f)] -> [Index] -> Color4f -> Mesh Vertex4342
-makeMeshfromSpare id verts ixs color =
-    makeMesh id (processSpareVerts verts ixs color) $ take (length ixs) [0..]
+makeMeshfromSpare :: [(Position4f, Texture2f)] -> [Index] -> Color4f -> MeshData Vertex4342
+makeMeshfromSpare verts ixs color =
+    let vertCount = length ixs
+        linIdxs   = take vertCount [0..]
+        triCount  = vertCount `quot` 3
+    in MeshData (processSpareVerts verts ixs color) linIdxs triCount
 
 
 
@@ -100,7 +104,7 @@ makeMeshfromSpare id verts ixs color =
 processSpareVerts :: [(Position4f, Texture2f)] -> [Index] -> Color4f -> [Vertex4342]
 processSpareVerts vs' ixs color = 
     let (vs, ts) = unzip $ extract vs' ixs
-        ns = (normals $ vs^..traverse._xyz)^..traverse.replicated 3 
+        ns = normals (vs^..traverse._xyz)^..traverse.replicated 3 
         cs = repeat color
     in zipWith4 Vertex vs ns cs ts
     where 
@@ -108,28 +112,32 @@ processSpareVerts vs' ixs color =
       extract vs = map (vs!!)
 
 
-addFaceToMesh :: Face -> Mesh Vertex4342 -> Mesh Vertex4342
-addFaceToMesh face@(v0:v1:v2:_:[]) mesh@Mesh{..} = 
+addFaceToMesh :: Face -> MeshData Vertex4342 -> MeshData Vertex4342
+addFaceToMesh face@(v0:v1:v2:_:[]) meshData = 
   let (normal, _, _)  = plainNormalForm (v2^._1) (v1^._1) (v0^._1)
-  in mesh 
-        { vertices  = map (\(p, c, t) -> Vertex (point p) normal c t) face ++ vertices 
-        , indices   = [0, 1, 2, 2, 3, 0] ++ map (+4) indices
-        , triCount  = triCount + 2
-        }
+      vertexCount     = length $ meshData^.mDataVertices
+  in   mDataVertices  <>~ map (\(p, c, t) -> Vertex (point p) normal c t) face -- ++ meshData^.vertices 
+     $ mDataIndices   <>~ map (vertexCount+) [0, 1, 2, 2, 3, 0] -- ++ map (+4) indices
+     $ mDataTriCount  +~ 2
+     $ meshData
+
 addFaceToMesh _ _     = error "invalid face" 
 
 
-pushToBack :: Mesh v -> Mesh v -> Mesh v
+pushToBack :: MeshData v -> MeshData v -> MeshData v
 pushToBack to from =
-  let vertexCount = length $ vertices to
-  in to{ vertices  = vertices to ++ vertices from
-       , indices   = indices to  ++ map (+vertexCount) (indices from)
-       , triCount  = triCount to + triCount from
-       }
+  let vertexCount = length $ to^.mDataVertices
+  in   mDataVertices  <>~ from^.mDataVertices
+     $ mDataIndices   <>~ map (+vertexCount) (from^.mDataIndices)
+     $ mDataTriCount   +~ from^.mDataTriCount
+     $ to
 
-extractMeshByIndices :: Mesh v -> Mesh v
-extractMeshByIndices m@Mesh{..} = 
-  let verts'  = map (vertices!!) indices
+extractMeshByIndices :: MeshData v -> MeshData v
+extractMeshByIndices mesh = 
+  let verts'  = map ((mesh^.mDataVertices)!!) $ mesh^.mDataIndices
       count   = length verts'
       ixs'    = [0..count]
-  in m{vertices = verts', indices = ixs', triCount = count `div` 3}
+  in  mDataVertices .~ verts'
+    $ mDataIndices  .~ ixs'
+    $ mDataTriCount .~ count `div` 3
+    $ mesh

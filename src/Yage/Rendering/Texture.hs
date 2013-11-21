@@ -19,18 +19,18 @@ import Graphics.Rendering.OpenGL (TextureObject)
 deriving instance Show TexColor
 
 instance Show (TexInfo a) where
-    show TexInfo{..} = format "TexInfo: {0} {1} - {2}" [show $ texWidth, show $ texHeight, show $ texColor]
+    show TexInfo{..} = format "TexInfo: {0} {1} - {2}" [show texWidth, show texHeight, show texColor]
 
 
 -- http://hackage.haskell.org/package/GLUtil-0.7/docs/src/Graphics-GLUtil-JuicyTextures.html#readTexture
 readTexInfoImg :: DynamicImage -> (forall a. IsPixelData a => TexInfo a -> IO b) -> IO (Either String b)
 readTexInfoImg img k = getTexInfo img
     where
-        getTexInfo (ImageY8    (Image w h p)) = Right <$> (k $ texInfo w h TexMono p)
-        getTexInfo (ImageYF    (Image w h p)) = Right <$> (k $ texInfo w h TexMono p)
-        getTexInfo (ImageRGB8  (Image w h p)) = Right <$> (k $ texInfo w h TexRGB p)
-        getTexInfo (ImageRGBF  (Image w h p)) = Right <$> (k $ texInfo w h TexRGB p)
-        getTexInfo (ImageRGBA8 (Image w h p)) = Right <$> (k $ texInfo w h TexRGBA p)
+        getTexInfo (ImageY8    (Image w h p)) = Right <$> k (texInfo w h TexMono p)
+        getTexInfo (ImageYF    (Image w h p)) = Right <$> k (texInfo w h TexMono p)
+        getTexInfo (ImageRGB8  (Image w h p)) = Right <$> k (texInfo w h TexRGB p)
+        getTexInfo (ImageRGBF  (Image w h p)) = Right <$> k (texInfo w h TexRGB p)
+        getTexInfo (ImageRGBA8 (Image w h p)) = Right <$> k (texInfo w h TexRGBA p)
         getTexInfo (ImageYCbCr8 img'        ) = getTexInfo . ImageRGB8 $ convertImage img'
         getTexInfo (ImageYA8    _           ) = return $ Left "YA format not supported"
         getTexInfo _                          = return $ Left "Unsupported image format"
