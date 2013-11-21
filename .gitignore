@@ -21,3 +21,4 @@ cabal.sandbox.config
 enumartion-record.hs
 generic-test.hscabal.config
 cabal.config
+hlint.html
