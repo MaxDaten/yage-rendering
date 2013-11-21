@@ -8,6 +8,7 @@ module Yage.Rendering
     , module Yage.Rendering
     , module Yage.Rendering.Lenses
     , module RendererExports
+    , module RenderEntity
     ) where
 
 import           Yage.Prelude
@@ -23,6 +24,7 @@ import           Yage.Rendering.Backend.Renderer.Types as RendererExports
                                                           (RenderConfig (..), RenderTarget (..), RenderLog (..))
 import           Yage.Rendering.Lenses
 import           Yage.Rendering.RenderWorld            hiding (renderResources)
+import           Yage.Rendering.RenderEntity           as RenderEntity
 import           Yage.Rendering.Types                  as Types
 
 
@@ -41,8 +43,8 @@ initialRenderUnit rconf rtarget =
 
 renderScene :: (MonadIO m) => RenderScene -> RenderUnit -> m RenderUnit
 renderScene scene rUnit =
-    let rView       = RenderView (viewMatrix scene) (projectionMatrix scene)
-        worldEnv    = RenderWorldEnv $ map toRenderEntity $ entities scene
+    let rView       = RenderView (scene^.sceneViewMatrix) (scene^.sceneProjectionMatrix)
+        worldEnv    = RenderWorldEnv $ map toRenderEntity $ scene^.sceneEntities
         worldState  = rUnit^.renderResources
         renderEnv   = rUnit^.renderSettings
     in io $ do
@@ -57,14 +59,14 @@ newtype ZOrderedRenderable = ZOrderedRenderable RenderEntity
 
 instance Eq ZOrderedRenderable where
     a == b =
-        let aZ = (renderPosition a)^._z
-            bZ = (renderPosition b)^._z
+        let aZ = renderPosition a ^._z
+            bZ = renderPosition b ^._z
         in aZ == bZ
 
 instance Ord ZOrderedRenderable where
     compare a b =
-        let aZ = (renderPosition a)^._z
-            bZ = (renderPosition b)^._z
+        let aZ = renderPosition a ^._z
+            bZ = renderPosition b ^._z
         in compare aZ bZ
 
 newtype PositionOrderedEntity = PositionOrderedEntity { unPositionOrderedEntity :: RenderEntity }
@@ -72,7 +74,7 @@ newtype PositionOrderedEntity = PositionOrderedEntity { unPositionOrderedEntity 
 
 
 instance Eq PositionOrderedEntity where
-    a == b = (renderPosition a) == (renderPosition b)
+    a == b = renderPosition a == renderPosition b
 
 instance Ord PositionOrderedEntity where
-    compare a b = (renderPosition a) `compare` (renderPosition b)
+    compare a b = renderPosition a `compare` renderPosition b

@@ -3,7 +3,6 @@
 {-# LANGUAGE NamedFieldPuns            #-}
 {-# LANGUAGE RankNTypes                #-}
 {-# LANGUAGE RecordWildCards           #-}
-{-# LANGUAGE TemplateHaskell           #-}
 module Yage.Rendering.RenderWorld
     ( module Yage.Rendering.RenderWorld
     , module Types
@@ -63,9 +62,9 @@ findContributingEntities = view worldEntities
 
 
 toViewDefinition :: RenderView -> RenderWorldResources -> RenderEntity -> ViewDefinition
-toViewDefinition rview@RenderView{..} RenderWorldResources{..} RenderEntity{..} =
-    let scaleM       = kronecker . point $ eScale
-        transM       = mkTransformation eOrientation ePosition
+toViewDefinition rview@RenderView{..} RenderWorldResources{..} ent =
+    let scaleM       = kronecker . point $ ent^.entityScale
+        transM       = mkTransformation (ent^.entityOrientation) (ent^.entityPosition)
         modelM       = transM !*! scaleM
         -- TODO rethink the normal matrix here
         normalM      = (adjoint <$> (inv33 . fromTransformation $ modelM) <|> Just eye3) ^?!_Just
@@ -73,52 +72,55 @@ toViewDefinition rview@RenderView{..} RenderWorldResources{..} RenderEntity{..} 
         { _vdMVPMatrix         = _rvProjectionMatrix !*! _rvViewMatrix !*! modelM
         , _vdModelMatrix       = modelM
         , _vdNormalMatrix      = normalM
-        , _vdRenderData        = getRenderData renderDef
-        , _vdUniformDef        = (snd . def'program $ renderDef, uniformEnv)
+        , _vdRenderData        = getRenderData $ ent^.entityRenderDef
+        , _vdUniformDef        = (ent^.entityRenderDef.rdefProgram._2, uniformEnv)
         }
     where
-        getRenderData RenderDefinition{..} =
-            RenderData
-                { vao           = _loadedVertexBuffer^.at (def'data, def'program^._1) ^?!_Just
-                , shaderProgram = _loadedShaders^.at (def'program^._1) ^?!_Just
-                , texObjs       = map makeTexObj def'textures
-                , triangleCount = meshTriangleCount def'data
+        getRenderData renderDef =
+            let rData = renderDef^.rdefData
+                rProg = renderDef^.rdefProgram^._1
+                rTexs  = renderDef^.rdefTextures
+            in RenderData
+                { vao           = _loadedVertexBuffer^.at (rData, rProg) ^?!_Just
+                , shaderProgram = _loadedShaders^.at rProg ^?!_Just
+                , texObjs       = map makeTexObj rTexs
+                , triangleCount = meshTriangleCount rData
                 }
         makeTexObj tex =
             let obj = _loadedTextures^.at (tex^.texResource) ^?!_Just
                 ch  = tex^.texChannel & _1 %~ fromIntegral
             in (obj, ch)
         uniformEnv = ShaderEnv
-            { shaderEnv'Program           = _loadedShaders^.at ((def'program renderDef)^._1) ^?!_Just
-            , shaderEnv'CurrentRenderable = undefined -- TODO init is currently in renderer (awkward!!)
-            , shaderEnv'CurrentScene      = rview
+            { _seProgram           = _loadedShaders^.at (ent^.entityRenderDef^.rdefProgram._1) ^?!_Just
+            , _seViewDef           = undefined -- TODO init is currently in renderer (awkward!!)
+            , _seView              = rview
             }
 
 
 
 prepareResources :: RenderWorld ()
-prepareResources = view worldEntities >>= mapM_ (loadRenderResourcesFor . renderDef)
+prepareResources = view worldEntities >>= mapM_ (loadRenderResourcesFor . _entityRenderDef)
 
 
 
 loadRenderResourcesFor :: RenderDefinition -> RenderWorld ()
-loadRenderResourcesFor RenderDefinition{..} = do
-    let shaderRes = def'program^._1
+loadRenderResourcesFor rdef = do
+    let shaderRes = rdef^.rdefProgram._1
 
     -- Shader on demand loading
     requestShader shaderRes
 
     -- VertexBuffer on demand with shader prog for vertex attributes
-    requestVertexBuffer def'data shaderRes
+    requestVertexBuffer (rdef^.rdefData) shaderRes
 
     -- TextureObjects on demand
-    forM_ (def'textures^..traverse.texResource) $ requestTexture
+    forM_ (rdef^.rdefTextures^..traverse.texResource) requestTexture
     where
         requestShader :: ShaderResource -> RenderWorld ()
         requestShader shaderRes = do
             res <- use renderResources
             unless (res^.loadedShaders.contains shaderRes) $ do
-                shaderProg <- loadShader $ shaderRes
+                shaderProg <- loadShader shaderRes
                 renderResources.loadedShaders.at shaderRes ?= traceShow' shaderProg
 
         requestVertexBuffer :: Mesh -> ShaderResource -> RenderWorld ()
@@ -138,9 +140,9 @@ loadRenderResourcesFor RenderDefinition{..} = do
 
         -- | creates vbo and ebo, sets shader attributes and creates finally a vao
         loadVertexBuffer :: Mesh -> ShaderProgram -> RenderWorld VAO
-        loadVertexBuffer Mesh{meshData, meshAttr} shaderProg = do
-            buff <- io $ makeVertexBufferF meshAttr
-            ebo  <- io $ bufferIndices $ map fromIntegral $ indices meshData
+        loadVertexBuffer Mesh{_meshData, _meshAttr} shaderProg = do
+            buff <- io $ makeVertexBufferF _meshAttr
+            ebo  <- io $ bufferIndices $ map fromIntegral $ _meshData^.mDataIndices
             io $ makeVAO $ do
                 GL.bindBuffer GL.ArrayBuffer        $= Just (vbo buff)
                 mapM_ (setVertexAttribute shaderProg) (attribVADs buff)
@@ -153,7 +155,7 @@ loadRenderResourcesFor RenderDefinition{..} = do
         -- | compiles shader
         loadShader :: ShaderResource -> RenderWorld ShaderProgram
         loadShader res = io $!
-            simpleShaderProgram (encodeString $ vert'src res) (encodeString $ frag'src res)
+            simpleShaderProgram (encodeString $ res^.srVertSrc) (encodeString $ res^.srFragSrc)
 
         -- | pushes texture to opengl
         loadTexture :: TextureResource -> RenderWorld GL.TextureObject
@@ -165,7 +167,7 @@ loadRenderResourcesFor RenderDefinition{..} = do
 
         handleTexObj res = do
             GL.textureFilter GL.Texture2D $= ((GL.Linear', Nothing), GL.Linear') -- TODO Def
-            printErrorMsg $ "tex: " ++ (show res )
+            printErrorMsg $ "tex: " ++ show res
             case res of
                 Left msg  -> error msg
                 Right obj -> return obj

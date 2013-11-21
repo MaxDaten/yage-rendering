@@ -39,6 +39,8 @@ library
                         Yage.Rendering.Mesh
                         Yage.Rendering.Shader
                         Yage.Rendering.RenderWorld
+                        Yage.Rendering.RenderScene
+                        Yage.Rendering.RenderEntity
                         Yage.Rendering.VertexSpec
                         Yage.Rendering.Primitives
                         

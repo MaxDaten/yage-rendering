@@ -36,6 +36,6 @@ type RenderWorld = RWST RenderWorldEnv () RenderWorldState IO
 
 instance Monoid RenderWorldResources where
     mappend (RenderWorldResources sA vA tA) (RenderWorldResources sB vB tB)
-           = RenderWorldResources (union sA sB) (union vA vB) (union tA tB)
+           = RenderWorldResources (sA `union` sB) (vA `union` vB) (tA `union` tB)
     mempty = RenderWorldResources mempty mempty mempty
 

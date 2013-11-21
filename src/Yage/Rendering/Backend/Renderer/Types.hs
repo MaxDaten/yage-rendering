@@ -21,35 +21,37 @@ import             Yage.Rendering.Backend.Shader   ()
 type Renderer = RWST RenderEnv RenderLog () IO
 
 data RenderTarget = RenderTarget
-    { target'size   :: !(Int, Int)
-    , target'ratio  :: !Double
+    { _targetSize   :: !(Int, Int)
+    , _targetRatio  :: !Double
     }
 
 data RenderEnv = RenderEnv
-    { envConfig         :: !RenderConfig    -- ^ The current settings for the frame
-    , renderTarget      :: !RenderTarget
+    { _reRenderConfig         :: !RenderConfig    -- ^ The current settings for the frame
+    , _reRenderTarget         :: !RenderTarget
     }
 
 data RenderLog = RenderLog 
-    { rlog'objcount :: !Int
-    , rlog'tricount :: !Int
-    , rlog'log      :: ![String]
+    { _rlLogObjCount :: !Int
+    , _rlLogTriCount :: !Int
+    , _rlLog         :: ![String]
     } deriving (Show, Eq)
 
 
 data RenderConfig = RenderConfig
-    { confClearColor        :: !(GL.Color4 Double)
-    , confDebugNormals      :: !Bool
-    , confWireframe         :: !Bool
+    { _rcConfClearColor        :: !(GL.Color4 Double)
+    , _rcConfDebugNormals      :: !Bool
+    , _rcConfWireframe         :: !Bool
     }
 
+{--
 data RenderStatistics = RenderStatistics
-    { lastObjectCount       :: !Int
+    { _rsStatObjectCount       :: !Int
     , lastTriangleCount     :: !Int
     , lastRenderDuration    :: !Double
     , loadedShadersCount    :: !Int
     , loadedMeshesCount     :: !Int
     } deriving Show
+--}
 
 
 emptyRenderLog :: RenderLog
@@ -61,9 +63,9 @@ type ShaderDefinition = ReaderT ShaderEnv IO
 
 
 data ShaderEnv = ShaderEnv
-    { shaderEnv'Program             :: ShaderProgram
-    , shaderEnv'CurrentRenderable   :: ViewDefinition
-    , shaderEnv'CurrentScene        :: RenderView 
+    { _seProgram     :: ShaderProgram
+    , _seViewDef     :: ViewDefinition
+    , _seView        :: RenderView 
     } deriving (Show, Typeable)
 
 ---------------------------------------------------------------------------------------------------

@@ -1,11 +1,8 @@
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
 {-# LANGUAGE DeriveDataTypeable         #-}
-{-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE DeriveGeneric              #-}
-{-# LANGUAGE DeriveTraversable          #-}
 {-# LANGUAGE ExistentialQuantification  #-}
 {-# LANGUAGE FlexibleInstances          #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE NamedFieldPuns             #-}
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE RecordWildCards            #-}
@@ -16,10 +13,10 @@ module Yage.Rendering.Types
     ( Program
     , VBO, EBO, FBO, VAO
 
-    , Renderable(..), SomeRenderable(..), renderableType, fromRenderable, toRenderable, toRenderEntity
+    , Renderable(..), SomeRenderable(..), renderableType, fromRenderable, toRenderable
     , RenderDefinition(..)
-    , RenderScene(..), emptyRenderScene, entitiesCount, addEntity
-    , RenderEntity(..), mkRenderEntity
+    , RenderScene(..)
+    , RenderEntity(..)
     , Mesh(..), MeshData(..)
     , Index, Position, Orientation, Scale
     , ShaderResource(..), ShaderProgram(..)
@@ -32,7 +29,6 @@ module Yage.Rendering.Types
 import           Yage.Prelude                        hiding (log)
 
 import           Data.Hashable                       ()
-import           Data.List                           (length)
 import           Filesystem.Path.CurrentOS           (encode)
 import           Foreign                             (Storable)
 import           Foreign.C.Types                     (CFloat (..))
@@ -43,11 +39,9 @@ import           GHC.Generics                        (Generic)
 import           Control.Lens                        hiding (Index)
 import           Control.Monad.State                 ()
 import           Control.Monad.Writer                ()
-import           Linear                              (M22, M33, M44, Quaternion,
-                                                      V3 (..), axisAngle, zero)
+import           Linear                              (M22, M33, M44, Quaternion, V3 (..))
 ---------------------------------------------------------------------------------------------------
 import           Graphics.GLUtil
-import qualified Graphics.GLUtil.Camera3D            as Cam
 import qualified Graphics.Rendering.OpenGL           as GL
 import           Graphics.Rendering.OpenGL.Raw.Types as GLRawTypes
 ---------------------------------------------------------------------------------------------------
@@ -95,9 +89,9 @@ data TextureDefinition = TextureDefinition
 
 
 data RenderDefinition = RenderDefinition
-    { def'data     :: Mesh
-    , def'program  :: Program
-    , def'textures :: [TextureDefinition] -- | (Resource, Shader TextureUnit)
+    { _rdefData     :: Mesh
+    , _rdefProgram  :: Program
+    , _rdefTextures :: [TextureDefinition] -- | (Resource, Shader TextureUnit)
     }
 
 ---------------------------------------------------------------------------------------------------
@@ -141,21 +135,12 @@ instance Renderable SomeRenderable where
 -- how to add statics?!
 -- mark ents or seperate?
 data RenderScene = RenderScene
-    { entities         :: [SomeRenderable]
-    , sceneTime        :: !Float
-    , viewMatrix       :: !(M44 Float)
-    , projectionMatrix :: !(M44 Float)
+    { _sceneEntities         :: [SomeRenderable]
+    , _sceneTime             :: !Float
+    , _sceneViewMatrix       :: !(M44 Float)
+    , _sceneProjectionMatrix :: !(M44 Float)
     } deriving (Typeable)
 
-
-emptyRenderScene :: RenderScene
-emptyRenderScene = RenderScene [] 0.0 (Cam.camMatrix Cam.fpsCamera) (Cam.projectionMatrix (Cam.deg2rad 60) 1 1 45)
-
-addEntity :: (Renderable r) =>  r -> RenderScene -> RenderScene
-addEntity r scene@RenderScene{entities} = scene{ entities = (SomeRenderable r):entities }
-
-entitiesCount :: RenderScene -> Int
-entitiesCount = length . entities
 
 ---------------------------------------------------------------------------------------------------
 
@@ -164,33 +149,18 @@ type Scale       = V3 Float
 type Position    = V3 Float
 
 data RenderEntity = RenderEntity
-    { ePosition    :: !Position
-    , eOrientation :: !Orientation
-    , eScale       :: !Scale
-    , renderDef    :: RenderDefinition
+    { _entityPosition    :: !Position
+    , _entityOrientation :: !Orientation
+    , _entityScale       :: !Scale
+    , _entityRenderDef   :: RenderDefinition
     } deriving (Typeable)
 
-mkRenderEntity :: RenderDefinition -> RenderEntity
-mkRenderEntity def = RenderEntity
-    { ePosition     = zero
-    , eOrientation  = axisAngle (V3 0 1 0) (Cam.deg2rad 0)
-    , eScale        = (V3 1 1 1)
-    , renderDef     = def
-    }
 
 instance Renderable RenderEntity where
-    renderDefinition  = renderDef
-    renderPosition    = ePosition
-    renderOrientation = eOrientation
-    renderScale       = eScale
-
-toRenderEntity :: SomeRenderable -> RenderEntity
-toRenderEntity (SomeRenderable r) = RenderEntity
-    { ePosition    = renderPosition r
-    , eOrientation = renderOrientation r
-    , eScale       = renderScale r
-    , renderDef    = renderDefinition r
-    }
+    renderDefinition  = _entityRenderDef
+    renderPosition    = _entityPosition
+    renderOrientation = _entityOrientation
+    renderScale       = _entityScale
 
 ---------------------------------------------------------------------------------------------------
 
@@ -198,29 +168,29 @@ type Index     = Int
 
 data Mesh = forall v. (Storable v) =>
     Mesh
-    { meshId   :: Int
-    , meshName :: String
-    , meshData :: MeshData v
-    , meshAttr :: [VertexAttribute]
-    , dirty    :: Bool
+    { _meshId       :: Int
+    , _meshName     :: String
+    , _meshData     :: MeshData v
+    , _meshAttr     :: [VertexAttribute]
+    , _meshDirty    :: Bool
     } deriving (Typeable)
 
 data MeshData v = MeshData
-    { vertices :: ![v]
-    , indices  :: ![Index]
-    , triCount :: !Int
+    { _mDataVertices :: ![v]
+    , _mDataIndices  :: ![Index]
+    , _mDataTriCount :: !Int
     } deriving (Show, Generic)
 
 instance Show Mesh where
     show Mesh{..} =
         format "Mesh {id = {0}, name = {1}, data = N/A, attribs = {2}, dirty = {3}}"
-               [     show meshId,    show meshName,        show meshAttr, show dirty]
+               [show _meshId, show _meshName, show _meshAttr, show _meshDirty]
 
 instance Eq Mesh where
-    a == b = meshId a == meshId b
+    a == b = _meshId a == _meshId b
 
 instance Ord Mesh where
-    compare a b = compare (meshId a) (meshId b)
+    compare a b = compare (_meshId a) (_meshId b)
 
 
 ---------------------------------------------------------------------------------------------------
@@ -231,8 +201,8 @@ toIndex1 = GL.Index1
 ---------------------------------------------------------------------------------------------------
 
 data ShaderResource = ShaderResource
-    { vert'src :: FilePath
-    , frag'src :: FilePath
+    { _srVertSrc :: FilePath
+    , _srFragSrc :: FilePath
     } deriving (Show, Eq, Ord)
 
 
@@ -263,8 +233,8 @@ instance Hashable FilePath where
 
 instance Hashable ShaderResource where
     hashWithSalt salt ShaderResource{..} =
-        salt     `hashWithSalt`
-        vert'src `hashWithSalt` frag'src
+        salt       `hashWithSalt`
+        _srVertSrc `hashWithSalt` _srFragSrc
 
 instance Hashable TextureResource where
     hashWithSalt salt (TextureFile file) =

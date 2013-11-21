@@ -10,10 +10,11 @@ import Yage.Rendering.Types
 import Yage.Rendering.VertexSpec
 
 
+
 makeMeshFromVerts :: (Storable v) => Int -> String -> [v] -> [Index] -> [VertexAttribute] -> Mesh
 -- TODO some assertions for invalid meshes
 makeMeshFromVerts ident name vs ixs attribs =
-    let meshdata = MeshData vs ixs $ (length ixs) `quot` 3
+    let meshdata = MeshData vs ixs $ length ixs `quot` 3
     in Mesh ident name meshdata attribs True
 
 makeMesh :: (Storable v) => Int -> String -> MeshData v -> [VertexAttribute] -> Mesh

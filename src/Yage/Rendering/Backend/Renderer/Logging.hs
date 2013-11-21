@@ -3,18 +3,19 @@ module Yage.Rendering.Backend.Renderer.Logging where
 
 import Yage.Prelude
 
-import Control.Monad.Writer (tell)
+import Control.Lens
 
 import Yage.Rendering.Backend.Renderer.Types
+import Yage.Rendering.Backend.Renderer.Lenses
 
 logRenderM :: String -> Renderer ()
-logRenderM msg = tell $ mempty{rlog'log = [msg]}
+logRenderM msg = scribe rlLog [msg]
 
 logCountObj :: Renderer ()
-logCountObj = tell $ mempty{ rlog'objcount = 1 }
+logCountObj = scribe rlLogObjCount 1
 
 logCountTriangles :: Int -> Renderer ()
-logCountTriangles tris = tell $ mempty{ rlog'tricount = tris }
+logCountTriangles = scribe rlLogTriCount
 
 logRenderMf :: String -> [String] -> Renderer ()
 logRenderMf msg args = logRenderM $ format msg args

@@ -1,7 +1,6 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing -fno-warn-missing-signatures #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE RankNTypes #-}
@@ -20,6 +19,7 @@ import Data.Foldable
 import Linear (V3(..), V4(..), R3(_xyz), point)
 
 import Yage.Rendering.Types
+import Yage.Rendering.Lenses
 import Yage.Rendering.Mesh
 import Yage.Rendering.VertexSpec
 import Yage.Math
@@ -67,7 +67,7 @@ defaultCubeDef = SimpleCubeDef
     }
 
 cubeMesh' :: SimpleCubeDef Face -> MeshData Vertex4342
-cubeMesh' def@SimpleCubeDef{..} = (foldr addFaceToMesh emptyMeshData def)
+cubeMesh' def@SimpleCubeDef{..} = foldr addFaceToMesh emptyMeshData def
 
 cubeMesh :: MeshData Vertex4342
 cubeMesh = cubeMesh' defaultCubeDef
@@ -104,7 +104,7 @@ makeMeshfromSpare verts ixs color =
 processSpareVerts :: [(Position4f, Texture2f)] -> [Index] -> Color4f -> [Vertex4342]
 processSpareVerts vs' ixs color = 
     let (vs, ts) = unzip $ extract vs' ixs
-        ns = (normals $ vs^..traverse._xyz)^..traverse.replicated 3 
+        ns = normals (vs^..traverse._xyz)^..traverse.replicated 3 
         cs = repeat color
     in zipWith4 Vertex vs ns cs ts
     where 
@@ -113,27 +113,31 @@ processSpareVerts vs' ixs color =
 
 
 addFaceToMesh :: Face -> MeshData Vertex4342 -> MeshData Vertex4342
-addFaceToMesh face@(v0:v1:v2:_:[]) mesh@MeshData{..} = 
+addFaceToMesh face@(v0:v1:v2:_:[]) meshData = 
   let (normal, _, _)  = plainNormalForm (v2^._1) (v1^._1) (v0^._1)
-  in mesh 
-        { vertices  = map (\(p, c, t) -> Vertex (point p) normal c t) face ++ vertices 
-        , indices   = [0, 1, 2, 2, 3, 0] ++ map (+4) indices
-        , triCount  = triCount + 2
-        }
+      vertexCount     = length $ meshData^.mDataVertices
+  in   mDataVertices  <>~ map (\(p, c, t) -> Vertex (point p) normal c t) face -- ++ meshData^.vertices 
+     $ mDataIndices   <>~ map (vertexCount+) [0, 1, 2, 2, 3, 0] -- ++ map (+4) indices
+     $ mDataTriCount  +~ 2
+     $ meshData
+
 addFaceToMesh _ _     = error "invalid face" 
 
 
 pushToBack :: MeshData v -> MeshData v -> MeshData v
 pushToBack to from =
-  let vertexCount = length $ vertices to
-  in to{ vertices  = vertices to ++ vertices from
-       , indices   = indices to  ++ map (+vertexCount) (indices from)
-       , triCount  = triCount to + triCount from
-       }
+  let vertexCount = length $ to^.mDataVertices
+  in   mDataVertices  <>~ from^.mDataVertices
+     $ mDataIndices   <>~ map (+vertexCount) (from^.mDataIndices)
+     $ mDataTriCount   +~ from^.mDataTriCount
+     $ to
 
 extractMeshByIndices :: MeshData v -> MeshData v
-extractMeshByIndices m@MeshData{..} = 
-  let verts'  = map (vertices!!) indices
+extractMeshByIndices mesh = 
+  let verts'  = map ((mesh^.mDataVertices)!!) $ mesh^.mDataIndices
       count   = length verts'
       ixs'    = [0..count]
-  in m{vertices = verts', indices = ixs', triCount = count `div` 3}
+  in  mDataVertices .~ verts'
+    $ mDataIndices  .~ ixs'
+    $ mDataTriCount .~ count `div` 3
+    $ mesh

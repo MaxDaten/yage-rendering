@@ -146,7 +146,7 @@ pokeAttribs ptr attrs =
             return $ ptr `plusPtr` sizeOf a
 
 peekAttribs :: (Storable p, Storable n, Storable c, Storable t)
-            => Ptr (Vertex p n c t) -> Layout -> IO ([Vertex p n c t])
+            => Ptr (Vertex p n c t) -> Layout -> IO [Vertex p n c t]
 peekAttribs ptr (_, num, stride) = 
     let offsets  = take num $ iterate (stride+) 0
     in mapM (peek . (ptr `plusPtr`)) offsets
