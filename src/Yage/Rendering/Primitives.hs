@@ -44,7 +44,9 @@ blh   = V3 l b h
 
 -------------------------------------------------------------------------------
 
-type Face = [(Position3f, Color4f, Texture2f)]
+data Face v = Face v v v v
+faceToVertexList :: Face v -> [v]
+faceToVertexList (Face v0 v1 v2 v3) = [v0, v1, v2, v3]
 
 data SimpleCubeDef f = SimpleCubeDef
   { front  :: f
@@ -55,31 +57,31 @@ data SimpleCubeDef f = SimpleCubeDef
   , hidden :: f
   } deriving (Typeable, Functor, Foldable)
 
-defaultCubeDef :: SimpleCubeDef Face
+defaultCubeDef :: SimpleCubeDef (Face Vertex3P4C2T)
 defaultCubeDef = SimpleCubeDef
-    { front   = [(tlf, white, uv01), (blf, white, uv00), (brf, white, uv10), (trf, white, uv11)]
-    , left    = [(tlh, white, uv01), (blh, white, uv00), (blf, white, uv10), (tlf, white, uv11)]
-    , right   = [(trf, white, uv01), (brf, white, uv00), (brh, white, uv10), (trh, white, uv11)]
-    , top     = [(tlh, white, uv01), (tlf, white, uv00), (trf, white, uv10), (trh, white, uv11)]
-    , bottom  = [(blf, white, uv01), (blh, white, uv00), (brh, white, uv10), (brf, white, uv11)]
-    , hidden  = [(trh, white, uv01), (brh, white, uv00), (blh, white, uv10), (tlh, white, uv11)]
+    { front   = Face (Vertex tlf () white uv01) (Vertex blf () white uv00) (Vertex brf () white uv10) (Vertex trf () white uv11)
+    , left    = Face (Vertex tlh () white uv01) (Vertex blh () white uv00) (Vertex blf () white uv10) (Vertex tlf () white uv11)
+    , right   = Face (Vertex trf () white uv01) (Vertex brf () white uv00) (Vertex brh () white uv10) (Vertex trh () white uv11)
+    , top     = Face (Vertex tlh () white uv01) (Vertex tlf () white uv00) (Vertex trf () white uv10) (Vertex trh () white uv11)
+    , bottom  = Face (Vertex blf () white uv01) (Vertex blh () white uv00) (Vertex brh () white uv10) (Vertex brf () white uv11)
+    , hidden  = Face (Vertex trh () white uv01) (Vertex brh () white uv00) (Vertex blh () white uv10) (Vertex tlh () white uv11)
     }
 
-cubeMesh' :: SimpleCubeDef Face -> MeshData Vertex4342
+cubeMesh' :: SimpleCubeDef (Face Vertex3P4C2T) -> MeshData Vertex3P3N3C4T2
 cubeMesh' def@SimpleCubeDef{..} = foldr addFaceToMesh emptyMeshData def
 
-cubeMesh :: MeshData Vertex4342
+cubeMesh :: MeshData Vertex3P3N3C4T2
 cubeMesh = cubeMesh' defaultCubeDef
 
 
 
-quadMesh :: MeshData Vertex4342
+quadMesh :: MeshData Vertex3P3N3C4T2
 quadMesh = 
     let tl    = (V3 (-1.0)   1.0  0.0, uv10)
         tr    = (V3   1.0    1.0  0.0, uv11)
         br    = (V3   1.0  (-1.0) 0.0, uv01)
         bl    = (V3 (-1.0) (-1.0) 0.0, uv00)
-        verts = over (mapped._1) point [tl, bl, br, tr]
+        verts = [tl, bl, br, tr]
         ixs   = [ 0, 1, 2
                 , 2, 3, 0
                 ]
@@ -89,7 +91,7 @@ quadMesh =
 -------------------------------------------------------------------------------
 
 
-makeMeshfromSpare :: [(Position4f, Texture2f)] -> [Index] -> Color4f -> MeshData Vertex4342
+makeMeshfromSpare :: [(Position3f, Texture2f)] -> [Index] -> Color4f -> MeshData Vertex3P3N3C4T2
 makeMeshfromSpare verts ixs color =
     let vertCount = length ixs
         linIdxs   = take vertCount [0..]
@@ -100,22 +102,22 @@ makeMeshfromSpare verts ixs color =
 
 -- | takes spare 3d-points (without duplicates) and the indices
 -- to construct the adequate attributes to be processed by opengl 
-processSpareVerts :: [(Position4f, Texture2f)] -> [Index] -> Color4f -> [Vertex4342]
+processSpareVerts :: [(Position3f, Texture2f)] -> [Index] -> Color4f -> [Vertex3P3N3C4T2]
 processSpareVerts vs' ixs color = 
     let (vs, ts) = unzip $ extract vs' ixs
         ns = normals (vs^..traverse._xyz)^..traverse.replicated 3 
         cs = repeat color
     in zipWith4 Vertex vs ns cs ts
     where 
-      extract :: [(Position4f, Texture2f)] -> [Index] -> [(Position4f, Texture2f)]
+      extract :: [(Position3f, Texture2f)] -> [Index] -> [(Position3f, Texture2f)]
       extract vs = map (vs!!)
 
 
-addFaceToMesh :: Face -> MeshData Vertex4342 -> MeshData Vertex4342
-addFaceToMesh face@(v0:v1:v2:_:[]) meshData = 
-  let (normal, _, _)  = plainNormalForm (v2^._1) (v1^._1) (v0^._1)
+addFaceToMesh :: Face Vertex3P4C2T -> MeshData Vertex3P3N3C4T2 -> MeshData Vertex3P3N3C4T2
+addFaceToMesh face@(Face v0 v1 v2 _) meshData = 
+  let (normal, _, _)  = plainNormalForm (v2^.vPosition) (v1^.vPosition) (v0^.vPosition)
       vertexCount     = length $ meshData^.mDataVertices
-  in   mDataVertices  <>~ map (\(p, c, t) -> Vertex (point p) normal c t) face -- ++ meshData^.vertices 
+  in   mDataVertices  <>~ map (\(Vertex p () c t) -> Vertex p normal c t) (faceToVertexList face) -- ++ meshData^.vertices 
      $ mDataIndices   <>~ map (vertexCount+) [0, 1, 2, 2, 3, 0] -- ++ map (+4) indices
      $ mDataTriCount  +~ 2
      $ meshData

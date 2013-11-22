@@ -40,8 +40,9 @@ type Position2f = V2 GLfloat
 type Normal3f   = V3 GLfloat
 type Color4f    = V4 GLfloat
 type Texture2f  = V2 GLfloat
-type Vertex4342 = Vertex Position4f Normal3f Color4f Texture2f
-type Vertex2P2T4C = Vertex Position2f () Color4f Texture2f
+type Vertex3P3N3C4T2 = Vertex Position3f Normal3f Color4f Texture2f
+type Vertex2P4C2T = Vertex Position2f () Color4f Texture2f
+type Vertex3P4C2T = Vertex Position3f () Color4f Texture2f
 
 data Vertex p n c t = Vertex 
     { _vPosition      :: p
