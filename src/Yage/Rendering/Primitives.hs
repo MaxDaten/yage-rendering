@@ -6,7 +6,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
 module Yage.Rendering.Primitives
-  ( cubeMesh, quadMesh
+  ( cubeMesh, quadMesh, gridMesh
   , makeMeshfromSpare, processSpareVerts, pushToBack, extractMeshByIndices
   ) where
 
@@ -15,7 +15,7 @@ import Yage.Prelude hiding (Index)
 import Data.List (map, take, length, (!!), repeat, zipWith4, unzip)
 import Data.Foldable
 
-import Linear (V3(..), V4(..), R3(_xyz), point)
+import Linear (V2(..), V3(..), V4(..), R3(_xyz))
 
 import Yage.Rendering.Types
 import Yage.Rendering.Lenses
@@ -42,11 +42,12 @@ brh   = V3 r b h
 blh   = V3 l b h
 
 
--------------------------------------------------------------------------------
-
 data Face v = Face v v v v
 faceToVertexList :: Face v -> [v]
 faceToVertexList (Face v0 v1 v2 v3) = [v0, v1, v2, v3]
+
+---------------------------------------------------------------------------------------------------
+-- Primitives
 
 data SimpleCubeDef f = SimpleCubeDef
   { front  :: f
@@ -56,6 +57,7 @@ data SimpleCubeDef f = SimpleCubeDef
   , bottom :: f
   , hidden :: f
   } deriving (Typeable, Functor, Foldable)
+
 
 defaultCubeDef :: SimpleCubeDef (Face Vertex3P4C2T)
 defaultCubeDef = SimpleCubeDef
@@ -87,8 +89,37 @@ quadMesh =
                 ]
     in makeMeshfromSpare verts ixs white
 
+-- | creates a grid along the xz plane with its center in origin and 1/1 dimension
+-- divisions along x and y. for a propper positioning of the center in origin, divisions
+-- sould be even
+-- TODO offset left
+gridMesh :: (Int, Int) -> MeshData Vertex3P3N3C4T2
+gridMesh (xdiv, zdiv) =
+  let xStep =  1.0 / (fromIntegral xdiv)
+      zStep =  1.0 / (fromIntegral zdiv)
+      ixs   = genIdxs
+      count = xdiv*zdiv*2
+      verts = genVerts xStep zStep (-0.5, -0.5)
+  in traceShow' $ MeshData verts ixs count
+  where 
+    genVerts xStep zStep (left, back) =
+          [Vertex v n c t | z <- [0.0 .. fromIntegral zdiv], x <- [0.0 .. fromIntegral xdiv]
+              , let v = V3 (left + x * xStep) 0.0 (back + z * zStep) 
+              , let n = V3 0 1.0 0
+              , let c = white
+              , let t = V2 (x * xStep) (z * zStep) 
+              ]
+    genIdxs = 
+      concat $ [[ leftBack, rightBack, rightFront, rightFront, leftFront, leftBack]
+                | row <- [0..zdiv-1], col <- [0..xdiv-1]
+                , let stride      = xdiv + 1
+                , let leftBack    = row * stride + col
+                , let rightBack   = row * stride + col + 1
+                , let leftFront   = (row + 1) * stride + col
+                , let rightFront  = (row + 1) * stride + col + 1
+                ]
 
--------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
 
 
 makeMeshfromSpare :: [(Position3f, Texture2f)] -> [Index] -> Color4f -> MeshData Vertex3P3N3C4T2
