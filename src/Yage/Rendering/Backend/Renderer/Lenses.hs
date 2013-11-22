@@ -12,3 +12,4 @@ makeLenses ''ShaderEnv
 makeLenses ''RenderLog
 makeLenses ''RenderEnv
 makeLenses ''RenderConfig
+makeLenses ''RenderData

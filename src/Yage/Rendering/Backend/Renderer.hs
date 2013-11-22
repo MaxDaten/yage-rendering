@@ -12,9 +12,9 @@ module Yage.Rendering.Backend.Renderer (
     , version
     ) where
 ---------------------------------------------------------------------------------------------------
-import           Control.Lens                            hiding (indices)
 import           Yage.Prelude                            hiding (log)
 
+import           Foreign.Ptr                             (nullPtr)
 import           Data.List                               (groupBy, map)
 
 import           Control.Monad                           (forM_, mapM_, when)
@@ -88,12 +88,13 @@ createShaderBatches _view vdefs =
     in map mkShaderBatch shaderGroups
     where
         sameShader :: ViewDefinition -> ViewDefinition -> Bool
-        sameShader a b = (a^.vdRenderData.to (program . shaderProgram)) == (b^.vdRenderData.to (program . shaderProgram))
+        sameShader a b = a^.vdRenderData.shaderProgram.to program 
+                         == b^.vdRenderData.shaderProgram.to program
 
         mkShaderBatch :: [ViewDefinition] -> RenderBatch ViewDefinition
         mkShaderBatch []         = error "empty RenderBatch: should be at least one for all items"
         mkShaderBatch defs@(v:_) =
-            let batchShader = v^.vdRenderData.to shaderProgram
+            let batchShader = v^.vdRenderData.shaderProgram
             in RenderBatch
                 { withBatch     = \m -> withShader batchShader (const $ m defs)
                 , perItemAction = \_ -> return ()
@@ -118,11 +119,20 @@ setupFrame = do
         GL.blend       $= GL.Enabled      -- TODO to init/render target
         GL.blendFunc   $= (GL.SrcAlpha, GL.OneMinusSrcAlpha) -- TODO to init/render target
         GL.polygonMode $= if wire then (GL.Line, GL.Line) else (GL.Fill, GL.Fill)
+        
+        -- TODO to renderdef or shader?
+        GL.pointSize   $= 2.0
+        -- line width greater than 1 leads to an InvalidValue
+        -- http://lwjgl.org/forum/index.php?action=printpage;topic=3106.0
+        GL.lineWidth   $= 1.0
+
+        -- for gl_PointSize in shader
+        -- GL.vertexProgramPointSize   $= GL.Enabled
 
         GL.clear [GL.ColorBuffer, GL.DepthBuffer]
 
         when (target^.targetDirty) $
-            let factor = fromIntegral . floor $ target^.targetFactor 
+            let factor = fromIntegral . floor $ target^.targetFactor
                 (w, h) = fromIntegral <$$> target^.targetSize
                 (x, y) = fromIntegral <$$> target^.targetXY
             in GL.viewport $= ( GL.Position (factor * x) (factor * y)
@@ -144,7 +154,7 @@ renderViewDefinition _view vdef =
     let rdata = vdef^.vdRenderData
     in do
         checkErr "start rendering"
-        io $! withVAO (rdata^.to vao) . withTexturesAt GL.Texture2D (tUnits rdata) $! do
+        io $! withVAO (rdata^.vao) . withTexturesAt GL.Texture2D (rdata^.to tUnits) $! do
 
             checkErr "preuniform"
             let (shaderDef, shaderEnv) = vdef^.vdUniformDef
@@ -153,15 +163,25 @@ renderViewDefinition _view vdef =
 
             checkErr "postuniform"
 
-            drawIndexedTris . fromIntegral $ triangleCount rdata
+            drawNow (rdata^.drawMode) rdata
             checkErr "after draw"
         logCountObj
-        logCountTriangles (triangleCount rdata)
+        logCountTriangles (rdata^.elementCount)
         checkErr "end render"
     where
         checkErr msg = io $ throwErrorMsg msg
 
-        tUnits d = over (mapped._2) (^._1) (texObjs d)
+        tUnits d = over (mapped._2) (^._1) (d^.texObjs)
+
+        drawNow mode@GL.Triangles rdata = GL.drawElements mode (getCnt mode rdata) GL.UnsignedInt nullPtr
+        drawNow mode@GL.Points    rdata = GL.drawElements mode (getCnt mode rdata) GL.UnsignedInt nullPtr
+        drawNow mode@GL.Lines     rdata = GL.drawElements (traceShow' mode) (getCnt mode rdata) GL.UnsignedInt nullPtr
+        drawNow mode _ = error $ format "primitive mode {0} not supported" [show mode]
+
+        getCnt GL.Triangles rdata = fromIntegral $ 3 * rdata^.elementCount
+        getCnt GL.Points    rdata = fromIntegral $ 3 * rdata^.elementCount
+        getCnt GL.Lines     rdata = fromIntegral $ 3 * rdata^.elementCount -- TODO missing 2 lines in cube
+        getCnt _ _ = error "the impossible happend"
 
 
 ---------------------------------------------------------------------------------------------------

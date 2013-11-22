@@ -80,10 +80,11 @@ toViewDefinition rview@RenderView{..} RenderWorldResources{..} ent =
                 rProg = renderDef^.rdefProgram^._1
                 rTexs  = renderDef^.rdefTextures
             in RenderData
-                { vao           = _loadedVertexBuffer^.at (rData, rProg) ^?!_Just
-                , shaderProgram = _loadedShaders^.at rProg ^?!_Just
-                , texObjs       = map makeTexObj rTexs
-                , triangleCount = meshTriangleCount rData
+                { _vao           = _loadedVertexBuffer^.at (rData, rProg) ^?!_Just
+                , _shaderProgram = _loadedShaders^.at rProg ^?!_Just
+                , _texObjs       = map makeTexObj rTexs
+                , _elementCount  = meshTriangleCount rData
+                , _drawMode      = renderDef^.rdefMode
                 }
         makeTexObj tex =
             let obj = _loadedTextures^.at (tex^.texResource) ^?!_Just

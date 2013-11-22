@@ -75,10 +75,11 @@ data ShaderEnv = ShaderEnv
 ---------------------------------------------------------------------------------------------------
 
 data RenderData = RenderData -- TODO rename RenderResource
-    { vao           :: GL.VertexArrayObject
-    , shaderProgram :: ShaderProgram
-    , texObjs       :: [(GL.TextureObject, (GL.GLuint, String))]
-    , triangleCount :: !Int
+    { _vao           :: GL.VertexArrayObject
+    , _shaderProgram :: ShaderProgram
+    , _texObjs       :: [(GL.TextureObject, (GL.GLuint, String))]
+    , _drawMode      :: !GL.PrimitiveMode
+    , _elementCount  :: !Int
     } deriving Show
 
 ---------------------------------------------------------------------------------------------------

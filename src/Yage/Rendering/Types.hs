@@ -11,7 +11,7 @@
 {-# LANGUAGE UndecidableInstances       #-}
 module Yage.Rendering.Types
     ( Program
-    , VBO, EBO, FBO, VAO
+    , VBO, EBO, FBO, VAO, GL.PrimitiveMode(..)
 
     , Renderable(..), SomeRenderable(..), renderableType, fromRenderable, toRenderable
     , RenderDefinition(..)
@@ -92,6 +92,7 @@ data RenderDefinition = RenderDefinition
     { _rdefData     :: Mesh
     , _rdefProgram  :: Program
     , _rdefTextures :: [TextureDefinition] -- | (Resource, Shader TextureUnit)
+    , _rdefMode     :: GL.PrimitiveMode
     }
 
 ---------------------------------------------------------------------------------------------------
@@ -158,7 +159,7 @@ data RenderEntity = RenderEntity
     { _entityPosition    :: !Position
     , _entityOrientation :: !Orientation
     , _entityScale       :: !Scale
-    , _entityRenderDef   :: RenderDefinition
+    , _entityRenderDef   :: !RenderDefinition
     } deriving (Typeable)
 
 
