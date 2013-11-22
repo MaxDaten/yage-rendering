@@ -175,7 +175,7 @@ renderViewDefinition _view vdef =
 
         drawNow mode@GL.Triangles rdata = GL.drawElements mode (getCnt mode rdata) GL.UnsignedInt nullPtr
         drawNow mode@GL.Points    rdata = GL.drawElements mode (getCnt mode rdata) GL.UnsignedInt nullPtr
-        drawNow mode@GL.Lines     rdata = GL.drawElements (traceShow' mode) (getCnt mode rdata) GL.UnsignedInt nullPtr
+        drawNow mode@GL.Lines     rdata = GL.drawElements mode (getCnt mode rdata) GL.UnsignedInt nullPtr
         drawNow mode _ = error $ format "primitive mode {0} not supported" [show mode]
 
         getCnt GL.Triangles rdata = fromIntegral $ 3 * rdata^.elementCount

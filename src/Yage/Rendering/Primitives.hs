@@ -94,13 +94,15 @@ quadMesh =
 -- sould be even
 -- TODO offset left
 gridMesh :: (Int, Int) -> MeshData Vertex3P3N3C4T2
-gridMesh (xdiv, zdiv) =
-  let xStep =  1.0 / (fromIntegral xdiv)
-      zStep =  1.0 / (fromIntegral zdiv)
-      ixs   = genIdxs
-      count = xdiv*zdiv*2
-      verts = genVerts xStep zStep (-0.5, -0.5)
-  in traceShow' $ MeshData verts ixs count
+gridMesh (xdiv, zdiv) 
+  | xdiv < 1 || zdiv < 1 = error "invalid divisions"
+  | otherwise = 
+    let xStep   =  1.0 / (fromIntegral xdiv)
+        zStep   =  1.0 / (fromIntegral zdiv)
+        ixs     = genIdxs
+        count   = xdiv*zdiv*2
+        verts   = genVerts xStep zStep (-0.5, -0.5)
+    in MeshData verts ixs count
   where 
     genVerts xStep zStep (left, back) =
           [Vertex v n c t | z <- [0.0 .. fromIntegral zdiv], x <- [0.0 .. fromIntegral xdiv]
