@@ -15,8 +15,6 @@ import           Yage.Prelude
 
 import           Data.List                             (map)
 
-import           Control.Lens
-
 import           Linear
 
 import           Yage.Rendering.Backend.Renderer
@@ -25,6 +23,7 @@ import           Yage.Rendering.Backend.Renderer.Types as RendererExports
 import           Yage.Rendering.Lenses
 import           Yage.Rendering.RenderWorld            hiding (renderResources)
 import           Yage.Rendering.RenderEntity           as RenderEntity
+import           Yage.Rendering.RenderScene            as RenderScene
 import           Yage.Rendering.Types                  as Types
 
 
@@ -43,10 +42,14 @@ initialRenderUnit rconf rtarget =
 
 renderScene :: (MonadIO m) => RenderScene -> RenderUnit -> m RenderUnit
 renderScene scene rUnit =
-    let rView       = RenderView (scene^.sceneViewMatrix) (scene^.sceneProjectionMatrix)
-        worldEnv    = RenderWorldEnv $ map toRenderEntity $ scene^.sceneEntities
-        worldState  = rUnit^.renderResources
-        renderEnv   = rUnit^.renderSettings
+    let viewMatrix          = scene^.sceneCamera.cameraHandle.to camMatrix
+        projMatrix          = projectionMatrix (scene^.sceneCamera.cameraFOV) aspect 0.1 100.0
+        rView               = RenderView viewMatrix projMatrix
+        worldEnv            = RenderWorldEnv $ map toRenderEntity $ scene^.sceneEntities
+        worldState          = rUnit^.renderResources
+        renderEnv           = rUnit^.renderSettings
+        (w, h)              = fromIntegral <$$> renderEnv^.reRenderTarget.targetSize
+        aspect              = (w/h)
     in io $ do
         (viewDefs, worldState')    <- runRenderWorld rView worldEnv worldState
         (_, __, rlog)              <- runRenderer (renderView rView viewDefs) renderEnv

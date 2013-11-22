@@ -15,7 +15,7 @@ module Yage.Rendering.Types
 
     , Renderable(..), SomeRenderable(..), renderableType, fromRenderable, toRenderable
     , RenderDefinition(..)
-    , RenderScene(..)
+    , RenderScene(..), Camera(..), CameraHandle
     , RenderEntity(..)
     , Mesh(..), MeshData(..)
     , Index, Position, Orientation, Scale
@@ -26,7 +26,7 @@ module Yage.Rendering.Types
     , module GLRawTypes
     ) where
 
-import           Yage.Prelude                        hiding (log)
+import           Yage.Prelude                        hiding (log, Index)
 
 import           Data.Hashable                       ()
 import           Filesystem.Path.CurrentOS           (encode)
@@ -36,12 +36,12 @@ import           Foreign.C.Types                     (CFloat (..))
 import           Data.Typeable
 import           GHC.Generics                        (Generic)
 
-import           Control.Lens                        hiding (Index)
 import           Control.Monad.State                 ()
 import           Control.Monad.Writer                ()
 import           Linear                              (M22, M33, M44, Quaternion, V3 (..))
 ---------------------------------------------------------------------------------------------------
 import           Graphics.GLUtil
+import qualified Graphics.GLUtil.Camera3D            as Cam
 import qualified Graphics.Rendering.OpenGL           as GL
 import           Graphics.Rendering.OpenGL.Raw.Types as GLRawTypes
 ---------------------------------------------------------------------------------------------------
@@ -131,14 +131,20 @@ instance Renderable SomeRenderable where
 
 ---------------------------------------------------------------------------------------------------
 
+type CameraHandle = Cam.Camera Float
+data Camera = Camera
+    { _cameraHandle     :: !CameraHandle
+    , _cameraFOV        :: !Float                 -- ^ in rad
+    } deriving (Show)
+
+deriving instance Show CameraHandle
 
 -- how to add statics?!
 -- mark ents or seperate?
 data RenderScene = RenderScene
     { _sceneEntities         :: [SomeRenderable]
     , _sceneTime             :: !Float
-    , _sceneViewMatrix       :: !(M44 Float)
-    , _sceneProjectionMatrix :: !(M44 Float)
+    , _sceneCamera           :: !Camera
     } deriving (Typeable)
 
 

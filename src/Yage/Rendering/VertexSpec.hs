@@ -18,7 +18,6 @@ module Yage.Rendering.VertexSpec
 
 ---------------------------------------------------------------------------------------------------
 import             Yage.Prelude
-import             Control.Lens                    
 ---------------------------------------------------------------------------------------------------
 import             Data.Data
 import             Data.List                       (map, scanl, take, iterate, length, sum, concat, head, transpose)

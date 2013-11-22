@@ -10,10 +10,9 @@ module Yage.Rendering.Primitives
   , makeMeshfromSpare, processSpareVerts, pushToBack, extractMeshByIndices
   ) where
 
-import Yage.Prelude -- hiding (id)
-import Control.Lens hiding (Index, indices)
+import Yage.Prelude hiding (Index)
 
-import Data.List ((++), map, take, length, (!!), repeat, zipWith4, unzip)
+import Data.List (map, take, length, (!!), repeat, zipWith4, unzip)
 import Data.Foldable
 
 import Linear (V3(..), V4(..), R3(_xyz), point)

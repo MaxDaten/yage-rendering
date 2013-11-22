@@ -3,7 +3,6 @@ module Yage.Rendering.RenderWorld.Types where
 
 import           Yage.Prelude
 
-import           Control.Lens
 import           Control.Monad.RWS.Strict
 import           Data.Map.Strict
 

@@ -1,7 +1,7 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 module Yage.Rendering.Mesh where
 
-import           Yage.Prelude
+import           Yage.Prelude                        hiding (Index)
 import           Data.List (length)
 import           Foreign                             (Storable)
 

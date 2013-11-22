@@ -17,7 +17,7 @@ import           Yage.Prelude                            hiding (log)
 
 import           Data.List                               (groupBy, map)
 
-import           Control.Monad                           (forM_, mapM_)
+import           Control.Monad                           (forM_, mapM_, when)
 import           Control.Monad.Reader                    (ask, runReaderT)
 import           Control.Monad.RWS.Strict                (runRWST)
 
@@ -112,19 +112,21 @@ setupFrame = do
     wire   <- view $ reRenderConfig.rcConfWireframe
     target <- view reRenderTarget
     io $! do
-        GL.clearColor $= fmap realToFrac clearC
-        GL.depthFunc $= Just GL.Less    -- TODO to init
-        GL.depthMask $= GL.Enabled      -- TODO to init
-        GL.blend     $= GL.Enabled      -- TODO to init/render target
-        GL.blendFunc $= (GL.SrcAlpha, GL.OneMinusSrcAlpha) -- TODO to init/render target
+        GL.clearColor  $= fmap realToFrac clearC
+        GL.depthFunc   $= Just GL.Less    -- TODO to init
+        GL.depthMask   $= GL.Enabled      -- TODO to init
+        GL.blend       $= GL.Enabled      -- TODO to init/render target
+        GL.blendFunc   $= (GL.SrcAlpha, GL.OneMinusSrcAlpha) -- TODO to init/render target
         GL.polygonMode $= if wire then (GL.Line, GL.Line) else (GL.Fill, GL.Fill)
 
         GL.clear [GL.ColorBuffer, GL.DepthBuffer]
 
-
-        let (w, h) = target^.targetSize
-            r      = floor $ target^.targetRatio
-        GL.viewport $= (GL.Position 0 0, GL.Size (fromIntegral (r * w)) (fromIntegral (r * h)))
+        when (target^.targetDirty) $
+            let factor = fromIntegral . floor $ target^.targetFactor 
+                (w, h) = fromIntegral <$$> target^.targetSize
+                (x, y) = fromIntegral <$$> target^.targetXY
+            in GL.viewport $= ( GL.Position (factor * x) (factor * y)
+                              , GL.Size (factor * w) (factor * h))
 
 
 ---------------------------------------------------------------------------------------------------

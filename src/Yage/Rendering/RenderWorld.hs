@@ -13,7 +13,6 @@ import           Yage.Prelude
 
 import           Data.List
 
-import           Control.Lens                     hiding (indices)
 import           Control.Monad.RWS.Strict
 
 import           Linear

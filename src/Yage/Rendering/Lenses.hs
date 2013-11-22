@@ -13,3 +13,4 @@ makeLenses ''RenderScene
 makeLenses ''RenderEntity
 makeLenses ''MeshData
 makeLenses ''Mesh
+makeLenses ''Camera

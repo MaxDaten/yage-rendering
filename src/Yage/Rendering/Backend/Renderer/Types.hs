@@ -21,8 +21,12 @@ import             Yage.Rendering.Backend.Shader   ()
 type Renderer = RWST RenderEnv RenderLog () IO
 
 data RenderTarget = RenderTarget
-    { _targetSize   :: !(Int, Int)
-    , _targetRatio  :: !Double
+    { _targetXY     :: !(Int, Int)
+    , _targetSize   :: !(Int, Int)  -- ^ (width, height)
+    , _targetFactor :: !Double      -- ^ for retina use 2
+    , _targetZNear  :: !Double
+    , _targetZFar   :: !Double
+    , _targetDirty  :: !Bool
     }
 
 data RenderEnv = RenderEnv

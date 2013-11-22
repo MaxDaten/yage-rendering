@@ -3,7 +3,6 @@ module Yage.Rendering.Backend.Renderer.Logging where
 
 import Yage.Prelude
 
-import Control.Lens
 
 import Yage.Rendering.Backend.Renderer.Types
 import Yage.Rendering.Backend.Renderer.Lenses
