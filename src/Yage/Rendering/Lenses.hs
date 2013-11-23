@@ -1,4 +1,5 @@
 {-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE NoMonomorphismRestriction  #-}
 
 module Yage.Rendering.Lenses where
 
@@ -14,3 +15,7 @@ makeLenses ''RenderEntity
 makeLenses ''MeshData
 makeLenses ''Mesh
 makeLenses ''Camera
+
+-- for Program
+shaderRes = _1
+shaderDef = _2 
