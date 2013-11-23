@@ -210,7 +210,9 @@ infixr 2 !=
 (!=) :: (AsUniform u) => String -> u -> ShaderDefinition ()
 name != uni = do
     sp <- view seProgram
-    io $ uni `asUniform` getUniform sp name
+    io $ 
+        uni `asUniform` getUniform sp name 
+            `catch` \(e::SomeException) -> print $ format "warning: {0}" [show e]
 
 shaderEnv :: ShaderDefinition ShaderEnv
 shaderEnv = ask
