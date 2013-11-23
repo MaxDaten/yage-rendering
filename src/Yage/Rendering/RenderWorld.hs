@@ -69,6 +69,7 @@ toViewDefinition rview@RenderView{..} RenderWorldResources{..} ent =
         normalM      = (adjoint <$> (inv33 . fromTransformation $ modelM) <|> Just eye3) ^?!_Just
     in ViewDefinition
         { _vdMVPMatrix         = _rvProjectionMatrix !*! _rvViewMatrix !*! modelM
+        , _vdModelViewMatrix   = _rvViewMatrix !*! modelM
         , _vdModelMatrix       = modelM
         , _vdNormalMatrix      = normalM
         , _vdRenderData        = getRenderData $ ent^.entityRenderDef

@@ -14,6 +14,7 @@ module Yage.Rendering
 import           Yage.Prelude
 
 import           Data.List                             (map)
+import           Control.Monad.RWS.Strict
 
 import           Linear
 
@@ -35,15 +36,48 @@ data RenderUnit = RenderUnit
 
 makeLenses ''RenderUnit
 
+type GuiModel = Int
+
+data RenderSubjects = RenderSubjects
+    { _rSysRenderScene :: !RenderScene 
+    , _rSysGuiModel    :: !GuiModel
+    }
+
+makeLenses ''RenderSubjects
+
+type RenderSystem = RWST RenderSubjects () RenderUnit IO
+
+
+
 initialRenderUnit :: RenderConfig -> RenderTarget -> RenderUnit
 initialRenderUnit rconf rtarget =
     RenderUnit initialRenderWorldState (RenderEnv rconf rtarget) emptyRenderLog
 
 
-renderScene :: (MonadIO m) => RenderScene -> RenderUnit -> m RenderUnit
-renderScene scene rUnit =
+runRenderSystem :: (MonadIO m) => RenderSubjects -> RenderUnit -> m RenderUnit
+runRenderSystem subjects unit = do
+    (unit', _) <- io $ execRWST theSystem subjects unit
+    return unit'
+
+theSystem :: RenderSystem ()
+theSystem = do
+    scene       <- view rSysRenderScene
+    renderEnv   <- use renderSettings
+    worldState  <- use renderResources
     let viewMatrix          = scene^.sceneCamera.cameraHandle.to camMatrix
-        projMatrix          = projectionMatrix (scene^.sceneCamera.cameraFOV) aspect 0.1 100.0
+        projMatrix          = projectionMatrix (scene^.sceneCamera.cameraFOV) aspect 0.1 100.0 -- TODO : move zfar/znear
+        rView               = RenderView viewMatrix projMatrix
+        worldEnv            = RenderWorldEnv $ map toRenderEntity $ scene^.sceneEntities
+        (w, h)              = fromIntegral <$$> renderEnv^.reRenderTarget.targetSize
+        aspect              = (w/h)
+    (viewDefs, worldState') <- io $ runRenderWorld rView worldEnv worldState
+    (_, __, rlog)           <- io $ runRenderer (renderView rView viewDefs) renderEnv
+    renderResources .= worldState'
+    lastRenderLog   .= rlog
+
+{--
+    let viewMatrix          = scene^.sceneCamera.cameraHandle.to camMatrix
+        projMatrix          = projectionMatrix (scene^.sceneCamera.cameraFOV) aspect 0.1 100.0 -- TODO : move zfar/znear
         rView               = RenderView viewMatrix projMatrix
         worldEnv            = RenderWorldEnv $ map toRenderEntity $ scene^.sceneEntities
         worldState          = rUnit^.renderResources
@@ -54,8 +88,12 @@ renderScene scene rUnit =
         (viewDefs, worldState')    <- runRenderWorld rView worldEnv worldState
         (_, __, rlog)              <- runRenderer (renderView rView viewDefs) renderEnv
         return $ RenderUnit worldState' renderEnv rlog
+--}
 
 
+
+
+---------------------------------------------------------------------------------------------------
 
 newtype ZOrderedRenderable = ZOrderedRenderable RenderEntity
     deriving (Typeable, Renderable)

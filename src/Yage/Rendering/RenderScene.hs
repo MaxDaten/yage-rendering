@@ -9,8 +9,9 @@ import           Yage.Prelude
 
 import           Data.List (length)
 
-import           Linear (V3)
+import           Linear (V3(..), V4(..), Conjugate, Epsilon, M44, M33)
 import qualified Graphics.GLUtil.Camera3D as Cam
+import qualified Graphics.GLUtil.Camera2D as Cam2D
 
 import           Yage.Rendering.Lenses
 import           Yage.Rendering.Types
@@ -55,3 +56,12 @@ roll = flip Cam.roll
 
 fov :: Camera -> Float -> Camera
 fov cam d = cam & cameraFOV +~ d 
+
+
+orthographicMatrix :: (Conjugate a, Epsilon a, RealFloat a)
+                    => a -> a -> a -> a -> a -> a -> M44 a
+orthographicMatrix l r t b f n = 
+    V4 ( V4 (2/(r-l)) 0        0             (-(r+l)/(r-l)) )
+       ( V4 0        (2/(t-b)) 0             (-(t+b)/(t-b)) )
+       ( V4 0        0         ((-2)/(f-n))  (-(f+n)/(f-n)) )
+       ( V4 0        0         0             1              )

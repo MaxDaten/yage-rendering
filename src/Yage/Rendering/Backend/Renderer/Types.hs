@@ -95,6 +95,7 @@ data RenderView = RenderView
 data ViewDefinition = ViewDefinition
     { _vdMVPMatrix             :: !(M44 Float)
     , _vdModelMatrix           :: !(M44 Float)
+    , _vdModelViewMatrix       :: !(M44 Float)
     , _vdNormalMatrix          :: !(M33 Float)
     , _vdRenderData            :: !RenderData
     , _vdUniformDef            :: !(ShaderDefinition (), ShaderEnv)
