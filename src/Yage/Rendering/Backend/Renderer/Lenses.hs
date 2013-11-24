@@ -10,6 +10,6 @@ makeLenses ''RenderView
 makeLenses ''RenderTarget
 makeLenses ''ShaderEnv
 makeLenses ''RenderLog
-makeLenses ''RenderEnv
+makeLenses ''RenderSettings
 makeLenses ''RenderConfig
 makeLenses ''RenderData

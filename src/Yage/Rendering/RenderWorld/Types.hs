@@ -12,7 +12,7 @@ import           Yage.Rendering.Types
 
 -- | container for all possible entities to render
 
-data RenderWorldResources = RenderWorldResources
+data RenderResources = RenderResources
     { _loadedShaders      :: !(Map ShaderResource ShaderProgram)
     , _loadedVertexBuffer :: !(Map (Mesh, ShaderResource) VAO)
     , _loadedTextures     :: !(Map TextureResource GL.TextureObject)
@@ -21,20 +21,15 @@ data RenderWorldResources = RenderWorldResources
 data RenderWorldEnv = RenderWorldEnv
     { _worldEntities :: [RenderEntity] }
 
-data RenderWorldState = RenderWorldState
-    { _renderResources :: RenderWorldResources }
-
 
 makeLenses ''RenderWorldEnv
-makeLenses ''RenderWorldState
-makeLenses ''RenderWorldResources
+makeLenses ''RenderResources
 
 
+type RenderWorld = RWST RenderWorldEnv () RenderResources IO
 
-type RenderWorld = RWST RenderWorldEnv () RenderWorldState IO
-
-instance Monoid RenderWorldResources where
-    mappend (RenderWorldResources sA vA tA) (RenderWorldResources sB vB tB)
-           = RenderWorldResources (sA `union` sB) (vA `union` vB) (tA `union` tB)
-    mempty = RenderWorldResources mempty mempty mempty
+instance Monoid RenderResources where
+    mappend (RenderResources sA vA tA) (RenderResources sB vB tB)
+           = RenderResources (sA `union` sB) (vA `union` vB) (tA `union` tB)
+    mempty = RenderResources mempty mempty mempty
 

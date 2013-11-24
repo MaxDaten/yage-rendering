@@ -35,7 +35,7 @@ import           Yage.Rendering.VertexSpec
 
 
 
-runRenderWorld :: RenderView -> RenderWorldEnv -> RenderWorldState -> IO ([ViewDefinition], RenderWorldState)
+runRenderWorld :: RenderView -> RenderWorldEnv -> RenderResources -> IO ([ViewDefinition], RenderResources)
 runRenderWorld rview env st =
     let theRun    = processRenderView rview
     in do
@@ -49,7 +49,7 @@ processRenderView :: RenderView -> RenderWorld [ViewDefinition]
 -- send them to renderer
 processRenderView renderview = do
     prepareResources
-    res <- use renderResources
+    res <- get
     ents <- findContributingEntities
     return $ map (toViewDefinition renderview res) ents
 
@@ -60,8 +60,8 @@ findContributingEntities = view worldEntities
 
 
 
-toViewDefinition :: RenderView -> RenderWorldResources -> RenderEntity -> ViewDefinition
-toViewDefinition rview@RenderView{..} RenderWorldResources{..} ent =
+toViewDefinition :: RenderView -> RenderResources -> RenderEntity -> ViewDefinition
+toViewDefinition rview@RenderView{..} RenderResources{..} ent =
     let scaleM       = kronecker . point $ ent^.entityScale
         transM       = mkTransformation (ent^.entityOrientation) (ent^.entityPosition)
         modelM       = transM !*! scaleM
@@ -119,25 +119,25 @@ loadRenderResourcesFor rdef = do
     where
         requestShader :: ShaderResource -> RenderWorld ()
         requestShader shaderRes = do
-            res <- use renderResources
+            res <- get
             unless (res^.loadedShaders.contains shaderRes) $ do
                 shaderProg <- loadShader shaderRes
-                renderResources.loadedShaders.at shaderRes ?= traceShow' shaderProg
+                loadedShaders.at shaderRes ?= traceShow' shaderProg
 
         requestVertexBuffer :: Mesh -> ShaderResource -> RenderWorld ()
         requestVertexBuffer mesh shaderRes = do
-            res <- use renderResources
+            res <- get
             unless (res^.loadedVertexBuffer.contains (mesh, shaderRes)) $ do
                 let shaderProg = res^.loadedShaders.at shaderRes ^?!_Just
                 vao            <- loadVertexBuffer mesh shaderProg
-                renderResources.loadedVertexBuffer.at (mesh, shaderRes) ?= vao
+                loadedVertexBuffer.at (mesh, shaderRes) ?= vao
 
         requestTexture :: TextureResource -> RenderWorld ()
         requestTexture texture = do
-            res <- use renderResources
+            res <- get
             unless (res^.loadedTextures.contains texture) $ do
                 texObj <- loadTexture texture
-                renderResources.loadedTextures.at texture ?= texObj
+                loadedTextures.at texture ?= texObj
 
         -- | creates vbo and ebo, sets shader attributes and creates finally a vao
         loadVertexBuffer :: Mesh -> ShaderProgram -> RenderWorld VAO
@@ -174,5 +174,5 @@ loadRenderResourcesFor rdef = do
                 Right obj -> return obj
 
 ---------------------------------------------------------------------------------------------------
-initialRenderWorldState :: RenderWorldState
-initialRenderWorldState = RenderWorldState mempty
+initialRenderWorldState :: RenderResources
+initialRenderWorldState = mempty

@@ -18,7 +18,7 @@ import             Graphics.GLUtil
 import             Yage.Rendering.Backend.Shader   ()
 
 
-type Renderer = RWST RenderEnv RenderLog () IO
+type Renderer = RWST RenderSettings RenderLog () IO
 
 data RenderTarget = RenderTarget
     { _targetXY     :: !(Int, Int)
@@ -29,7 +29,7 @@ data RenderTarget = RenderTarget
     , _targetDirty  :: !Bool
     }
 
-data RenderEnv = RenderEnv
+data RenderSettings = RenderSettings
     { _reRenderConfig         :: !RenderConfig    -- ^ The current settings for the frame
     , _reRenderTarget         :: !RenderTarget
     }

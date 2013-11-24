@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
+{-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE ExistentialQuantification  #-}
@@ -133,10 +134,11 @@ instance Renderable SomeRenderable where
 ---------------------------------------------------------------------------------------------------
 
 type CameraHandle = Cam.Camera Float
-data Camera = Camera
-    { _cameraHandle     :: !CameraHandle
-    , _cameraFOV        :: !Float                 -- ^ in rad
-    } deriving (Show)
+
+data Camera =
+      Camera3D !CameraHandle !Float
+    | Camera2D !CameraHandle
+    deriving (Show)
 
 deriving instance Show CameraHandle
 
@@ -144,7 +146,6 @@ deriving instance Show CameraHandle
 -- mark ents or seperate?
 data RenderScene = RenderScene
     { _sceneEntities         :: [SomeRenderable]
-    , _sceneTime             :: !Float
     , _sceneCamera           :: !Camera
     } deriving (Typeable)
 

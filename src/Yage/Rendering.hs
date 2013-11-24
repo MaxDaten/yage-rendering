@@ -14,84 +14,73 @@ module Yage.Rendering
 import           Yage.Prelude
 
 import           Data.List                             (map)
-import           Control.Monad.RWS.Strict
+
+import           Control.Monad.RWS
 
 import           Linear
 
-import           Yage.Rendering.Backend.Renderer
+import           Yage.Rendering.Backend.Renderer       as Renderer
 import           Yage.Rendering.Backend.Renderer.Types as RendererExports 
-                                                          (RenderConfig (..), RenderTarget (..), RenderLog (..))
+                                                          (RenderConfig (..), RenderTarget (..)
+                                                            , RenderLog (..), RenderSettings(..)
+                                                            , ShaderDefinition(..))
+import           Yage.Rendering.Backend.Renderer.Lenses as RendererExports
 import           Yage.Rendering.Lenses
 import           Yage.Rendering.RenderWorld            hiding (renderResources)
 import           Yage.Rendering.RenderEntity           as RenderEntity
 import           Yage.Rendering.RenderScene            as RenderScene
 import           Yage.Rendering.Types                  as Types
 
-
 data RenderUnit = RenderUnit
-    { _renderResources :: RenderWorldState
-    , _renderSettings  :: RenderEnv
-    , _lastRenderLog   :: RenderLog
+    { _renderResources :: RenderResources
+    , _renderSettings  :: RenderSettings
     }
-
 makeLenses ''RenderUnit
-
-type GuiModel = Int
-
-data RenderSubjects = RenderSubjects
-    { _rSysRenderScene :: !RenderScene 
-    , _rSysGuiModel    :: !GuiModel
-    }
-
-makeLenses ''RenderSubjects
-
-type RenderSystem = RWST RenderSubjects () RenderUnit IO
-
 
 
 initialRenderUnit :: RenderConfig -> RenderTarget -> RenderUnit
 initialRenderUnit rconf rtarget =
-    RenderUnit initialRenderWorldState (RenderEnv rconf rtarget) emptyRenderLog
+    RenderUnit mempty (RenderSettings rconf rtarget)
+
+type RenderSystem = RWST RenderSettings RenderLog RenderResources IO
 
 
-runRenderSystem :: (MonadIO m) => RenderSubjects -> RenderUnit -> m RenderUnit
-runRenderSystem subjects unit = do
-    (unit', _) <- io $ execRWST theSystem subjects unit
-    return unit'
+runRenderSystem :: (MonadIO m) => [RenderScene] -> RenderUnit -> m (RenderUnit, RenderLog)
+runRenderSystem scenes unit@(RenderUnit res set) = do
+    (res', rlog) <- io $ execRWST theSystem set res
+    return (unit & renderResources .~ res', rlog)
+    where
+        theSystem = do
+            rs <- mapM prepareSceneRenderer scenes
+            logs <- io $ mapM (flip Renderer.runRenderer set) rs
+            forOf (traverse._3) logs tell
 
-theSystem :: RenderSystem ()
-theSystem = do
-    scene       <- view rSysRenderScene
-    renderEnv   <- use renderSettings
-    worldState  <- use renderResources
-    let viewMatrix          = scene^.sceneCamera.cameraHandle.to camMatrix
-        projMatrix          = projectionMatrix (scene^.sceneCamera.cameraFOV) aspect 0.1 100.0 -- TODO : move zfar/znear
-        rView               = RenderView viewMatrix projMatrix
+
+prepareSceneRenderer :: RenderScene -> RenderSystem (Renderer ())
+prepareSceneRenderer scene = do
+    renderSettings <- ask
+    renderResources <- get
+    let renderTarget        = renderSettings^.reRenderTarget
+
+        viewMatrix          = scene^.sceneCamera.cameraHandle.to camMatrix
+        projMatrix          = getProjection (scene^.sceneCamera) renderTarget
+        renderView          = RenderView viewMatrix projMatrix
+        
         worldEnv            = RenderWorldEnv $ map toRenderEntity $ scene^.sceneEntities
-        (w, h)              = fromIntegral <$$> renderEnv^.reRenderTarget.targetSize
-        aspect              = (w/h)
-    (viewDefs, worldState') <- io $ runRenderWorld rView worldEnv worldState
-    (_, __, rlog)           <- io $ runRenderer (renderView rView viewDefs) renderEnv
-    renderResources .= worldState'
-    lastRenderLog   .= rlog
-
-{--
-    let viewMatrix          = scene^.sceneCamera.cameraHandle.to camMatrix
-        projMatrix          = projectionMatrix (scene^.sceneCamera.cameraFOV) aspect 0.1 100.0 -- TODO : move zfar/znear
-        rView               = RenderView viewMatrix projMatrix
-        worldEnv            = RenderWorldEnv $ map toRenderEntity $ scene^.sceneEntities
-        worldState          = rUnit^.renderResources
-        renderEnv           = rUnit^.renderSettings
-        (w, h)              = fromIntegral <$$> renderEnv^.reRenderTarget.targetSize
-        aspect              = (w/h)
-    in io $ do
-        (viewDefs, worldState')    <- runRenderWorld rView worldEnv worldState
-        (_, __, rlog)              <- runRenderer (renderView rView viewDefs) renderEnv
-        return $ RenderUnit worldState' renderEnv rlog
---}
-
-
-
+        
+    (viewDefs, renderRes') <- io $ runRenderWorld renderView worldEnv renderResources
+    put renderRes'
+    return $ renderFrame renderView viewDefs
+    where
+        getProjection :: Camera -> RenderTarget -> M44 Float
+        getProjection (Camera3D _ fov) target = 
+            let (w, h)      = fromIntegral <$$> target^.targetSize
+                aspect      = (w/h)
+            in projectionMatrix fov aspect 0.1 100.0 -- TODO : move zfar/znear
+        
+        getProjection (Camera2D _) target = 
+            let (w, h)      = fromIntegral <$$> target^.targetSize
+            in orthographicMatrix 0.0 (w) 0.0 (h) (0.5) (100.0) 
 
 ---------------------------------------------------------------------------------------------------
 

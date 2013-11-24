@@ -19,7 +19,7 @@ import           Yage.Rendering.Types
 
 
 emptyRenderScene :: Camera -> RenderScene
-emptyRenderScene cam = RenderScene [] 0.0 cam -- ) (Cam.projectionMatrix (Cam.deg2rad 60) 1 1 45)
+emptyRenderScene = RenderScene []-- ) (Cam.projectionMatrix (Cam.deg2rad 60) 1 1 45)
 
 addEntity :: (Renderable r) => RenderScene -> r -> RenderScene
 addEntity scene r = scene & sceneEntities <>~ [SomeRenderable r]
@@ -54,8 +54,8 @@ rollRad = flip Cam.rollRad
 roll :: CameraHandle -> Float -> CameraHandle
 roll = flip Cam.roll
 
-fov :: Camera -> Float -> Camera
-fov cam d = cam & cameraFOV +~ d 
+--fov :: Camera -> Float -> Camera
+--fov cam d = cam & cameraProj +~ d 
 
 
 orthographicMatrix :: (Conjugate a, Epsilon a, RealFloat a)

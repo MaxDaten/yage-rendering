@@ -5,8 +5,7 @@
 
 module Yage.Rendering.Backend.Renderer (
       module Types
-    , runRenderer
-    , renderView
+    , runRenderer, renderFrame
     , (!=), shaderEnv
     , logRenderM
     , version
@@ -43,21 +42,32 @@ data RenderBatch r = RenderBatch
     }
 
 
+-- TODO :: combine this with the scene setup
+runRenderer :: Renderer a -> RenderSettings -> IO (a, (), RenderLog)
+runRenderer renderer env = runRWST render env ()
+    where
+        render = do
+            beforeRender
+            a <- renderer
+            afterRender
+            return a
 
-renderView :: RenderView -> [ViewDefinition] -> Renderer ()
-renderView view vdefs = renderFrame view vdefs >> afterFrame
+
+--renderView :: RenderView -> [ViewDefinition] -> Renderer ()
+--renderView view vdefs = renderFrame view vdefs >> afterFrame
 
 
 
-afterFrame :: Renderer ()
-afterFrame = return ()
+--afterFrame :: Renderer ()
+--afterFrame = return ()
 
 
 renderFrame :: RenderView -> [ViewDefinition] -> Renderer ()
 renderFrame view vdefs = do
-    beforeRender
+    --- beforeRender
 
     (_a, _time) <- ioTime $ doRender view vdefs
+    return ()
     --let stats = RenderStatistics
     --        { lastObjectCount    = -1
     --        , lastRenderDuration = renderTime
@@ -67,7 +77,7 @@ renderFrame view vdefs = do
     --        }
     --logRenderM $ show stats
 
-    afterRender
+    -- afterRender
 
 
 doRender :: RenderView -> [ViewDefinition] -> Renderer ()
@@ -197,9 +207,6 @@ mapTextureSamplers texObjs =
 ---------------------------------------------------------------------------------------------------
 
 -- | runs the renderer in the given environment to render one frame.
--- TODO :: combine this with the scene setup
-runRenderer :: Renderer a -> RenderEnv -> IO (a, (), RenderLog)
-runRenderer renderer env = runRWST renderer env ()
 
 runUniform :: ShaderDefinition a -> ShaderEnv -> IO a
 runUniform = runReaderT
