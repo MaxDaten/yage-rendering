@@ -123,12 +123,13 @@ setupFrame = do
     wire   <- view $ reRenderConfig.rcConfWireframe
     target <- view reRenderTarget
     io $! do
-        GL.clearColor  $= fmap realToFrac clearC
+        GL.clearColor  $= realToFrac <$> clearC
         GL.depthFunc   $= Just GL.Less    -- TODO to init
         GL.depthMask   $= GL.Enabled      -- TODO to init
         GL.blend       $= GL.Enabled      -- TODO to init/render target
         GL.blendFunc   $= (GL.SrcAlpha, GL.OneMinusSrcAlpha) -- TODO to init/render target
         GL.polygonMode $= if wire then (GL.Line, GL.Line) else (GL.Fill, GL.Fill)
+        --GL.cullFace    $= Just GL.Back
         
         -- TODO to renderdef or shader?
         GL.pointSize   $= 2.0

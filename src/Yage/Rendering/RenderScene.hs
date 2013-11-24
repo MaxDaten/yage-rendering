@@ -9,7 +9,7 @@ import           Yage.Prelude
 
 import           Data.List (length)
 
-import           Linear (V3(..), V4(..), Conjugate, Epsilon, M44)
+import           Linear (V3(..), V4(..), Conjugate, Epsilon, M44, Quaternion)
 import qualified Graphics.GLUtil.Camera3D as Cam
 
 import           Yage.Rendering.Lenses
@@ -26,6 +26,8 @@ addEntity scene r = scene & sceneEntities <>~ [SomeRenderable r]
 entitiesCount :: RenderScene -> Int
 entitiesCount = length . _sceneEntities
 
+mkCameraHandle :: V3 Float -> V3 Float -> V3 Float -> Quaternion Float -> V3 Float -> CameraHandle
+mkCameraHandle = Cam.Camera
 
 -- | for chaining like:
 -- >>> cam `dolly` movement
@@ -59,8 +61,9 @@ roll = flip Cam.roll
 
 orthographicMatrix :: (Conjugate a, Epsilon a, RealFloat a)
                     => a -> a -> a -> a -> a -> a -> M44 a
-orthographicMatrix l r t b f n = 
+orthographicMatrix l r t b n f = 
     V4 ( V4 (2/(r-l)) 0        0             (-(r+l)/(r-l)) )
        ( V4 0        (2/(t-b)) 0             (-(t+b)/(t-b)) )
        ( V4 0        0         ((-2)/(f-n))  (-(f+n)/(f-n)) )
        ( V4 0        0         0             1              )
+

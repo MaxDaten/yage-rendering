@@ -11,28 +11,25 @@ module Yage.Rendering
     , module RenderEntity
     ) where
 
+import           Data.List                              (map)
+import           GHC.Float                              (double2Float)
 import           Yage.Prelude
-
-import           Data.List                             (map)
 
 import           Control.Monad.RWS
 
 import           Linear
 
-import           Yage.Rendering.Backend.Renderer       as Renderer
-import           Yage.Rendering.Backend.Renderer.Types as RendererExports 
-                                                          (RenderConfig (..), RenderTarget (..)
-                                                            , RenderLog (..), RenderSettings(..)
-                                                            , ShaderDefinition)
+import           Yage.Rendering.Backend.Renderer        as Renderer
 import           Yage.Rendering.Backend.Renderer.Lenses as RendererExports
+import           Yage.Rendering.Backend.Renderer.Types  as RendererExports (RenderConfig (..), RenderLog (..), RenderSettings (..), RenderTarget (..), ShaderDefinition)
 import           Yage.Rendering.Lenses
+import           Yage.Rendering.RenderEntity            as RenderEntity
+import           Yage.Rendering.RenderScene             as RenderScene
 import           Yage.Rendering.RenderWorld
-import           Yage.Rendering.RenderEntity           as RenderEntity
-import           Yage.Rendering.RenderScene            as RenderScene
-import           Yage.Rendering.Types                  as Types
+import           Yage.Rendering.Types                   as Types
 
 data RenderUnit = RenderUnit
-    { _renderSubject   :: RenderScene
+    { _renderSubject :: RenderScene
     --, _renderSettings  :: RenderSettings
     }
 makeLenses ''RenderUnit
@@ -62,22 +59,25 @@ prepareSceneRenderer scene = do
         viewMatrix          = scene^.sceneCamera.cameraHandle.to camMatrix
         projMatrix          = getProjection (scene^.sceneCamera) renderTarget
         renderView          = RenderView viewMatrix projMatrix
-        
+
         worldEnv            = RenderWorldEnv $ map toRenderEntity $ scene^.sceneEntities
-        
+
     (viewDefs, renderRes') <- io $ runRenderWorld renderView worldEnv renderResources
     put renderRes'
     return $ renderFrame renderView viewDefs
     where
         getProjection :: Camera -> RenderTarget -> M44 Float
-        getProjection (Camera3D _ fov) target = 
+        getProjection (Camera3D _ fov) target =
             let (w, h)      = fromIntegral <$$> target^.targetSize
+                (n, f)      = double2Float <$$> (target^.targetZNear, target^.targetZFar)
                 aspect      = (w/h)
-            in projectionMatrix fov aspect 0.1 100.0 -- TODO : move zfar/znear
-        
-        getProjection (Camera2D _) target = 
+            in projectionMatrix fov aspect n f -- TODO : move zfar/znear
+
+        getProjection (Camera2D _) target =
             let (w, h)      = fromIntegral <$$> target^.targetSize
-            in orthographicMatrix 0.0 w 0.0 h 0.5 100.0 -- TODO magic numbers to camera2d
+                (x, y)      = fromIntegral <$$> target^.targetXY
+                (n, f)      = double2Float <$$> (target^.targetZNear, target^.targetZFar)
+            in orthographicMatrix x w y h n f
 
 ---------------------------------------------------------------------------------------------------
 
