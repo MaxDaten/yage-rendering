@@ -97,8 +97,8 @@ gridMesh :: (Int, Int) -> MeshData Vertex3P3N3C4T2
 gridMesh (xdiv, zdiv) 
   | xdiv < 1 || zdiv < 1 = error "invalid divisions"
   | otherwise = 
-    let xStep   =  1.0 / (fromIntegral xdiv)
-        zStep   =  1.0 / (fromIntegral zdiv)
+    let xStep   =  1.0 / fromIntegral xdiv
+        zStep   =  1.0 / fromIntegral zdiv
         ixs     = genIdxs
         count   = xdiv*zdiv*2
         verts   = genVerts xStep zStep (-0.5, -0.5)
@@ -112,14 +112,14 @@ gridMesh (xdiv, zdiv)
               , let t = V2 (x * xStep) (z * zStep) 
               ]
     genIdxs = 
-      concat $ [[ leftBack, rightBack, rightFront, rightFront, leftFront, leftBack]
-                | row <- [0..zdiv-1], col <- [0..xdiv-1]
-                , let stride      = xdiv + 1
-                , let leftBack    = row * stride + col
-                , let rightBack   = row * stride + col + 1
-                , let leftFront   = (row + 1) * stride + col
-                , let rightFront  = (row + 1) * stride + col + 1
-                ]
+      concat [[ leftBack, rightBack, rightFront, rightFront, leftFront, leftBack]
+              | row <- [0..zdiv-1], col <- [0..xdiv-1]
+              , let stride      = xdiv + 1
+              , let leftBack    = row * stride + col
+              , let rightBack   = row * stride + col + 1
+              , let leftFront   = (row + 1) * stride + col
+              , let rightFront  = (row + 1) * stride + col + 1
+              ]
 
 ---------------------------------------------------------------------------------------------------
 

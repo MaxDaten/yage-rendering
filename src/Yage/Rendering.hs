@@ -3,7 +3,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TemplateHaskell            #-}
 module Yage.Rendering
-    ( (!=), shaderEnv
+    ( (!=), shaderEnv, RenderResources
     , module Types
     , module Yage.Rendering
     , module Yage.Rendering.Lenses
@@ -23,37 +23,34 @@ import           Yage.Rendering.Backend.Renderer       as Renderer
 import           Yage.Rendering.Backend.Renderer.Types as RendererExports 
                                                           (RenderConfig (..), RenderTarget (..)
                                                             , RenderLog (..), RenderSettings(..)
-                                                            , ShaderDefinition(..))
+                                                            , ShaderDefinition)
 import           Yage.Rendering.Backend.Renderer.Lenses as RendererExports
 import           Yage.Rendering.Lenses
-import           Yage.Rendering.RenderWorld            hiding (renderResources)
+import           Yage.Rendering.RenderWorld
 import           Yage.Rendering.RenderEntity           as RenderEntity
 import           Yage.Rendering.RenderScene            as RenderScene
 import           Yage.Rendering.Types                  as Types
 
 data RenderUnit = RenderUnit
-    { _renderResources :: RenderResources
-    , _renderSettings  :: RenderSettings
+    { _renderSubject   :: RenderScene
+    --, _renderSettings  :: RenderSettings
     }
 makeLenses ''RenderUnit
 
 
-initialRenderUnit :: RenderConfig -> RenderTarget -> RenderUnit
-initialRenderUnit rconf rtarget =
-    RenderUnit mempty (RenderSettings rconf rtarget)
-
 type RenderSystem = RWST RenderSettings RenderLog RenderResources IO
 
 
-runRenderSystem :: (MonadIO m) => [RenderScene] -> RenderUnit -> m (RenderUnit, RenderLog)
-runRenderSystem scenes unit@(RenderUnit res set) = do
-    (res', rlog) <- io $ execRWST theSystem set res
-    return (unit & renderResources .~ res', rlog)
+-- TODO individual settings
+runRenderSystem :: (MonadIO m) => [RenderUnit] -> RenderSettings -> RenderResources -> m (RenderResources, RenderLog)
+runRenderSystem units settings res = do
+    (res', rlog) <- io $ execRWST theSystem settings res
+    return (res', rlog)
     where
         theSystem = do
-            rs <- mapM prepareSceneRenderer scenes
-            logs <- io $ mapM (flip Renderer.runRenderer set) rs
-            forOf (traverse._3) logs tell
+            renderInstructions <- sequence_ <$> mapM prepareSceneRenderer (units^..traverse.renderSubject)
+            (_, _, rlog) <- io $ Renderer.runRenderer renderInstructions settings
+            tell rlog
 
 
 prepareSceneRenderer :: RenderScene -> RenderSystem (Renderer ())
@@ -80,7 +77,7 @@ prepareSceneRenderer scene = do
         
         getProjection (Camera2D _) target = 
             let (w, h)      = fromIntegral <$$> target^.targetSize
-            in orthographicMatrix 0.0 (w) 0.0 (h) (0.5) (100.0) 
+            in orthographicMatrix 0.0 w 0.0 h 0.5 100.0 -- TODO magic numbers to camera2d
 
 ---------------------------------------------------------------------------------------------------
 

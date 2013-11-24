@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fwarn-name-shadowing  #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE ImpredicativeTypes        #-}
 {-# LANGUAGE NamedFieldPuns            #-}
@@ -106,31 +107,31 @@ prepareResources = view worldEntities >>= mapM_ (loadRenderResourcesFor . _entit
 
 loadRenderResourcesFor :: RenderDefinition -> RenderWorld ()
 loadRenderResourcesFor rdef = do
-    let shaderRes = rdef^.rdefProgram._1
+    let shRes = rdef^.rdefProgram.shaderRes
 
     -- Shader on demand loading
-    requestShader shaderRes
+    requestShader shRes
 
     -- VertexBuffer on demand with shader prog for vertex attributes
-    requestVertexBuffer (rdef^.rdefData) shaderRes
+    requestVertexBuffer (rdef^.rdefData) shRes
 
     -- TextureObjects on demand
     forM_ (rdef^.rdefTextures^..traverse.texResource) requestTexture
     where
         requestShader :: ShaderResource -> RenderWorld ()
-        requestShader shaderRes = do
+        requestShader shRes = do
             res <- get
-            unless (res^.loadedShaders.contains shaderRes) $ do
-                shaderProg <- loadShader shaderRes
-                loadedShaders.at shaderRes ?= traceShow' shaderProg
+            unless (res^.loadedShaders.contains shRes) $ do
+                shaderProg <- loadShader shRes
+                loadedShaders.at shRes ?= traceShow' shaderProg
 
         requestVertexBuffer :: Mesh -> ShaderResource -> RenderWorld ()
-        requestVertexBuffer mesh shaderRes = do
+        requestVertexBuffer mesh shRes = do
             res <- get
-            unless (res^.loadedVertexBuffer.contains (mesh, shaderRes)) $ do
-                let shaderProg = res^.loadedShaders.at shaderRes ^?!_Just
+            unless (res^.loadedVertexBuffer.contains (mesh, shRes)) $ do
+                let shaderProg = res^.loadedShaders.at shRes ^?!_Just
                 vao            <- loadVertexBuffer mesh shaderProg
-                loadedVertexBuffer.at (mesh, shaderRes) ?= vao
+                loadedVertexBuffer.at (mesh, shRes) ?= vao
 
         requestTexture :: TextureResource -> RenderWorld ()
         requestTexture texture = do

@@ -9,9 +9,8 @@ import           Yage.Prelude
 
 import           Data.List (length)
 
-import           Linear (V3(..), V4(..), Conjugate, Epsilon, M44, M33)
+import           Linear (V3(..), V4(..), Conjugate, Epsilon, M44)
 import qualified Graphics.GLUtil.Camera3D as Cam
-import qualified Graphics.GLUtil.Camera2D as Cam2D
 
 import           Yage.Rendering.Lenses
 import           Yage.Rendering.Types
