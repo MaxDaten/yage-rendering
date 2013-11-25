@@ -123,7 +123,7 @@ loadRenderResourcesFor rdef = do
             res <- get
             unless (res^.loadedShaders.contains shRes) $ do
                 shaderProg <- loadShader shRes
-                loadedShaders.at shRes ?= traceShow' shaderProg
+                loadedShaders.at shRes ?= shaderProg
 
         requestVertexBuffer :: Mesh -> ShaderResource -> RenderWorld ()
         requestVertexBuffer mesh shRes = do
