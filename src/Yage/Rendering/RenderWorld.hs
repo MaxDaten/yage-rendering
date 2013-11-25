@@ -143,7 +143,7 @@ loadRenderResourcesFor rdef = do
         -- | creates vbo and ebo, sets shader attributes and creates finally a vao
         loadVertexBuffer :: Mesh -> ShaderProgram -> RenderWorld VAO
         loadVertexBuffer Mesh{_meshData, _meshAttr} shaderProg = do
-            buff <- io $ makeVertexBufferF _meshAttr
+            buff <- io $ makeVertexBufferF (_meshAttr _meshData)
             ebo  <- io $ bufferIndices $ map fromIntegral $ _meshData^.mDataIndices
             io $ makeVAO $ do
                 GL.bindBuffer GL.ArrayBuffer        $= Just (vbo buff)

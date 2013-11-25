@@ -179,7 +179,7 @@ data Mesh = forall v. (Storable v) =>
     { _meshId       :: Int
     , _meshName     :: String
     , _meshData     :: MeshData v
-    , _meshAttr     :: [VertexAttribute]
+    , _meshAttr     :: MeshData v -> [VertexAttribute]
     , _meshDirty    :: Bool
     } deriving (Typeable)
 
@@ -192,7 +192,7 @@ data MeshData v = MeshData
 instance Show Mesh where
     show Mesh{..} =
         format "Mesh {id = {0}, name = {1}, data = N/A, attribs = {2}, dirty = {3}}"
-               [show _meshId, show _meshName, show _meshAttr, show _meshDirty]
+               [show _meshId, show _meshName, "N/A", show _meshDirty]
 
 instance Eq Mesh where
     a == b = _meshId a == _meshId b
