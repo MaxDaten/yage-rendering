@@ -16,10 +16,10 @@ makeMeshFromVerts :: (Storable v) => Int -> String -> [v] -> [Index] -> GetVerte
 -- TODO some assertions for invalid meshes
 makeMeshFromVerts ident name vs ixs attribs =
     let meshdata = MeshData vs ixs $ length ixs `quot` 3
-    in Mesh ident name meshdata attribs True
+    in Mesh ident name meshdata attribs 0
 
 makeMesh :: (Storable v) => Int -> String -> MeshData v -> GetVertexAttributes v -> Mesh
-makeMesh ident name meshdata getAttribs = Mesh ident name meshdata getAttribs True
+makeMesh ident name meshdata getAttribs = Mesh ident name meshdata getAttribs 0
 
 emptyMeshData :: MeshData v
 emptyMeshData = MeshData [] [] 0

@@ -63,8 +63,8 @@ findContributingEntities = view worldEntities
 
 toViewDefinition :: RenderView -> RenderResources -> RenderEntity -> ViewDefinition
 toViewDefinition rview@RenderView{..} RenderResources{..} ent =
-    let scaleM       = kronecker . point $ ent^.entityScale
-        transM       = mkTransformation (ent^.entityOrientation) (ent^.entityPosition)
+    let scaleM       = kronecker . point $ ent^.entityTransformation.transScale
+        transM       = mkTransformation (ent^.entityTransformation.transOrientation) (ent^.entityTransformation.transPosition)
         modelM       = transM !*! scaleM
         -- TODO rethink the normal matrix here
         normalM      = (adjoint <$> (inv33 . fromTransformation $ modelM) <|> Just eye3) ^?!_Just
@@ -82,7 +82,7 @@ toViewDefinition rview@RenderView{..} RenderResources{..} ent =
                 rProg = renderDef^.rdefProgram^._1
                 rTexs  = renderDef^.rdefTextures
             in RenderData
-                { _vao           = _loadedVertexBuffer^.at (rData, rProg) ^?!_Just
+                { _vao           = _loadedVertexArrays^.at (rData, rProg) ^?!_Just
                 , _shaderProgram = _loadedShaders^.at rProg ^?!_Just
                 , _texObjs       = map makeTexObj rTexs
                 , _elementCount  = meshTriangleCount rData
@@ -113,7 +113,9 @@ loadRenderResourcesFor rdef = do
     requestShader shRes
 
     -- VertexBuffer on demand with shader prog for vertex attributes
-    requestVertexBuffer (rdef^.rdefData) shRes
+    requestVertexBuffer (rdef^.rdefData)
+    updateVertexBuffer (rdef^.rdefData)
+    requestVertexArray (rdef^.rdefData) shRes
 
     -- TextureObjects on demand
     forM_ (rdef^.rdefTextures^..traverse.texResource) requestTexture
@@ -125,13 +127,34 @@ loadRenderResourcesFor rdef = do
                 shaderProg <- loadShader shRes
                 loadedShaders.at shRes ?= shaderProg
 
-        requestVertexBuffer :: Mesh -> ShaderResource -> RenderWorld ()
-        requestVertexBuffer mesh shRes = do
+        requestVertexBuffer :: Mesh -> RenderWorld ()
+        requestVertexBuffer mesh@Mesh{_meshModToken, _meshData, _meshAttr} = do
             res <- get
-            unless (res^.loadedVertexBuffer.contains (mesh, shRes)) $ do
+            unless (res^.loadedVertexBuffer.contains mesh) $ do
+                buff <- io $ makeVertexBufferF (_meshData^.to _meshAttr)
+                ebo  <- io $ bufferIndices $ map fromIntegral $ _meshData^.mDataIndices
+                loadedVertexBuffer.at mesh ?= (_meshModToken, buff, ebo)
+
+        updateVertexBuffer :: Mesh -> RenderWorld ()
+        updateVertexBuffer mesh@Mesh{_meshData, _meshAttr} = do
+            res <- get
+            let (oldtoken, buff, ebo) = res^.loadedVertexBuffer.at mesh ^?!_Just
+                currentToken          = _meshModToken mesh 
+            unless (oldtoken == currentToken) $ do
+                io $ do
+                    _ <- updateVertexBufferF (_meshData^.to _meshAttr) buff
+                    GL.bindBuffer GL.ElementArrayBuffer $= Just ebo
+                    replaceIndices $ map fromIntegral $ _meshData^.mDataIndices
+                    GL.bindBuffer GL.ElementArrayBuffer $= Nothing
+                loadedVertexBuffer.at mesh ?= (currentToken, buff, ebo)
+
+        requestVertexArray :: Mesh -> ShaderResource -> RenderWorld ()
+        requestVertexArray mesh shRes = do
+            res <- get
+            unless (res^.loadedVertexArrays.contains (mesh, shRes)) $ do
                 let shaderProg = res^.loadedShaders.at shRes ^?!_Just
-                vao            <- loadVertexBuffer mesh shaderProg
-                loadedVertexBuffer.at (mesh, shRes) ?= vao
+                vao            <- loadVertexArray mesh shaderProg
+                loadedVertexArrays.at (mesh, shRes) ?= vao
 
         requestTexture :: TextureResource -> RenderWorld ()
         requestTexture texture = do
@@ -140,11 +163,12 @@ loadRenderResourcesFor rdef = do
                 texObj <- loadTexture texture
                 loadedTextures.at texture ?= texObj
 
+
         -- | creates vbo and ebo, sets shader attributes and creates finally a vao
-        loadVertexBuffer :: Mesh -> ShaderProgram -> RenderWorld VAO
-        loadVertexBuffer Mesh{_meshData, _meshAttr} shaderProg = do
-            buff <- io $ makeVertexBufferF (_meshAttr _meshData)
-            ebo  <- io $ bufferIndices $ map fromIntegral $ _meshData^.mDataIndices
+        loadVertexArray :: Mesh -> ShaderProgram -> RenderWorld VAO
+        loadVertexArray mesh shaderProg = do
+            res <- get
+            let (_, buff, ebo) = res^.loadedVertexBuffer.at mesh ^?!_Just
             io $ makeVAO $ do
                 GL.bindBuffer GL.ArrayBuffer        $= Just (vbo buff)
                 mapM_ (setVertexAttribute shaderProg) (attribVADs buff)
@@ -177,3 +201,6 @@ loadRenderResourcesFor rdef = do
 ---------------------------------------------------------------------------------------------------
 initialRenderWorldState :: RenderResources
 initialRenderWorldState = mempty
+
+replaceIndices :: [Word32] -> IO ()
+replaceIndices = replaceBuffer GL.ElementArrayBuffer

@@ -20,8 +20,8 @@ import           Yage.Rendering.Types
 emptyRenderScene :: Camera -> RenderScene
 emptyRenderScene = RenderScene []-- ) (Cam.projectionMatrix (Cam.deg2rad 60) 1 1 45)
 
-addEntity :: (Renderable r) => RenderScene -> r -> RenderScene
-addEntity scene r = scene & sceneEntities <>~ [SomeRenderable r]
+addRenderable :: (Renderable r) => RenderScene -> r -> RenderScene
+addRenderable scene r = scene & sceneEntities <>~ [SomeRenderable r]
 
 entitiesCount :: RenderScene -> Int
 entitiesCount = length . _sceneEntities

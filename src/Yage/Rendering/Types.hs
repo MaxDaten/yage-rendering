@@ -17,11 +17,12 @@ module Yage.Rendering.Types
     , Renderable(..), SomeRenderable(..), renderableType, fromRenderable, toRenderable
     , RenderDefinition(..)
     , RenderScene(..), Camera(..), CameraHandle
+    , RenderTransformation(..), idTransformation
     , RenderEntity(..)
-    , Mesh(..), MeshData(..)
+    , Mesh(..), MeshData(..), ModificationToken
     , Index, Position, Orientation, Scale
     , ShaderResource(..), ShaderProgram(..)
-    , TextureDefinition(..), TextureResource(..)
+    , TextureDefinition(..), TextureResource(..), TextureChannel
 
     , toIndex1
     , module GLRawTypes
@@ -39,7 +40,7 @@ import           GHC.Generics                        (Generic)
 
 import           Control.Monad.State                 ()
 import           Control.Monad.Writer                ()
-import           Linear                              (M22, M33, M44, Quaternion, V3 (..))
+import           Linear                              (M22, M33, M44, Quaternion, V3 (..), zero, axisAngle)
 ---------------------------------------------------------------------------------------------------
 import           Graphics.GLUtil
 import qualified Graphics.GLUtil.Camera3D            as Cam
@@ -81,9 +82,10 @@ instance Eq TextureResource where
 
 ---------------------------------------------------------------------------------------------------
 
+type TextureChannel = (Int, String)
 
 data TextureDefinition = TextureDefinition
-    { _texChannel  :: (Int, String)
+    { _texChannel  :: TextureChannel
     , _texResource :: TextureResource
     } deriving (Typeable, Show, Eq, Ord)
 
@@ -102,9 +104,7 @@ data RenderDefinition = RenderDefinition
 
 class Typeable r => Renderable r where
     renderDefinition      :: r -> RenderDefinition
-    renderPosition        :: r -> Position
-    renderOrientation     :: r -> Orientation
-    renderScale           :: r -> Scale
+    renderTransformation  :: r -> RenderTransformation
 
 
 data SomeRenderable = forall r. (Typeable r, Renderable r) => SomeRenderable r
@@ -125,10 +125,8 @@ renderableType (SomeRenderable r) = typeOf r
 
 instance Renderable SomeRenderable where
     --render scene res (SomeRenderable r) = render scene res r
-    renderDefinition  (SomeRenderable r) = renderDefinition r
-    renderPosition    (SomeRenderable r) = renderPosition r
-    renderOrientation (SomeRenderable r) = renderOrientation r
-    renderScale       (SomeRenderable r) = renderScale r
+    renderDefinition     (SomeRenderable r) = renderDefinition r
+    renderTransformation (SomeRenderable r) = renderTransformation r
 
 
 ---------------------------------------------------------------------------------------------------
@@ -156,31 +154,37 @@ type Orientation = Quaternion Float
 type Scale       = V3 Float
 type Position    = V3 Float
 
+data RenderTransformation = RenderTransformation
+    { _transPosition    :: !Position
+    , _transOrientation :: !Orientation
+    , _transScale       :: !Scale
+    }
+
+idTransformation :: RenderTransformation
+idTransformation =
+ RenderTransformation
+    zero
+    (axisAngle (V3 0 1 0) (Cam.deg2rad 0))
+    (V3 1 1 1)
+
 data RenderEntity = RenderEntity
-    { _entityPosition    :: !Position
-    , _entityOrientation :: !Orientation
-    , _entityScale       :: !Scale
-    , _entityRenderDef   :: !RenderDefinition
+    { _entityTransformation :: !RenderTransformation
+    , _entityRenderDef      :: !RenderDefinition
     } deriving (Typeable)
-
-
-instance Renderable RenderEntity where
-    renderDefinition  = _entityRenderDef
-    renderPosition    = _entityPosition
-    renderOrientation = _entityOrientation
-    renderScale       = _entityScale
 
 ---------------------------------------------------------------------------------------------------
 
 type Index     = Int
 
+type ModificationToken = Int
+
 data Mesh = forall v. (Storable v) =>
     Mesh
-    { _meshId       :: Int
-    , _meshName     :: String
-    , _meshData     :: MeshData v
-    , _meshAttr     :: MeshData v -> [VertexAttribute]
-    , _meshDirty    :: Bool
+    { _meshId         :: Int
+    , _meshName       :: String
+    , _meshData       :: MeshData v
+    , _meshAttr       :: MeshData v -> [VertexAttribute]
+    , _meshModToken   :: ModificationToken
     } deriving (Typeable)
 
 data MeshData v = MeshData
@@ -191,8 +195,8 @@ data MeshData v = MeshData
 
 instance Show Mesh where
     show Mesh{..} =
-        format "Mesh {id = {0}, name = {1}, data = N/A, attribs = {2}, dirty = {3}}"
-               [show _meshId, show _meshName, "N/A", show _meshDirty]
+        format "Mesh {id = {0}, name = {1}, data = N/A, attribs = {2}, modToken = {3}}"
+               [show _meshId, show _meshName, "N/A", show _meshModToken]
 
 instance Eq Mesh where
     a == b = _meshId a == _meshId b

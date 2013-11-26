@@ -6,7 +6,7 @@ module Yage.Rendering
     ( (!=), shaderEnv, RenderResources
     , module Types
     , module Yage.Rendering
-    , module Yage.Rendering.Lenses
+    , module Lenses
     , module RendererExports
     , module RenderEntity
     ) where
@@ -22,7 +22,7 @@ import           Linear
 import           Yage.Rendering.Backend.Renderer        as Renderer
 import           Yage.Rendering.Backend.Renderer.Lenses as RendererExports
 import           Yage.Rendering.Backend.Renderer.Types  as RendererExports (RenderConfig (..), RenderLog (..), RenderSettings (..), RenderTarget (..), ShaderDefinition)
-import           Yage.Rendering.Lenses
+import           Yage.Rendering.Lenses                  as Lenses
 import           Yage.Rendering.RenderEntity            as RenderEntity
 import           Yage.Rendering.RenderScene             as RenderScene
 import           Yage.Rendering.RenderWorld
@@ -86,14 +86,14 @@ newtype ZOrderedRenderable = ZOrderedRenderable RenderEntity
 
 instance Eq ZOrderedRenderable where
     a == b =
-        let aZ = renderPosition a ^._z
-            bZ = renderPosition b ^._z
+        let aZ = (renderTransformation a)^.transPosition._z
+            bZ = (renderTransformation b)^.transPosition._z
         in aZ == bZ
 
 instance Ord ZOrderedRenderable where
     compare a b =
-        let aZ = renderPosition a ^._z
-            bZ = renderPosition b ^._z
+        let aZ = (renderTransformation a)^.transPosition._z
+            bZ = (renderTransformation b)^.transPosition._z
         in compare aZ bZ
 
 newtype PositionOrderedEntity = PositionOrderedEntity { unPositionOrderedEntity :: RenderEntity }
@@ -101,7 +101,7 @@ newtype PositionOrderedEntity = PositionOrderedEntity { unPositionOrderedEntity 
 
 
 instance Eq PositionOrderedEntity where
-    a == b = renderPosition a == renderPosition b
+    a == b = (renderTransformation a)^.transPosition == (renderTransformation b)^.transPosition
 
 instance Ord PositionOrderedEntity where
-    compare a b = renderPosition a `compare` renderPosition b
+    compare a b = ((renderTransformation a)^.transPosition) `compare` ((renderTransformation b)^.transPosition)

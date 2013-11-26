@@ -31,6 +31,7 @@ import             Foreign                         hiding (void)
 import             Linear                          (V2(..), V3(..), V4(..))
 import             Graphics.Rendering.OpenGL       (GLfloat)
 import qualified   Graphics.Rendering.OpenGL       as GL
+import             Graphics.Rendering.OpenGL       (($=))
 import             Graphics.GLUtil
 {-=================================================================================================-}
 
@@ -73,8 +74,6 @@ instance (Storable p, Storable n, Storable c, Storable t) => Storable (Vertex p 
 
 
 
-
-
 -- the main reason for this box is to transpose the attribute-list with the data list
 -- to write the data in a sequence
 data ToGLBuffer = forall t a. (Show (t a), Traversable t, Storable (t a), HasVariableType (t a)) 
@@ -111,11 +110,22 @@ infixr 2 @=
 
 makeVertexBufferF :: [VertexAttribute] -> IO VertexBufferObject
 makeVertexBufferF attrs = 
-    let (_, elems, stride) = attribsLayout attrs
-        vadMapping               = attribsToVAD attrs
+    let (_, elems, stride)  = attribsLayout attrs
+        vadMapping          = attribsToVAD attrs
     in allocaBytes (stride * elems) $ \ptr -> do
             pokeAttribs ptr attrs
             VertexBufferObject vadMapping <$> fromPtr GL.ArrayBuffer (stride * elems) ptr
+ 
+updateVertexBufferF :: [VertexAttribute] -> VertexBufferObject -> IO VertexBufferObject
+updateVertexBufferF attrs buff =
+    let (_, elems, stride)  = attribsLayout attrs
+        vadMapping          = attribsToVAD attrs
+    in allocaBytes (stride * elems) $ \ptr -> do
+            pokeAttribs ptr attrs
+            GL.bindBuffer GL.ArrayBuffer $= Just (vbo buff)
+            GL.bufferData GL.ArrayBuffer $= (fromIntegral $ stride * elems, ptr, GL.StaticDraw)
+            GL.bindBuffer GL.ArrayBuffer $= Nothing
+            return $ buff{ attribVADs = vadMapping }
  
 
 attribsToVAD :: [VertexAttribute] -> [VertexDescriptor]
