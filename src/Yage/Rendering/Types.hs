@@ -24,7 +24,7 @@ module Yage.Rendering.Types
     , ShaderResource(..), ShaderProgram(..)
     , TextureDefinition(..), TextureResource(..), TextureChannel
 
-    , toIndex1
+    , toIndex1, GL.Color4(..)
     , module GLRawTypes
     ) where
 
