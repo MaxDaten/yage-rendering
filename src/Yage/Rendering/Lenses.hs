@@ -9,6 +9,10 @@ import           Yage.Prelude
 
 import           Yage.Rendering.Types
 
+import qualified Graphics.GLUtil.Camera3D as C (Camera(..))
+
+import           Linear (V3, Quaternion)
+
 
 makeLenses ''TextureDefinition
 makeLenses ''ShaderResource
@@ -37,3 +41,10 @@ meshName :: Lens' Mesh String
 meshName f (m@Mesh{ _meshName }) = fmap (\name -> m{_meshName = name}) (f _meshName)
 meshModToken :: Lens' Mesh ModificationToken
 meshModToken f (m@Mesh{ _meshModToken }) = fmap (\token -> m{_meshModToken = token}) (f _meshModToken)
+
+
+cameraLocation :: Lens' CameraHandle (V3 Float)
+cameraLocation f (cam@C.Camera{C.location})= fmap (\l -> cam{C.location = l}) (f location)
+
+cameraOrientation :: Lens' CameraHandle (Quaternion Float)
+cameraOrientation f (cam@C.Camera{C.orientation}) = fmap (\o -> cam{C.orientation = o}) (f orientation)

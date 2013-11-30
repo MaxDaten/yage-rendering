@@ -9,6 +9,10 @@ module Yage.Rendering
     , module Lenses
     , module RendererExports
     , module RenderEntity
+    , module RenderScene
+    , module VertexSpec
+    , module Mesh
+
     ) where
 
 import           Data.List                              (map)
@@ -17,7 +21,7 @@ import           Yage.Prelude
 
 import           Control.Monad.RWS
 
-import           Linear
+import           Linear                                 as Linear
 
 import           Yage.Rendering.Backend.Renderer        as Renderer
 import           Yage.Rendering.Backend.Renderer.Lenses as RendererExports
@@ -25,6 +29,8 @@ import           Yage.Rendering.Backend.Renderer.Types  as RendererExports (Rend
 import           Yage.Rendering.Lenses                  as Lenses
 import           Yage.Rendering.RenderEntity            as RenderEntity
 import           Yage.Rendering.RenderScene             as RenderScene
+import           Yage.Rendering.Mesh                    as Mesh
+import           Yage.Rendering.VertexSpec              as VertexSpec ((@=), vPosition, vNormal, vColor, vTexture)
 import           Yage.Rendering.RenderWorld
 import           Yage.Rendering.Types                   as Types
 
