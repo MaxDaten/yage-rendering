@@ -45,20 +45,20 @@ makeLenses ''RenderUnit
 type RenderSystem = RWST RenderSettings RenderLog RenderResources IO
 
 
+runRenderSystem :: (MonadIO m) => RenderSystem () -> RenderSettings -> RenderResources -> m (RenderResources, RenderLog)
+runRenderSystem sys settings res = io $ execRWST sys settings res
+
 -- TODO individual settings
-runRenderSystem :: (MonadIO m) => [RenderUnit] -> RenderSettings -> RenderResources -> m (RenderResources, RenderLog)
-runRenderSystem units settings res = do
-    (res', rlog) <- io $ execRWST theSystem settings res
-    return (res', rlog)
-    where
-        theSystem = do
-            renderInstructions <- sequence_ <$> mapM prepareSceneRenderer (units^..traverse.renderSubject)
-            (_, _, rlog) <- io $ Renderer.runRenderer renderInstructions settings
-            tell rlog
+mkRenderSystem :: RenderUnit -> RenderSystem ()
+mkRenderSystem unit = do
+    settings      <- ask
+    sceneRenderer <- unit^.renderSubject.to mkSceneRenderer
+    (_, _, rlog)  <- (io $ Renderer.runRenderer sceneRenderer settings)
+    tell rlog
 
 
-prepareSceneRenderer :: RenderScene -> RenderSystem (Renderer ())
-prepareSceneRenderer scene = do
+mkSceneRenderer :: RenderScene -> RenderSystem (Renderer ())
+mkSceneRenderer scene = do
     renderSettings <- ask
     renderResources <- get
     let renderTarget        = renderSettings^.reRenderTarget
