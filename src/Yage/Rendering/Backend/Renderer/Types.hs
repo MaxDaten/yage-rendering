@@ -10,7 +10,7 @@ import             Yage.Prelude                    hiding (log)
 import             Control.Monad.Reader            (ReaderT)
 import             Control.Monad.RWS.Strict        (RWST)
 
-import             Linear                          (M44, M33)
+import             Linear                          (V2, M44, M33)
 import qualified   Graphics.Rendering.OpenGL       as GL
 import             Graphics.Rendering.OpenGL.GL    as GLReExports (Color4(..))
 
@@ -21,8 +21,8 @@ import             Yage.Rendering.Backend.Shader   ()
 type Renderer = RWST RenderSettings RenderLog () IO
 
 data RenderTarget = RenderTarget
-    { _targetXY     :: !(Int, Int)
-    , _targetSize   :: !(Int, Int)  -- ^ (width, height)
+    { _targetXY     :: V2 Int
+    , _targetSize   :: V2 Int      -- ^ (width, height)
     , _targetFactor :: !Double      -- ^ for retina use 2
     , _targetZNear  :: !Double
     , _targetZFar   :: !Double

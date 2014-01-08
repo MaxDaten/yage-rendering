@@ -24,6 +24,8 @@ import           Graphics.GLUtil                         hiding (makeVAO,
                                                           offset0)
 import qualified Graphics.Rendering.OpenGL               as GL
 import           Graphics.Rendering.OpenGL.GL            (($=))
+
+import           Linear                                  (V2(..))
 ---------------------------------------------------------------------------------------------------
 import           Yage.Rendering.Shader
 
@@ -144,8 +146,8 @@ setupFrame = do
 
         when (target^.targetDirty) $
             let factor = fromIntegral . floor $ target^.targetFactor
-                (w, h) = fromIntegral <$$> target^.targetSize
-                (x, y) = fromIntegral <$$> target^.targetXY
+                V2 w h = fromIntegral <$> target^.targetSize
+                V2 x y = fromIntegral <$> target^.targetXY
             in GL.viewport $= ( GL.Position (factor * x) (factor * y)
                               , GL.Size (factor * w) (factor * h))
 

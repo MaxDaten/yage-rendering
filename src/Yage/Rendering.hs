@@ -12,7 +12,7 @@ module Yage.Rendering
     , module RenderScene
     , module VertexSpec
     , module Mesh
-
+    , module LinExport
     ) where
 
 import           Data.List                              (map)
@@ -21,7 +21,8 @@ import           Yage.Prelude
 
 import           Control.Monad.RWS
 
-import           Linear                                 as Linear
+import           Linear                                 as Linear (V2(..), M44, _x, _y, _z)
+import           Linear                                 as LinExport
 
 import           Yage.Rendering.Backend.Renderer        as Renderer
 import           Yage.Rendering.Backend.Renderer.Lenses as RendererExports
@@ -74,14 +75,14 @@ prepareSceneRenderer scene = do
     where
         getProjection :: Camera -> RenderTarget -> M44 Float
         getProjection (Camera3D _ fov) target =
-            let (w, h)      = fromIntegral <$$> target^.targetSize
+            let V2 w h      = fromIntegral <$> target^.targetSize
                 (n, f)      = double2Float <$$> (target^.targetZNear, target^.targetZFar)
                 aspect      = (w/h)
             in projectionMatrix fov aspect n f -- TODO : move zfar/znear
 
         getProjection (Camera2D _) target =
-            let (w, h)      = fromIntegral <$$> target^.targetSize
-                (x, y)      = fromIntegral <$$> target^.targetXY
+            let V2 w h      = fromIntegral <$> target^.targetSize
+                V2 x y      = fromIntegral <$> target^.targetXY
                 (n, f)      = double2Float <$$> (target^.targetZNear, target^.targetZFar)
             in orthographicMatrix x w y h n f
 
