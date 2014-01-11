@@ -38,7 +38,7 @@ library
                         Yage.Rendering.Texture
                         Yage.Rendering.Mesh
                         Yage.Rendering.Shader
-                        Yage.Rendering.RenderWorld
+                        Yage.Rendering.ResourceManager
                         Yage.Rendering.RenderScene
                         Yage.Rendering.RenderEntity
                         Yage.Rendering.VertexSpec
@@ -46,6 +46,7 @@ library
                         
                         Yage.Rendering.Backend.Shader
                         Yage.Rendering.Backend.Renderer
+                        Yage.Rendering.Backend.Framebuffer
                         Yage.Rendering.Backend.Renderer.Logging
   other-modules:
                         Paths_yage_rendering
@@ -53,7 +54,7 @@ library
 
                         Yage.Rendering.Backend.Renderer.Types
                         Yage.Rendering.Backend.Renderer.Lenses
-                        Yage.Rendering.RenderWorld.Types
+                        Yage.Rendering.ResourceManager.Types
 
   If flag(perf)
     ghc-options:        -threaded -O2

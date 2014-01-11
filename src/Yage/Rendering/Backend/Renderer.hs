@@ -55,7 +55,7 @@ runRenderer renderer env = runRWST render env ()
             return a
 
 
---renderView :: RenderView -> [ViewDefinition] -> Renderer ()
+--renderView :: RenderView -> [ViewEntity] -> Renderer ()
 --renderView view vdefs = renderFrame view vdefs >> afterFrame
 
 
@@ -64,7 +64,7 @@ runRenderer renderer env = runRWST render env ()
 --afterFrame = return ()
 
 
-renderFrame :: RenderView -> [ViewDefinition] -> Renderer ()
+renderFrame :: RenderView -> [ViewEntity] -> Renderer ()
 renderFrame view vdefs = do
     --- beforeRender
 
@@ -82,28 +82,28 @@ renderFrame view vdefs = do
     -- afterRender
 
 
-doRender :: RenderView -> [ViewDefinition] -> Renderer ()
+doRender :: RenderView -> [ViewEntity] -> Renderer ()
 doRender view vdefs =
     let batches = createShaderBatches view vdefs
     in forM_ batches $ renderBatch view
 
 
 
-renderBatch :: RenderView -> RenderBatch ViewDefinition -> Renderer ()
+renderBatch :: RenderView -> RenderBatch ViewEntity -> Renderer ()
 renderBatch view RenderBatch{..} = withBatch $
-    mapM_ (perItemAction >> renderViewDefinition view)
+    mapM_ (perItemAction >> renderViewEntity view)
 
 
-createShaderBatches :: RenderView -> [ViewDefinition] -> [RenderBatch ViewDefinition]
+createShaderBatches :: RenderView -> [ViewEntity] -> [RenderBatch ViewEntity]
 createShaderBatches _view vdefs =
     let shaderGroups = groupBy sameShader vdefs
     in map mkShaderBatch shaderGroups
     where
-        sameShader :: ViewDefinition -> ViewDefinition -> Bool
+        sameShader :: ViewEntity -> ViewEntity -> Bool
         sameShader a b = a^.vdRenderData.shaderProgram.to program 
                          == b^.vdRenderData.shaderProgram.to program
 
-        mkShaderBatch :: [ViewDefinition] -> RenderBatch ViewDefinition
+        mkShaderBatch :: [ViewEntity] -> RenderBatch ViewEntity
         mkShaderBatch []         = error "empty RenderBatch: should be at least one for all items"
         mkShaderBatch defs@(v:_) =
             let batchShader = v^.vdRenderData.shaderProgram
@@ -121,11 +121,11 @@ beforeRender = setupFrame
 
 setupFrame :: Renderer ()
 setupFrame = do
-    clearC <- view $ reRenderConfig.rcConfClearColor
+    --clearC <- undefined --  TODO view $ reRenderConfig.rcConfClearColor
     wire   <- view $ reRenderConfig.rcConfWireframe
     target <- view reRenderTarget
     io $! do
-        GL.clearColor  $= realToFrac <$> clearC
+        --GL.clearColor  $= realToFrac <$> clearC
         GL.depthFunc   $= Just GL.Less    -- TODO to init
         GL.depthMask   $= GL.Enabled      -- TODO to init
         GL.blend       $= GL.Enabled      -- TODO to init/render target
@@ -162,8 +162,8 @@ afterRender = return ()
 
 ---------------------------------------------------------------------------------------------------
 
-renderViewDefinition :: RenderView -> ViewDefinition -> Renderer ()
-renderViewDefinition _view vdef =
+renderViewEntity :: RenderView -> ViewEntity -> Renderer ()
+renderViewEntity _view vdef =
     let rdata = vdef^.vdRenderData
     in do
         checkErr "start rendering"

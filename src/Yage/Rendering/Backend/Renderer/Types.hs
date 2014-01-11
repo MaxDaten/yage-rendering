@@ -16,9 +16,16 @@ import             Graphics.Rendering.OpenGL.GL    as GLReExports (Color4(..))
 
 import             Graphics.GLUtil
 import             Yage.Rendering.Backend.Shader   ()
+import             Yage.Rendering.Backend.Framebuffer
 
 
 type Renderer = RWST RenderSettings RenderLog () IO
+
+data RenderSettings = RenderSettings
+    { _reRenderConfig         :: !RenderConfig    -- ^ The current settings for the frame
+    , _reRenderTarget         :: !RenderTarget
+    }
+
 
 data RenderTarget = RenderTarget
     { _targetXY     :: V2 Int
@@ -27,12 +34,16 @@ data RenderTarget = RenderTarget
     , _targetZNear  :: !Double
     , _targetZFar   :: !Double
     , _targetDirty  :: !Bool
+    --, _targetBuffer :: !Framebuffer
     }
 
-data RenderSettings = RenderSettings
-    { _reRenderConfig         :: !RenderConfig    -- ^ The current settings for the frame
-    , _reRenderTarget         :: !RenderTarget
+
+data RenderConfig = RenderConfig
+    { _rcConfDebugNormals      :: !Bool
+    , _rcConfWireframe         :: !Bool
+    --, _rcConfClearColor        :: !(GL.Color4 Double) -- FIXME: will be managed by fbo
     }
+
 
 data RenderLog = RenderLog 
     { _rlLogObjCount :: !Int
@@ -40,12 +51,6 @@ data RenderLog = RenderLog
     , _rlLog         :: ![String]
     } deriving (Show, Eq)
 
-
-data RenderConfig = RenderConfig
-    { _rcConfClearColor        :: !(GL.Color4 Double)
-    , _rcConfDebugNormals      :: !Bool
-    , _rcConfWireframe         :: !Bool
-    }
 
 {--
 data RenderStatistics = RenderStatistics
@@ -68,7 +73,7 @@ type ShaderDefinition = ReaderT ShaderEnv IO
 
 data ShaderEnv = ShaderEnv
     { _seProgram     :: ShaderProgram
-    , _seViewDef     :: ViewDefinition
+    , _seViewDef     :: ViewEntity
     , _seView        :: RenderView 
     } deriving (Show, Typeable)
 
@@ -92,7 +97,7 @@ data RenderView = RenderView
     } deriving Show
 
 
-data ViewDefinition = ViewDefinition
+data ViewEntity = ViewEntity
     { _vdMVPMatrix             :: !(M44 Float)
     , _vdModelMatrix           :: !(M44 Float)
     , _vdModelViewMatrix       :: !(M44 Float)
@@ -104,9 +109,9 @@ data ViewDefinition = ViewDefinition
 
 ---------------------------------------------------------------------------------------------------
 
-instance Show ViewDefinition where
-    show ViewDefinition{..} = 
-        format "ViewDefinition {mvp = {0}, model = {1}, normal = {2}, data = N/A, shader = N/A}"
+instance Show ViewEntity where
+    show ViewEntity{..} = 
+        format "ViewEntity {mvp = {0}, model = {1}, normal = {2}, data = N/A, shader = N/A}"
                     [show _vdMVPMatrix, show _vdModelMatrix, show _vdNormalMatrix]
 
 instance Monoid RenderLog where

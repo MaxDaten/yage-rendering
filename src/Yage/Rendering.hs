@@ -2,6 +2,7 @@
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE RecordWildCards            #-}
 module Yage.Rendering
     ( (!=), shaderEnv, RenderResources
     , module Types
@@ -15,13 +16,14 @@ module Yage.Rendering
     , module LinExport
     ) where
 
+import           Yage.Prelude
+import           Yage.Math
+
 import           Data.List                              (map)
 import           GHC.Float                              (double2Float)
-import           Yage.Prelude
 
 import           Control.Monad.RWS
 
-import           Linear                                 as Linear (V2(..), M44, _x, _y, _z)
 import           Linear                                 as LinExport
 
 import           Yage.Rendering.Backend.Renderer        as Renderer
@@ -32,14 +34,14 @@ import           Yage.Rendering.RenderEntity            as RenderEntity
 import           Yage.Rendering.RenderScene             as RenderScene
 import           Yage.Rendering.Mesh                    as Mesh
 import           Yage.Rendering.VertexSpec              as VertexSpec ((@=), vPosition, vNormal, vColor, vTexture)
-import           Yage.Rendering.RenderWorld
+import           Yage.Rendering.ResourceManager
 import           Yage.Rendering.Types                   as Types
 
-data RenderUnit = RenderUnit
+data RenderNode = RenderNode
     { _renderSubject :: RenderScene
     --, _renderSettings  :: RenderSettings
     }
-makeLenses ''RenderUnit
+makeLenses ''RenderNode
 
 
 type RenderSystem = RWST RenderSettings RenderLog RenderResources IO
@@ -49,30 +51,35 @@ runRenderSystem :: (MonadIO m) => RenderSystem () -> RenderSettings -> RenderRes
 runRenderSystem sys settings res = io $ execRWST sys settings res
 
 -- TODO individual settings
-mkRenderSystem :: RenderUnit -> RenderSystem ()
+mkRenderSystem :: RenderNode -> RenderSystem ()
 mkRenderSystem unit = do
     settings      <- ask
-    sceneRenderer <- unit^.renderSubject.to mkSceneRenderer
+    sceneRenderer <- mkSceneRenderer $ unit^.renderSubject
     (_, _, rlog)  <- (io $ Renderer.runRenderer sceneRenderer settings)
     tell rlog
 
 
 mkSceneRenderer :: RenderScene -> RenderSystem (Renderer ())
 mkSceneRenderer scene = do
-    renderSettings <- ask
-    renderResources <- get
-    let renderTarget        = renderSettings^.reRenderTarget
+    (renderView, viewEntities) <- prepareDefinitions
+    return $ renderFrame renderView viewEntities
 
-        viewMatrix          = scene^.sceneCamera.cameraHandle.to camMatrix
-        projMatrix          = getProjection (scene^.sceneCamera) renderTarget
-        renderView          = RenderView viewMatrix projMatrix
-
-        worldEnv            = RenderWorldEnv $ map toRenderEntity $ scene^.sceneEntities
-
-    (viewDefs, renderRes') <- io $ runRenderWorld renderView worldEnv renderResources
-    put renderRes'
-    return $ renderFrame renderView viewDefs
     where
+        prepareDefinitions :: RenderSystem (RenderView, [ViewEntity])
+        prepareDefinitions = do 
+            renderSettings  <- ask
+            let renderTarget        = renderSettings^.reRenderTarget
+
+                viewMatrix          = scene^.sceneCamera.cameraHandle.to camMatrix
+                projMatrix          = getProjection (scene^.sceneCamera) renderTarget
+                renderView          = RenderView viewMatrix projMatrix
+                entities            = map toRenderEntity $ scene^.sceneEntities
+                resourceables       = Resourceables $ entities
+
+            res <- runResourceManager renderView resourceables =<< get
+            put res
+            return (renderView, map (toViewEntity renderView res) entities)
+
         getProjection :: Camera -> RenderTarget -> M44 Float
         getProjection (Camera3D _ fov) target =
             let V2 w h      = fromIntegral <$> target^.targetSize
@@ -85,6 +92,49 @@ mkSceneRenderer scene = do
                 V2 x y      = fromIntegral <$> target^.targetXY
                 (n, f)      = double2Float <$$> (target^.targetZNear, target^.targetZFar)
             in orthographicMatrix x w y h n f
+
+---------------------------------------------------------------------------------------------------
+
+
+
+toViewEntity :: RenderView -> RenderResources -> RenderEntity -> ViewEntity
+toViewEntity rview@RenderView{..} RenderResources{..} ent =
+    let scaleM       = kronecker . point $ ent^.entityTransformation.transScale
+        transM       = mkTransformation (ent^.entityTransformation.transOrientation) (ent^.entityTransformation.transPosition)
+        modelM       = transM !*! scaleM
+        -- TODO rethink the normal matrix here
+        normalM      = (adjoint <$> (inv33 . fromTransformation $ modelM) <|> Just eye3) ^?!_Just
+    in ViewEntity
+        { _vdMVPMatrix         = _rvProjectionMatrix !*! _rvViewMatrix !*! modelM
+        , _vdModelViewMatrix   = _rvViewMatrix !*! modelM
+        , _vdModelMatrix       = modelM
+        , _vdNormalMatrix      = normalM
+        , _vdRenderData        = getRenderData $ ent^.entityRenderDef
+        , _vdUniformDef        = (ent^.entityRenderDef.rdefProgram._2, uniformEnv)
+        }
+    where
+        getRenderData renderDef =
+            let rData = renderDef^.rdefData
+                rProg = renderDef^.rdefProgram^._1
+                rTexs  = renderDef^.rdefTextures
+            in RenderData
+                { _vao           = _loadedVertexArrays^.at (rData, rProg) ^?!_Just
+                , _shaderProgram = _loadedShaders^.at rProg ^?!_Just
+                , _texObjs       = map makeTexObj rTexs
+                , _elementCount  = meshTriangleCount rData
+                , _drawMode      = renderDef^.rdefMode
+                }
+        makeTexObj tex =
+            let obj = _loadedTextures^.at (tex^.texResource) ^?!_Just
+                ch  = tex^.texChannel & _1 %~ fromIntegral
+            in (obj, ch)
+        uniformEnv = ShaderEnv
+            { _seProgram           = _loadedShaders^.at (ent^.entityRenderDef^.rdefProgram._1) ^?!_Just
+            , _seViewDef           = undefined -- TODO init is currently in renderer (awkward!!)
+            , _seView              = rview
+            }
+
+
 
 ---------------------------------------------------------------------------------------------------
 

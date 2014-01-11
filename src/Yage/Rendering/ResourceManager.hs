@@ -4,30 +4,26 @@
 {-# LANGUAGE NamedFieldPuns            #-}
 {-# LANGUAGE RankNTypes                #-}
 {-# LANGUAGE RecordWildCards           #-}
-module Yage.Rendering.RenderWorld
-    ( module Yage.Rendering.RenderWorld
+module Yage.Rendering.ResourceManager
+    ( module Yage.Rendering.ResourceManager
     , module Types
     ) where
 
-import           Yage.Math
 import           Yage.Prelude
 
 import           Data.List
 
 import           Control.Monad.RWS.Strict
 
-import           Linear
-
 import           Graphics.GLUtil                  hiding (loadShader, loadTexture)
 import           Graphics.Rendering.OpenGL        (($=))
 import qualified Graphics.Rendering.OpenGL        as GL
 
 import           Yage.Rendering.Backend.Renderer
-import           Yage.Rendering.RenderWorld.Types as Types
+import           Yage.Rendering.ResourceManager.Types as Types
 
 import           Yage.Rendering.Lenses
 import qualified Yage.Rendering.Texture           as Tex
-import           Yage.Rendering.Mesh              as Mesh
 import           Yage.Rendering.Types
 import           Yage.Rendering.VertexSpec
 
@@ -36,76 +32,18 @@ import           Yage.Rendering.VertexSpec
 
 
 
-runRenderWorld :: RenderView -> RenderWorldEnv -> RenderResources -> IO ([ViewDefinition], RenderResources)
-runRenderWorld rview env st =
-    let theRun    = processRenderView rview
-    in do
-        (a,st',_) <- runRWST theRun env st
-        return (a,st')
+runResourceManager :: (MonadIO m) => RenderView -> Resourceables -> RenderResources -> m RenderResources
+runResourceManager rview env st = do
+    ((),st',_) <- io $ runRWST prepareResources env st
+    return st'
 
 
-processRenderView :: RenderView -> RenderWorld [ViewDefinition]
--- process all entities, load render resources
--- generate list of currently contributing entities in view (intermediates)
--- send them to renderer
-processRenderView renderview = do
-    prepareResources
-    res <- get
-    ents <- findContributingEntities
-    return $ map (toViewDefinition renderview res) ents
+prepareResources :: ResourceManager ()
+prepareResources = view entities >>= mapM_ (loadRenderResourcesFor . _entityRenderDef)
 
 
 
-findContributingEntities :: RenderWorld [RenderEntity]
-findContributingEntities = view worldEntities
-
-
-
-toViewDefinition :: RenderView -> RenderResources -> RenderEntity -> ViewDefinition
-toViewDefinition rview@RenderView{..} RenderResources{..} ent =
-    let scaleM       = kronecker . point $ ent^.entityTransformation.transScale
-        transM       = mkTransformation (ent^.entityTransformation.transOrientation) (ent^.entityTransformation.transPosition)
-        modelM       = transM !*! scaleM
-        -- TODO rethink the normal matrix here
-        normalM      = (adjoint <$> (inv33 . fromTransformation $ modelM) <|> Just eye3) ^?!_Just
-    in ViewDefinition
-        { _vdMVPMatrix         = _rvProjectionMatrix !*! _rvViewMatrix !*! modelM
-        , _vdModelViewMatrix   = _rvViewMatrix !*! modelM
-        , _vdModelMatrix       = modelM
-        , _vdNormalMatrix      = normalM
-        , _vdRenderData        = getRenderData $ ent^.entityRenderDef
-        , _vdUniformDef        = (ent^.entityRenderDef.rdefProgram._2, uniformEnv)
-        }
-    where
-        getRenderData renderDef =
-            let rData = renderDef^.rdefData
-                rProg = renderDef^.rdefProgram^._1
-                rTexs  = renderDef^.rdefTextures
-            in RenderData
-                { _vao           = _loadedVertexArrays^.at (rData, rProg) ^?!_Just
-                , _shaderProgram = _loadedShaders^.at rProg ^?!_Just
-                , _texObjs       = map makeTexObj rTexs
-                , _elementCount  = meshTriangleCount rData
-                , _drawMode      = renderDef^.rdefMode
-                }
-        makeTexObj tex =
-            let obj = _loadedTextures^.at (tex^.texResource) ^?!_Just
-                ch  = tex^.texChannel & _1 %~ fromIntegral
-            in (obj, ch)
-        uniformEnv = ShaderEnv
-            { _seProgram           = _loadedShaders^.at (ent^.entityRenderDef^.rdefProgram._1) ^?!_Just
-            , _seViewDef           = undefined -- TODO init is currently in renderer (awkward!!)
-            , _seView              = rview
-            }
-
-
-
-prepareResources :: RenderWorld ()
-prepareResources = view worldEntities >>= mapM_ (loadRenderResourcesFor . _entityRenderDef)
-
-
-
-loadRenderResourcesFor :: RenderDefinition -> RenderWorld ()
+loadRenderResourcesFor :: RenderDefinition -> ResourceManager ()
 loadRenderResourcesFor rdef = do
     let shRes = rdef^.rdefProgram.shaderRes
 
@@ -120,14 +58,14 @@ loadRenderResourcesFor rdef = do
     -- TextureObjects on demand
     forM_ (rdef^.rdefTextures^..traverse.texResource) requestTexture
     where
-        requestShader :: ShaderResource -> RenderWorld ()
+        requestShader :: ShaderResource -> ResourceManager ()
         requestShader shRes = do
             res <- get
             unless (res^.loadedShaders.contains shRes) $ do
                 shaderProg <- loadShader shRes
                 loadedShaders.at shRes ?= shaderProg
 
-        requestVertexBuffer :: Mesh -> RenderWorld ()
+        requestVertexBuffer :: Mesh -> ResourceManager ()
         requestVertexBuffer mesh@Mesh{_meshModToken, _meshData, _meshAttr} = do
             res <- get
             unless (res^.loadedVertexBuffer.contains mesh) $ do
@@ -135,7 +73,7 @@ loadRenderResourcesFor rdef = do
                 ebo  <- io $ bufferIndices $ map fromIntegral $ _meshData^.mDataIndices
                 loadedVertexBuffer.at mesh ?= (_meshModToken, buff, ebo)
 
-        updateVertexBuffer :: Mesh -> RenderWorld ()
+        updateVertexBuffer :: Mesh -> ResourceManager ()
         updateVertexBuffer mesh@Mesh{_meshData, _meshAttr} = do
             res <- get
             let (oldtoken, buff, ebo) = res^.loadedVertexBuffer.at mesh ^?!_Just
@@ -148,7 +86,7 @@ loadRenderResourcesFor rdef = do
                     GL.bindBuffer GL.ElementArrayBuffer $= Nothing
                 loadedVertexBuffer.at mesh ?= (currentToken, buff, ebo)
 
-        requestVertexArray :: Mesh -> ShaderResource -> RenderWorld ()
+        requestVertexArray :: Mesh -> ShaderResource -> ResourceManager ()
         requestVertexArray mesh shRes = do
             res <- get
             unless (res^.loadedVertexArrays.contains (mesh, shRes)) $ do
@@ -156,7 +94,7 @@ loadRenderResourcesFor rdef = do
                 vao            <- loadVertexArray mesh shaderProg
                 loadedVertexArrays.at (mesh, shRes) ?= vao
 
-        requestTexture :: TextureResource -> RenderWorld ()
+        requestTexture :: TextureResource -> ResourceManager ()
         requestTexture texture = do
             res <- get
             unless (res^.loadedTextures.contains texture) $ do
@@ -165,7 +103,7 @@ loadRenderResourcesFor rdef = do
 
 
         -- | creates vbo and ebo, sets shader attributes and creates finally a vao
-        loadVertexArray :: Mesh -> ShaderProgram -> RenderWorld VAO
+        loadVertexArray :: Mesh -> ShaderProgram -> ResourceManager VAO
         loadVertexArray mesh shaderProg = do
             res <- get
             let (_, buff, ebo) = res^.loadedVertexBuffer.at mesh ^?!_Just
@@ -179,12 +117,12 @@ loadRenderResourcesFor rdef = do
             setAttrib prog name GL.ToFloat vad
 
         -- | compiles shader
-        loadShader :: ShaderResource -> RenderWorld ShaderProgram
+        loadShader :: ShaderResource -> ResourceManager ShaderProgram
         loadShader res = io $!
             simpleShaderProgram (encodeString $ res^.srVertSrc) (encodeString $ res^.srFragSrc)
 
         -- | pushes texture to opengl
-        loadTexture :: TextureResource -> RenderWorld GL.TextureObject
+        loadTexture :: TextureResource -> ResourceManager GL.TextureObject
         loadTexture (TextureImage _ img) = io $
             handleTexObj =<< Tex.readTextureImg img
 
@@ -199,8 +137,8 @@ loadRenderResourcesFor rdef = do
                 Right obj -> return obj
 
 ---------------------------------------------------------------------------------------------------
-initialRenderWorldState :: RenderResources
-initialRenderWorldState = mempty
+initialRenderResources :: RenderResources
+initialRenderResources = mempty
 
 replaceIndices :: [Word32] -> IO ()
 replaceIndices = replaceBuffer GL.ElementArrayBuffer
