@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE RecordWildCards            #-}
+{-# LANGUAGE RankNTypes                 #-}
 module Yage.Rendering.Backend.Renderer.Types (
       module Yage.Rendering.Backend.Renderer.Types
     , module GLReExports
@@ -19,7 +20,7 @@ import             Yage.Rendering.Backend.Shader   ()
 import             Yage.Rendering.Backend.Framebuffer
 
 
-type Renderer = RWST RenderSettings RenderLog () IO
+type Renderer = RWST RenderSettings RenderLog RenderState IO
 
 data RenderSettings = RenderSettings
     { _reRenderConfig         :: !RenderConfig    -- ^ The current settings for the frame
@@ -52,7 +53,18 @@ data RenderLog = RenderLog
     } deriving (Show, Eq)
 
 
+
+data RenderState = RenderState
+    { _currentFramebuffer :: Maybe Framebuffer
+    , _currentShader      :: Maybe ShaderProgram
+    }
+
+initRenderState = RenderState Nothing Nothing
+
+
 {--
+data RenderState = RenderState
+    { _currentFBO :: Maybe Framebuffer }
 data RenderStatistics = RenderStatistics
     { _rsStatObjectCount       :: !Int
     , lastTriangleCount     :: !Int
@@ -68,25 +80,22 @@ emptyRenderLog = mempty
 
 ---------------------------------------------------------------------------------------------------
 
-type ShaderDefinition = ReaderT ShaderEnv IO
-
-
-data ShaderEnv = ShaderEnv
-    { _seProgram     :: ShaderProgram
-    , _seViewDef     :: ViewEntity
-    , _seView        :: RenderView 
-    } deriving (Show, Typeable)
-
+type ShaderDefinition = ReaderT ShaderProgram Renderer
+  
+type TextureAssignment = (GL.TextureObject, (GL.GLuint, String))
 ---------------------------------------------------------------------------------------------------
 
 data RenderData = RenderData -- TODO rename RenderResource
-    { _vao           :: GL.VertexArrayObject
-    , _shaderProgram :: ShaderProgram
-    , _texObjs       :: [(GL.TextureObject, (GL.GLuint, String))]
-    , _drawMode      :: !GL.PrimitiveMode
-    , _elementCount  :: !Int
-    } deriving Show
+    { _vao             :: GL.VertexArrayObject
+    , _uniformDefs     :: ShaderDefinition () -- to monoid
+    , _textureChannels :: [TextureAssignment]
+    , _drawMode        :: !GL.PrimitiveMode
+    , _elementCount    :: !Int
+    }
 
+
+instance Show RenderData where
+    show RenderData{..} = "RenderData: { vao: {0}, texs: {1}, mode: {2}, elem# {3} }"
 ---------------------------------------------------------------------------------------------------
 
 
@@ -96,23 +105,7 @@ data RenderView = RenderView
     , _rvProjectionMatrix  :: !(M44 Float)
     } deriving Show
 
-
-data ViewEntity = ViewEntity
-    { _vdMVPMatrix             :: !(M44 Float)
-    , _vdModelMatrix           :: !(M44 Float)
-    , _vdModelViewMatrix       :: !(M44 Float)
-    , _vdNormalMatrix          :: !(M33 Float)
-    , _vdRenderData            :: !RenderData
-    , _vdUniformDef            :: !(ShaderDefinition (), ShaderEnv)
-    }
-
-
 ---------------------------------------------------------------------------------------------------
-
-instance Show ViewEntity where
-    show ViewEntity{..} = 
-        format "ViewEntity {mvp = {0}, model = {1}, normal = {2}, data = N/A, shader = N/A}"
-                    [show _vdMVPMatrix, show _vdModelMatrix, show _vdNormalMatrix]
 
 instance Monoid RenderLog where
     mempty = RenderLog 0 0 []

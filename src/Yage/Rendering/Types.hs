@@ -22,9 +22,10 @@ module Yage.Rendering.Types
     , Mesh(..), MeshData(..), ModificationToken
     , Index, Position, Orientation, Scale
     , ShaderResource(..), ShaderProgram(..)
-    , TextureDefinition(..), TextureResource(..), TextureChannel
+    , TextureDefinition(..), TextureResource(..), TextureChannel, GLTextureSpec(..)
+    , RenderbufferResource(..), GLRenderbufferSpec(..)
 
-    , toIndex1, GL.Color4(..)
+    , toIndex1, GL.Color4(..), GL.PixelInternalFormat(..), GL.TextureTarget2D(..)
     , module GLRawTypes
     ) where
 
@@ -58,27 +59,45 @@ type FBO = GL.FramebufferObject
 
 ---------------------------------------------------------------------------------------------------
 
+data GLTextureSpec = GLTextureSpec GL.TextureTarget2D GL.PixelInternalFormat (Int, Int)
+data GLRenderbufferSpec = GLRenderbufferSpec GL.PixelInternalFormat (Int, Int)
+
+data RenderbufferResource = RenderbufferResource String GLRenderbufferSpec
+
 data TextureResource =
       TextureFile FilePath
     | TextureImage String DynamicImage
+    | TextureBuffer String GLTextureSpec -- only backed by opengl
     deriving (Typeable)
 
 
 -- TODO
 instance Ord TextureResource where
-    compare (TextureFile pathA   ) (TextureFile pathB   ) = compare pathA pathB
-    compare (TextureImage nameA _) (TextureImage nameB _) = compare nameA nameB
+    compare (TextureFile pathA   ) (TextureFile pathB   )    = compare pathA pathB
+    compare (TextureImage nameA _) (TextureImage nameB _)    = compare nameA nameB
+    compare (TextureBuffer nameA _) (TextureBuffer nameB _)  = compare nameA nameB
     compare (TextureFile _) _ = GT
     compare _ _               = LT
 
 instance Show TextureResource where
-    show (TextureFile name)     = show name
+    show (TextureFile path)     = show path
     show (TextureImage name _ ) = show name
+    show (TextureBuffer name _)  = show name
 
 instance Eq TextureResource where
-    (==) (TextureFile name1) (TextureFile name2)         = name1 == name2
-    (==) (TextureImage name1 _ ) (TextureImage name2 _ ) = name1 == name2
+    (==) (TextureFile name1) (TextureFile name2)           = name1 == name2
+    (==) (TextureImage name1 _ ) (TextureImage name2 _ )   = name1 == name2
+    (==) (TextureBuffer name1 _) (TextureBuffer name2 _)   = name1 == name2
     (==) _ _ = False
+
+instance Show RenderbufferResource where
+    show (RenderbufferResource name _) = show name
+
+instance Eq RenderbufferResource where
+    (==) (RenderbufferResource nameA _) (RenderbufferResource nameB _) = nameA == nameB
+
+instance Ord RenderbufferResource where
+    compare (RenderbufferResource nameA _) (RenderbufferResource nameB _) = compare nameA nameB
 
 ---------------------------------------------------------------------------------------------------
 
@@ -252,5 +271,7 @@ instance Hashable TextureResource where
     hashWithSalt salt (TextureFile file) =
         salt `hashWithSalt` file
     hashWithSalt salt (TextureImage name _) =
+        salt `hashWithSalt` name
+    hashWithSalt salt (TextureBuffer name _) =
         salt `hashWithSalt` name
 

@@ -14,6 +14,7 @@ module Yage.Rendering
     , module VertexSpec
     , module Mesh
     , module LinExport
+    , module Framebuffer
     ) where
 
 import           Yage.Prelude
@@ -22,6 +23,7 @@ import           Yage.Math
 import           Data.List                              (map)
 import           GHC.Float                              (double2Float)
 
+import           Control.Monad                          (mapM)
 import           Control.Monad.RWS
 
 import           Linear                                 as LinExport
@@ -29,16 +31,19 @@ import           Linear                                 as LinExport
 import           Yage.Rendering.Backend.Renderer        as Renderer
 import           Yage.Rendering.Backend.Renderer.Lenses as RendererExports
 import           Yage.Rendering.Backend.Renderer.Types  as RendererExports (RenderConfig (..), RenderLog (..), RenderSettings (..), RenderTarget (..), ShaderDefinition)
+import           Yage.Rendering.Backend.Framebuffer     as Framebuffer
 import           Yage.Rendering.Lenses                  as Lenses
 import           Yage.Rendering.RenderEntity            as RenderEntity
 import           Yage.Rendering.RenderScene             as RenderScene
 import           Yage.Rendering.Mesh                    as Mesh
 import           Yage.Rendering.VertexSpec              as VertexSpec ((@=), vPosition, vNormal, vColor, vTexture)
 import           Yage.Rendering.ResourceManager
+import           Yage.Rendering.ResourceManager         as Framebuffer (defaultFramebuffer)
 import           Yage.Rendering.Types                   as Types
 
 data RenderNode = RenderNode
     { _renderSubject :: RenderScene
+    , _renderTarget  :: Maybe (String, FramebufferSpec TextureResource RenderbufferResource)
     --, _renderSettings  :: RenderSettings
     }
 makeLenses ''RenderNode
@@ -47,26 +52,38 @@ makeLenses ''RenderNode
 type RenderSystem = RWST RenderSettings RenderLog RenderResources IO
 
 
+class HasPipelineData a | a -> b where
+    getPipelineData :: a -> b
+
+
+
 runRenderSystem :: (MonadIO m) => RenderSystem () -> RenderSettings -> RenderResources -> m (RenderResources, RenderLog)
 runRenderSystem sys settings res = io $ execRWST sys settings res
 
+
 -- TODO individual settings
-mkRenderSystem :: RenderNode -> RenderSystem ()
-mkRenderSystem unit = do
+mkRenderSystem :: HasPipelineData a => a -> RenderPipeline s Rendering b c -> RenderSystem ()
+mkRenderSystem units = do
     settings      <- ask
-    sceneRenderer <- mkSceneRenderer $ unit^.renderSubject
-    (_, _, rlog)  <- (io $ Renderer.runRenderer sceneRenderer settings)
-    tell rlog
+    renderers     <- mapM (\u -> mkSceneRenderer (u^.renderSubject) (u^.renderTarget)) units
+    renderResult  <- io $ mapM (flip Renderer.runRenderer settings) renderers
+    mapM_ tell (renderResult^..traverse._3)
 
 
-mkSceneRenderer :: RenderScene -> RenderSystem (Renderer ())
-mkSceneRenderer scene = do
-    (renderView, viewEntities) <- prepareDefinitions
-    return $ renderFrame renderView viewEntities
+{--
+
+mkSceneRenderer :: RenderScene -> Maybe (String, FramebufferSpec TextureResource RenderbufferResource) -> RenderSystem (Renderer ())
+mkSceneRenderer scene mfbo = do
+    (renderView, viewEntities) <- prepareResources
+    Just framebuffer           <- case mfbo of
+                                    Just (fboId, _) -> use $ compiledFBOs.at fboId
+                                    Nothing         -> return $ Just defaultFramebuffer
+    return $ renderFrame renderView viewEntities framebuffer
 
     where
-        prepareDefinitions :: RenderSystem (RenderView, [ViewEntity])
-        prepareDefinitions = do 
+
+        prepareResources :: RenderSystem (RenderView, [ViewEntity])
+        prepareResources = do 
             renderSettings  <- ask
             let renderTarget        = renderSettings^.reRenderTarget
 
@@ -74,11 +91,12 @@ mkSceneRenderer scene = do
                 projMatrix          = getProjection (scene^.sceneCamera) renderTarget
                 renderView          = RenderView viewMatrix projMatrix
                 entities            = map toRenderEntity $ scene^.sceneEntities
-                resourceables       = Resourceables $ entities
+                resourceables       = Resourceables entities mfbo
 
-            res <- runResourceManager renderView resourceables =<< get
-            put res
-            return (renderView, map (toViewEntity renderView res) entities)
+--------- SUCKAGE!!!!!!!!!!!!!!!!!------------------
+            loadedRes <- runResourceManager resourceables =<< get
+            put loadedRes
+            return (renderView, map (toViewEntity renderView loadedRes) entities)
 
         getProjection :: Camera -> RenderTarget -> M44 Float
         getProjection (Camera3D _ fov) target =
@@ -112,7 +130,9 @@ toViewEntity rview@RenderView{..} RenderResources{..} ent =
         , _vdRenderData        = getRenderData $ ent^.entityRenderDef
         , _vdUniformDef        = (ent^.entityRenderDef.rdefProgram._2, uniformEnv)
         }
+    
     where
+        
         getRenderData renderDef =
             let rData = renderDef^.rdefData
                 rProg = renderDef^.rdefProgram^._1
@@ -124,17 +144,19 @@ toViewEntity rview@RenderView{..} RenderResources{..} ent =
                 , _elementCount  = meshTriangleCount rData
                 , _drawMode      = renderDef^.rdefMode
                 }
+        
         makeTexObj tex =
             let obj = _loadedTextures^.at (tex^.texResource) ^?!_Just
                 ch  = tex^.texChannel & _1 %~ fromIntegral
             in (obj, ch)
+        
         uniformEnv = ShaderEnv
             { _seProgram           = _loadedShaders^.at (ent^.entityRenderDef^.rdefProgram._1) ^?!_Just
             , _seViewDef           = undefined -- TODO init is currently in renderer (awkward!!)
             , _seView              = rview
             }
 
-
+--}
 
 ---------------------------------------------------------------------------------------------------
 
