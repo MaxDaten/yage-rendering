@@ -1,8 +1,13 @@
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE RecordWildCards            #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE FunctionalDependencies     #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE TupleSections              #-}
+{-# LANGUAGE OverloadedStrings          #-}
+
 module Yage.Rendering
     ( (!=), shaderEnv, RenderResources
     , module Types
@@ -21,9 +26,7 @@ import           Yage.Prelude
 import           Yage.Math
 
 import           Data.List                              (map)
-import           GHC.Float                              (double2Float)
 
-import           Control.Monad                          (mapM)
 import           Control.Monad.RWS
 
 import           Linear                                 as LinExport
@@ -40,20 +43,29 @@ import           Yage.Rendering.VertexSpec              as VertexSpec ((@=), vPo
 import           Yage.Rendering.ResourceManager
 import           Yage.Rendering.ResourceManager         as Framebuffer (defaultFramebuffer)
 import           Yage.Rendering.Types                   as Types
+import           Yage.Rendering.Backend.RenderPipeline
+import           Yage.Rendering.Backend.Renderer.DeferredLighting
 
-data RenderNode = RenderNode
-    { _renderSubject :: RenderScene
-    , _renderTarget  :: Maybe (String, FramebufferSpec TextureResource RenderbufferResource)
-    --, _renderSettings  :: RenderSettings
+
+type RenderResources = GLRenderResources
+type RenderSystem = RWST RenderSettings RenderLog GLRenderResources IO
+
+
+
+data DeferredLightingDefinition = DeferredLightingDefinition
+    { dfGeoPassDefinition       :: PassDefinition -- see Rendering
+    , dfLightingPassDefinitin   :: PassDefinition
     }
-makeLenses ''RenderNode
+
+ 
 
 
-type RenderSystem = RWST RenderSettings RenderLog RenderResources IO
-
-
-class HasPipelineData a | a -> b where
-    getPipelineData :: a -> b
+data PassDefinition = PassDefinition
+    { fbSpec           :: (String, FramebufferSpec TextureResource RenderbufferResource)
+    , fbShader         :: ShaderResource
+    , fbGlobalUniforms :: RenderScene    -> ShaderDefinition ()
+    , fbEntityUniforms :: RenderEntity   -> ShaderDefinition () 
+    }
 
 
 
@@ -62,13 +74,126 @@ runRenderSystem sys settings res = io $ execRWST sys settings res
 
 
 -- TODO individual settings
-mkRenderSystem :: HasPipelineData a => a -> RenderPipeline s Rendering b c -> RenderSystem ()
-mkRenderSystem units = do
+mkRenderSystem :: (WithSetup s Renderer) => a -> RenderPipeline s Renderer a b -> RenderSystem ()
+mkRenderSystem toRender pipeline = do
     settings      <- ask
-    renderers     <- mapM (\u -> mkSceneRenderer (u^.renderSubject) (u^.renderTarget)) units
-    renderResult  <- io $ mapM (flip Renderer.runRenderer settings) renderers
-    mapM_ tell (renderResult^..traverse._3)
+    (_, rlog)     <- io $ flip Renderer.runRenderer settings $ runPipeline pipeline toRender
+    tell rlog
 
+
+createDeferredRenderSystem :: DeferredLightingDefinition -> RenderScene -> RenderSystem ()
+createDeferredRenderSystem DeferredLightingDefinition{..} scene = do
+    ((geoSetup, lightSetup, pipelineData), res) <- loadPipelineResources =<< get
+    put res
+    mkRenderSystem pipelineData $ deferredLighting (mkGeoPass geoSetup) (mkLightPass lightSetup)
+
+    where
+
+    loadPipelineResources res = 
+        runResourceManager res . unGLRM $ 
+            (,,) <$> loadFramebufferSetup dfGeoPassDefinition
+                 <*> loadFramebufferSetup dfLightingPassDefinitin
+                 <*> loadPipelineData
+
+
+    loadFramebufferSetup :: PassDefinition
+                         -> GLResourceManager FramebufferSetup
+    loadFramebufferSetup PassDefinition{..} = 
+        FramebufferSetup 
+            <$> requestFramebuffer fbSpec
+            <*> requestShader fbShader
+            <*> pure (fbGlobalUniforms scene) -- renderView to this here plz
+            -- <*> pure []
+            <*> pure (return ())
+            <*> pure (return ())
+
+        
+
+
+    loadPipelineData :: GLResourceManager DeferredLightingData
+    loadPipelineData = 
+        let sceneEnts       = scene^.sceneEntities
+            rEntities       = map toRenderEntity sceneEnts  -- TODO Filter out items with forward shader
+            geoShader       = fbShader dfGeoPassDefinition
+            lightShader     = fbShader dfLightingPassDefinitin
+            getGeoUniforms  = fbEntityUniforms dfGeoPassDefinition
+        in do
+            geos     <- forM rEntities $ loadRenderEntity geoShader getGeoUniforms
+            lights   <- return []
+            return $ DeferredLightingData geos lights
+
+
+
+loadRenderEntity :: ShaderResource 
+                -> (RenderEntity -> ShaderDefinition ())
+                -> RenderEntity 
+                -> GLResourceManager RenderData
+loadRenderEntity withProgram entityUniforms ent =
+    let rdef    = ent^.entityRenderDef
+    in
+    RenderData <$> requestRenderItem (rdef^.rdefData, withProgram)
+               <*> pure (entityUniforms ent)
+               <*> forM (rdef^.rdefTextures) makeTexAssignment
+               <*> pure (rdef^.rdefMode)
+               <*> pure (meshTriangleCount (rdef^.rdefData))
+    
+    where 
+    
+    makeTexAssignment tex =
+        let ch = tex^.texChannel & _1 %~ fromIntegral
+        in (,ch) <$> requestTexture (tex^.texResource)
+
+{--
+
+        getProjection :: Camera -> RenderTarget -> M44 Float
+        getProjection (Camera3D _ fov) target =
+            let V2 w h      = fromIntegral <$> target^.targetSize
+                (n, f)      = double2Float <$$> (target^.targetZNear, target^.targetZFar)
+                aspect      = (w/h)
+            in projectionMatrix fov aspect n f
+
+
+    createUniformDef ent = 
+        let trans        = ent^.entityTransformation
+            scaleM       = kronecker . point $ trans^.transScale
+            transM       = mkTransformation (trans^.transOrientation) (trans^.transPosition)
+            modelM       = transM !*! scaleM
+            -- TODO rethink the normal matrix here
+            normalM      = (adjoint <$> (inv33 . fromTransformation $ modelM) <|> Just eye3) ^?!_Just
+        in do
+            "model_matrix"      != modelM
+            "normal_matrix"     != normalM
+
+let albedoTex       = TextureBuffer "gbuffer-albedo"       $ GLTextureSpec Texture2D RGB' (800, 600)
+            normalTex       = TextureBuffer "gbuffer-normal"       $ GLTextureSpec Texture2D RGB' (800, 600)
+            specularTex     = TextureBuffer "gbuffer-specul"       $ GLTextureSpec Texture2D RGB' (800, 600)
+            glossyTex       = TextureBuffer "gbuffer-glossy"       $ GLTextureSpec Texture2D RGB' (800, 600)
+            depthStencilTex = TextureBuffer "gbuffer-depthStencil" $ GLTextureSpec Texture2D RGB' (800, 600)
+            geoProgram      = ShaderResource "geopass.vert" "geopass.frag"
+
+            geoFBODef       = FramebufferResources
+                                { fbSpec           = ( "geo-fbo"
+                                                     , colorAttachment (TextureTarget Texture2D albedoTex   0)  <>  
+                                                       colorAttachment (TextureTarget Texture2D normalTex   0)  <>
+                                                       colorAttachment (TextureTarget Texture2D specularTex 0)  <>
+                                                       colorAttachment (TextureTarget Texture2D glossyTex   0)  <>
+                                                       depthStencilAttachment (TextureTarget Texture2D depthStencilTex 0)
+                                                     )
+                                , fbShader         = geoProgram
+                                }
+
+            lightTex        = TextureBuffer "lbuffer-light" $ GLTextureSpec Texture2D RGB' (800, 600)
+            lightingProgram = ShaderResource "lightpass.vert" "lightpass.frag"
+
+            lightFBODef     = FramebufferResources
+                                { fbSpec           = ( "light-fbo"
+                                                     , colorAttachment        (TextureTarget Texture2D lightTex   0)   <>
+                                                       depthStencilAttachment (TextureTarget Texture2D depthStencilTex 0)
+                                                     )
+                                , fbShader         = lightingProgram
+                                }
+
+--}
 
 {--
 

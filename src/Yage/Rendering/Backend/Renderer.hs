@@ -38,12 +38,6 @@ import           Yage.Rendering.Backend.Renderer.Types   as Types
 import           Paths_yage_rendering
 
 
-data RenderBatch r = RenderBatch
-    { withBatch     :: ([r] -> Renderer ()) -> Renderer ()
-    , perItemAction :: r -> Renderer ()
-    , batch         :: [r]
-    }
-
 
 -- TODO :: combine this with the scene setup
 runRenderer :: Renderer a -> RenderSettings -> IO (a, RenderLog)
@@ -60,20 +54,26 @@ runRenderer renderer env = do
 
 
 
-renderToFramebuffer :: RenderView -> [RenderData] -> Framebuffer -> Renderer ()
-renderToFramebuffer view rdata toFramebuffer = 
+renderToFramebuffer :: [RenderData] -> Framebuffer -> Renderer ()
+renderToFramebuffer rdata toFramebuffer = 
     withFramebuffer toFramebuffer DrawTarget $ \_fb -> 
-        renderFrame view rdata
+        renderFrame rdata
 
 
-renderFrame :: RenderView -> [RenderData] -> Renderer ()
-renderFrame view rdata = do
-    forM_ rdata $ renderRenderData view
+renderFrame :: [RenderData] -> Renderer ()
+renderFrame rdata = do
+    forM_ rdata renderRenderData
 
 
 
 
 {--
+
+data RenderBatch r = RenderBatch
+    { withBatch     :: ([r] -> Renderer ()) -> Renderer ()
+    , perItemAction :: r -> Renderer ()
+    , batch         :: [r]
+    }
 
 doRender :: RenderView -> [RenderData] -> Renderer ()
 doRender view vdefs =
@@ -154,8 +154,8 @@ afterRender = return ()
 
 ---------------------------------------------------------------------------------------------------
 
-renderRenderData :: RenderView -> RenderData -> Renderer ()
-renderRenderData _view rdata = do
+renderRenderData :: RenderData -> Renderer ()
+renderRenderData rdata = do
     checkErr "start rendering"
     mshader <- use currentShader
     withVAO (rdata^.vao) . withTexturesAt GL.Texture2D (rdata^.textureChannels) $! do
@@ -220,7 +220,7 @@ shaderEnv = ask
 -- | the current bound fbo is NOT restored (lack of support by the OpenGL lib),
 -- instead the default is restored 
 withFramebuffer :: Framebuffer -> FBOTarget -> (Framebuffer -> Renderer a) -> Renderer a
-withFramebuffer fb@(Framebuffer fbo _) t action = 
+withFramebuffer fb@(Framebuffer fbo _ setup) t action = 
     let target = getGLTarget t in do
     -- old <- return GL.FramebufferObject 0 -- TODO get real git glGetIntegerv GL_FRAMEBUFFER_BINDING
     currentFramebuffer ?= fb
@@ -255,6 +255,7 @@ withVAO v ma = do
     return r
 
 
+-- from GLUtil do pull it into my Renderer monad
 withTexturesAt :: GL.BindableTextureTarget t
                => t -> [TextureAssignment]-> Renderer a -> Renderer a
 withTexturesAt tt ts m = do 

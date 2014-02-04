@@ -12,7 +12,7 @@ import           Yage.Prelude
 import           Foreign.Ptr                      (nullPtr)
 import           Data.List
 
-import           Control.Monad.RWS
+import           Control.Monad.Trans.State.Strict
 
 import           Graphics.GLUtil                  hiding (loadShader, loadTexture)
 import           Graphics.Rendering.OpenGL        (($=))
@@ -29,7 +29,9 @@ import           Yage.Rendering.VertexSpec
 
 ---------------------------------------------------------------------------------------------------
 
-instance ResourceManaging ResourceManager where
+
+
+instance ResourceManaging GLResourceManager where
     requestFramebuffer   = undefined
     requestTexture       = undefined
     requestShader        = undefined
@@ -38,14 +40,13 @@ instance ResourceManaging ResourceManager where
 
 
 
-runResourceManager :: (MonadIO m) => Resourceables -> RenderResources -> m RenderResources
-runResourceManager toRes st = do
-    ((),st',_) <- io $ runRWST (unResourceManager prepareResources) toRes st
-    return st'
+runResourceManager :: (MonadIO m) => res -> ResourceManager res a -> m (a, res)
+runResourceManager res rm = io $ runStateT rm res
 
 
-prepareResources :: ResourceManager ()
-prepareResources = do
+{--
+
+    do
     mapM_ (loadRenderResourcesFor . _entityRenderDef) =<< view entities
     fbo <- view fbufferSpec
     case fbo of
@@ -74,7 +75,7 @@ prepareResources = do
         
         status <- io . GL.get $ GL.framebufferStatus GL.Framebuffer
         return $ case status of
-            GL.Complete -> Right $ Framebuffer fbo spec --(const (return ()))
+            GL.Complete -> Right $ Framebuffer fbo spec (const (return ()))
             _           -> Left status 
         
         where
@@ -226,14 +227,15 @@ prepareResources = do
         GL.bindRenderbuffer GL.Renderbuffer $= rObj
         GL.renderbufferStorage GL.Renderbuffer format (GL.RenderbufferSize (fromIntegral w) (fromIntegral h))
         return rObj
+--}
 
 ---------------------------------------------------------------------------------------------------
-initialRenderResources :: RenderResources
-initialRenderResources = mempty
+initialGLRenderResources :: GLRenderResources
+initialGLRenderResources = mempty
 
 
 defaultFramebuffer :: Framebuffer
-defaultFramebuffer = Framebuffer GL.defaultFramebufferObject mempty
+defaultFramebuffer = Framebuffer GL.defaultFramebufferObject mempty (const (return ()))
 
 replaceIndices :: [Word32] -> IO ()
 replaceIndices = replaceBuffer GL.ElementArrayBuffer

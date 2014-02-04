@@ -5,8 +5,10 @@ module Yage.Rendering.ResourceManager.Types where
 
 import           Yage.Prelude
 
-import           Control.Monad.RWS
+import           Control.Monad.State (MonadState)
+import           Control.Monad.Trans.State.Strict
 import           Data.Map.Strict
+import           Control.Concurrent.STM (TVar)
 
 import qualified Graphics.Rendering.OpenGL as GL
 
@@ -23,38 +25,40 @@ class (Monad rm) => ResourceManaging rm where
     requestGeometry      :: (Ord geoId)  => geoId  -> rm geohandler
     -- | RenderItem is like the combound of a render-program and render-data
     --  e.g. shader and geometry 
-    requestRenderItem    :: (Ord iid)    => iid    -> rm iid
+    requestRenderItem    :: (Ord geoId, Ord shId) => (geoId, shId) -> rm iid
 
 
-data RenderResources = RenderResources
-    { _loadedShaders      :: (Map ShaderResource ShaderProgram)
-    , _loadedVertexBuffer :: (Map Mesh (ModificationToken, VertexBufferObject, EBO))
-    , _loadedVertexArrays :: (Map (Mesh, ShaderResource) VAO)
-    , _loadedTextures     :: (Map TextureResource GL.TextureObject)
-    , _loadedRenderbuffers:: (Map RenderbufferResource GL.RenderbufferObject)
-    , _compiledFBOs       :: (Map String Framebuffer)
+type VBO_RHandle           = TVar (ModificationToken, VertexBufferObject, EBO)
+type VAO_RHandle           = TVar VAO
+type Shader_RHandle        = TVar ShaderProgram
+type Texture_RHandle       = TVar GL.TextureObject
+type Renderbuffer_RHandle  = TVar GL.RenderbufferObject
+type Framebuffer_RHandle   = TVar Framebuffer
+
+data GLRenderResources = GLRenderResources
+    { _loadedShaders      :: (Map ShaderResource         Shader_RHandle)
+    , _loadedVertexBuffer :: (Map Mesh                   VBO_RHandle)
+    , _loadedVertexArrays :: (Map (Mesh, ShaderResource) VAO_RHandle)
+    , _loadedTextures     :: (Map TextureResource        Texture_RHandle)
+    , _loadedRenderbuffers:: (Map RenderbufferResource   Renderbuffer_RHandle)
+    , _compiledFBOs       :: (Map String                 Framebuffer_RHandle)
     }
 
-data Resourceables = Resourceables
-    { _entities      :: [RenderEntity]
-    , _fbufferSpec   :: Maybe (String, FramebufferSpec TextureResource RenderbufferResource)
-    -- , _worldLights   :: [RenderLight] 
-    }
-
-
-makeLenses ''Resourceables
-makeLenses ''RenderResources
+makeLenses ''GLRenderResources
 
 
 
-instance Monoid RenderResources where
-    mappend (RenderResources sA vA aA tA fA rA) (RenderResources sB vB aB tB fB rB)
-           = RenderResources (sA `union` sB) (vA `union` vB) (aA `union` aB) (tA `union` tB) (fA `union` fB) (rA `union` rB)
-    mempty = RenderResources mempty mempty mempty mempty mempty mempty
+instance Monoid GLRenderResources where
+    mappend (GLRenderResources sA vA aA tA fA rA) (GLRenderResources sB vB aB tB fB rB)
+           = GLRenderResources (sA `union` sB) (vA `union` vB) (aA `union` aB) (tA `union` tB) (fA `union` fB) (rA `union` rB)
+    mempty = GLRenderResources mempty mempty mempty mempty mempty mempty
 
 
-newtype ResourceManager a = ResourceManager {unResourceManager :: RWST Resourceables () RenderResources IO a}
-    deriving (MonadWriter (), MonadReader Resourceables, MonadState RenderResources, MonadRWS Resourceables () RenderResources, MonadIO, Monad)
+type ResourceManager res a = StateT res IO a
 
+newtype GLResourceManager a = GLResourceManager { unGLRM :: ResourceManager GLRenderResources a }
+    deriving ( Monad, Functor, Applicative, MonadIO
+             , MonadState GLRenderResources
+             )
 
 

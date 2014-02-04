@@ -17,13 +17,9 @@ import Yage.Rendering.Backend.Renderer.Types
 import Yage.Rendering.Backend.Framebuffer
 
 
-
-
 data DeferredLightingData = DeferredLightingData
     { geometries   :: [ RenderData ]
     , lights       :: [ RenderData ]
-    , view         :: RenderView
-    --, forwards   :: (View, [Geo])
     }
 
 
@@ -31,43 +27,48 @@ data FramebufferSetup = FramebufferSetup
     { framebuffer    :: Framebuffer
     , passShader     :: ShaderProgram
     , globalUniforms :: ShaderDefinition ()
-    , globalTextures :: [TextureAssignment]
+    --, globalTextures :: [TextureAssignment]
+    , preRendering   :: Renderer ()
+    , postRendering  :: Renderer ()
     }
 
 
 instance WithSetup FramebufferSetup Renderer where
-    withSetup s@FramebufferSetup{..} ma = do
-        withFramebuffer framebuffer DrawTarget $ \fb ->
-         withShader passShader                  $ \sh ->
-          withTexturesAt Texture2D globalTextures $ do
+    withSetup FramebufferSetup{..} ma = do
+        withFramebuffer framebuffer DrawTarget $ \_fb ->
+         withShader passShader                  $ \sh -> do
+          --withTexturesAt Texture2D globalTextures $ do
+            preRendering
             runUniform globalUniforms sh
-            ma s
+            r <- ma
+            postRendering
+            return r
 
 
 type DeferredPipeline = RenderPipeline FramebufferSetup Renderer
-type GeoPass          = DeferredPipeline (RenderView, [RenderData]) Framebuffer
-type LightPass        = DeferredPipeline (Framebuffer, RenderView, [RenderData]) Framebuffer
+type GeoPass          = DeferredPipeline ([RenderData]) Framebuffer
+type LightPass        = DeferredPipeline (Framebuffer, [RenderData]) Framebuffer
 
 
-deferredShading :: GeoPass -> LightPass -> DeferredPipeline DeferredLightingData ()
-deferredShading geoPass lightPass = proc (DeferredLightingData geos lights view) -> do
-    gbuffer <- geoPass   -< (view, geos)
-    lbuffer <- lightPass -< (gbuffer, view, lights)
+deferredLighting :: GeoPass -> LightPass -> DeferredPipeline DeferredLightingData ()
+deferredLighting geoPass lightPass = proc (DeferredLightingData geos lights) -> do
+    gbuffer <- geoPass   -< geos
+    lbuffer <- lightPass -< (gbuffer, lights)
     returnA -< ()
 
 
 
 
+mkGeoPass :: FramebufferSetup -> GeoPass
+mkGeoPass setup = 
+    mkRenderPass setup $ \geos -> do
+        renderFrame geos
+        return $ framebuffer setup
 
-geoPass setup = 
-    mkRenderPass setup $ \(view, geos) -> do
-        renderFrame view geos
-        return ()
-
-
-lightPass setup = 
-    mkRenderPass setup $ \(gbuffer, view, lights) -> do
-        renderFrame view lights
-        return ()
+mkLightPass :: FramebufferSetup -> LightPass
+mkLightPass setup = 
+    mkRenderPass setup $ \(gbuffer, lights) -> do
+        renderFrame lights
+        return $ framebuffer setup
 
 

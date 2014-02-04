@@ -81,6 +81,7 @@ library
                         , JuicyPixels             >= 3
 
                         , mtl                     >= 2.1
+                        , stm                     >= 2.4
                         , containers              >= 0.5
                         , unordered-containers    >= 0.2
                         , hashable                >= 1

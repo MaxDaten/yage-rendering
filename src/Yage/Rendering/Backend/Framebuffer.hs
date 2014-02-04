@@ -13,36 +13,17 @@ data FBOTarget = DrawTarget
                | FramebufferTarget
                | ReadTarget 
 
-data Framebuffer = forall tex rbuff. Framebuffer GL.FramebufferObject (FramebufferSpec tex rbuff) -- (Framebuffer -> IO ()) -- TODO will be replaced by settings
-
-
-data AttachmentTarget tex rbuff
-    = TextureTarget GL.TextureTarget2D tex GL.Level 
-    | RenderbufferTarget rbuff
-    deriving (Eq, Ord)
-
--- type FramebufferAttachment = GL.FramebufferObjectAttachment
-
-{--
-data BufferMask = BitMask GL.GLuint
-                | ColorMask (GL.Color4 GL.Capability)
-                | DepthMask GL.Capability
-
-data BufferClear = ClearColor (GL.Color4 GL.GL)
-
-
-data BufferSettings = BufferSettings
-    { bufferEnabled :: GL.Capability
-    , bufferMask    :: BufferMask
-    , bufferClear   :: 
-    }
---}
-
 data FramebufferAttachmentSlot
     = ColorAttachment -- (BufferMode, BufferMode) ColorSettings
     | DepthAttachment -- DepthSettings
     | StencilAttachment -- StencilSettings
     | DepthStencilAttachment -- (DepthSettings, StencilSettings)
+    deriving (Eq, Ord)
+
+
+data AttachmentTarget tex rbuff
+    = TextureTarget GL.TextureTarget2D tex GL.Level 
+    | RenderbufferTarget rbuff
     deriving (Eq, Ord)
 
 
@@ -62,6 +43,33 @@ data FramebufferSpec tex rbuff = FramebufferSpec
     } deriving (Eq, Ord)
 
 makeLenses ''FramebufferSpec
+
+
+data Framebuffer = forall tex rbuff. Framebuffer 
+    { _fbo      :: GL.FramebufferObject 
+    , _spec     :: (FramebufferSpec tex rbuff)
+    , _fboInit  :: (Framebuffer -> IO ())  -- TODO will be replaced by settings
+    }
+
+makeLenses ''Framebuffer
+
+
+-- type FramebufferAttachment = GL.FramebufferObjectAttachment
+
+{--
+data BufferMask = BitMask GL.GLuint
+                | ColorMask (GL.Color4 GL.Capability)
+                | DepthMask GL.Capability
+
+data BufferClear = ClearColor (GL.Color4 GL.GL)
+
+
+data BufferSettings = BufferSettings
+    { bufferEnabled :: GL.Capability
+    , bufferMask    :: BufferMask
+    , bufferClear   :: 
+    }
+--}
 
 
 
