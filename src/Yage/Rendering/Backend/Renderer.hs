@@ -40,9 +40,9 @@ import           Paths_yage_rendering
 
 
 -- TODO :: combine this with the scene setup
-runRenderer :: Renderer a -> RenderSettings -> IO (a, RenderLog)
-runRenderer renderer env = do
-    (a, _st, rlog) <- runRWST render env initRenderState
+runRenderer :: Renderer a -> IO (a, RenderLog)
+runRenderer renderer = do
+    (a, _st, rlog) <- runRWST render () initRenderState
     return (a, rlog)
     where
         render = do
@@ -110,6 +110,7 @@ createShaderBatches _view vdefs =
 beforeRender :: Renderer ()
 beforeRender = return ()
 
+{--
 
 setupFrame :: Renderer ()
 setupFrame = do
@@ -142,6 +143,7 @@ setupFrame = do
                 V2 x y = fromIntegral <$> target^.targetXY
             in GL.viewport $= ( GL.Position (factor * x) (factor * y)
                               , GL.Size (factor * w) (factor * h))
+--}
 
 
 ---------------------------------------------------------------------------------------------------

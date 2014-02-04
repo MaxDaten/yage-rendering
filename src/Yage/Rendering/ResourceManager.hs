@@ -2,6 +2,10 @@
 {-# LANGUAGE NamedFieldPuns               #-}
 {-# LANGUAGE MultiParamTypeClasses        #-}
 {-# LANGUAGE RecordWildCards              #-}
+{-# LANGUAGE Rank2Types                   #-}
+{-# LANGUAGE FlexibleContexts             #-}
+{-# LANGUAGE TupleSections                #-}
+
 module Yage.Rendering.ResourceManager
     ( module Yage.Rendering.ResourceManager
     , module Types
@@ -12,7 +16,9 @@ import           Yage.Prelude
 import           Foreign.Ptr                      (nullPtr)
 import           Data.List
 
+import           Control.Monad
 import           Control.Monad.Trans.State.Strict
+
 
 import           Graphics.GLUtil                  hiding (loadShader, loadTexture)
 import           Graphics.Rendering.OpenGL        (($=))
@@ -23,7 +29,7 @@ import           Yage.Rendering.ResourceManager.Types as Types
 
 import           Yage.Rendering.Lenses
 import qualified Yage.Rendering.Texture           as Tex
-import           Yage.Rendering.Types
+import           Yage.Rendering.Types             hiding (Index)
 import           Yage.Rendering.VertexSpec
 
 
@@ -31,37 +37,26 @@ import           Yage.Rendering.VertexSpec
 
 
 
-instance ResourceManaging GLResourceManager where
-    requestFramebuffer   = undefined
-    requestTexture       = undefined
-    requestShader        = undefined
-    requestGeometry      = undefined
-    requestRenderItem    = undefined
 
-
-
-runResourceManager :: (MonadIO m) => res -> ResourceManager res a -> m (a, res)
+runResourceManager :: (MonadIO m) => GLResources -> ResourceManager a -> m (a, GLResources)
 runResourceManager res rm = io $ runStateT rm res
 
 
-{--
+requestResource :: (Ord d) => Lens' GLResources (Map d r) -> (d -> ResourceManager r) -> d -> ResourceManager r 
+requestResource accessor loader resource = do
+    resmap <- use accessor
+    unless (resmap^.contains resource) $ do
+        item <- loader resource
+        accessor.at resource ?= item
+    use accessor <&> \m -> m^.at resource ^?! _Just
 
-    do
-    mapM_ (loadRenderResourcesFor . _entityRenderDef) =<< view entities
-    fbo <- view fbufferSpec
-    case fbo of
-        Just spec -> loadFramebuffer spec
-        Nothing   -> return ()
 
-    where
+requestFramebuffer :: (String, FramebufferSpec TextureResource RenderbufferResource) -> ResourceManager Framebuffer
+requestFramebuffer (fboIdent, spec) =
+    let compiler = const $ compileFBO spec <&> flip (^?!) folded -- unsafe head 
+    in requestResource compiledFBOs compiler fboIdent
 
-    loadFramebuffer :: (String, FramebufferSpec TextureResource RenderbufferResource) -> ResourceManager ()
-    loadFramebuffer (fboIdent, spec) = do
-        res <- get
-        unless (res^.compiledFBOs.contains fboIdent) $ do
-            Right fbo <- compileFBO spec
-            compiledFBOs.at fboIdent ?= fbo
-
+    where 
 
     -- | creates a new framebuffer according to the given specs
     compileFBO :: FramebufferSpec TextureResource RenderbufferResource -> ResourceManager (Either GL.FramebufferStatus Framebuffer)
@@ -71,7 +66,6 @@ runResourceManager res rm = io $ runStateT rm res
         
         doAttachments
         when (null $ spec^.fboColors) $ io $ GL.drawBuffer $= GL.NoBuffers
-
         
         status <- io . GL.get $ GL.framebufferStatus GL.Framebuffer
         return $ case status of
@@ -79,125 +73,37 @@ runResourceManager res rm = io $ runStateT rm res
             _           -> Left status 
         
         where
-            doAttachments = do
-                attaching $ spec^.fboColors
-                attaching $ spec^.fboStencil^..traverse
-                attaching $ spec^.fboDepth^..traverse
 
-            --attachTargetToFBO :: Int -> FramebufferAttachment -> IO ()
-            attaching = imapM_ attachTargetToFBO
+        doAttachments = do
+            attaching $ spec^.fboColors
+            attaching $ spec^.fboStencil^..traverse
+            attaching $ spec^.fboDepth^..traverse
 
-            attachTargetToFBO index attchmnt = 
-                case toGLAttachment attchmnt index of
-                    (glAt, TextureTarget tt2d tex level) -> do
-                            prefetchTexture tex -- TODO : capture this with new loadAndGet
-                            Just texObj <- use $ loadedTextures.at tex
-                            io $ GL.framebufferTexture2D GL.Framebuffer glAt tt2d texObj level
-                    (glAt, RenderbufferTarget rbuff)       -> do
-                        prefetchRenderbuffer rbuff
-                        Just robj <- use $ loadedRenderbuffers.at rbuff 
-                        io $ GL.framebufferRenderbuffer GL.Framebuffer glAt GL.Renderbuffer robj
+        --attachTargetToFBO :: Int -> FramebufferAttachment -> IO ()
+        attaching = imapM_ attachTargetToFBO
 
-            toGLAttachment :: FramebufferAttachment TextureResource RenderbufferResource -> Int -> (GL.FramebufferObjectAttachment, AttachmentTarget TextureResource RenderbufferResource)
-            toGLAttachment (FramebufferAttachment ColorAttachment target) index    = (GL.ColorAttachment (fromIntegral index), target)
-            toGLAttachment (FramebufferAttachment DepthAttachment target) _        = (GL.DepthAttachment, target)
-            toGLAttachment (FramebufferAttachment StencilAttachment target) _      = (GL.StencilAttachment, target)
-            toGLAttachment (FramebufferAttachment DepthStencilAttachment target) _ = (GL.DepthStencilAttachment, target)
- 
+        attachTargetToFBO index attchmnt = 
+            case toGLAttachment attchmnt index of
+                (glAt, TextureTarget tt2d tex level) -> do
+                    texObj <- requestTexture tex
+                    io $ GL.framebufferTexture2D GL.Framebuffer glAt tt2d texObj level
+                (glAt, RenderbufferTarget rbuff)     -> do
+                    robj <- requestRenderbuffer rbuff 
+                    io $ GL.framebufferRenderbuffer GL.Framebuffer glAt GL.Renderbuffer robj
+
+        toGLAttachment :: FramebufferAttachment TextureResource RenderbufferResource -> Int -> (GL.FramebufferObjectAttachment, AttachmentTarget TextureResource RenderbufferResource)
+        toGLAttachment (FramebufferAttachment ColorAttachment target) index    = (GL.ColorAttachment (fromIntegral index), target)
+        toGLAttachment (FramebufferAttachment DepthAttachment target) _        = (GL.DepthAttachment, target)
+        toGLAttachment (FramebufferAttachment StencilAttachment target) _      = (GL.StencilAttachment, target)
+        toGLAttachment (FramebufferAttachment DepthStencilAttachment target) _ = (GL.DepthStencilAttachment, target)
 
 
-    loadRenderResourcesFor :: RenderDefinition -> ResourceManager ()
-    loadRenderResourcesFor rdef = do
-        let shRes = rdef^.rdefProgram.shaderRes
 
-        -- Shader on demand loading
-        prefetchShader shRes
-
-        -- VertexBuffer on demand with shader prog for vertex attributes
-        prefetchVertexBuffer (rdef^.rdefData)
-        updateVertexBuffer   (rdef^.rdefData)
-        prefetchVertexArray  (rdef^.rdefData) shRes
-
-        -- TextureObjects on demand
-        forM_ (rdef^.rdefTextures^..traverse.texResource) prefetchTexture
-    
-
-    prefetchShader :: ShaderResource -> ResourceManager ()
-    prefetchShader shRes = do
-        res <- get
-        unless (res^.loadedShaders.contains shRes) $ do
-            shaderProg <- loadShader shRes
-            loadedShaders.at shRes ?= shaderProg
-
-    prefetchVertexBuffer :: Mesh -> ResourceManager ()
-    prefetchVertexBuffer mesh@Mesh{_meshModToken, _meshData, _meshAttr} = do
-        res <- get
-        unless (res^.loadedVertexBuffer.contains mesh) $ do
-            buff <- io $ makeVertexBufferF (_meshData^.to _meshAttr)
-            ebo  <- io $ bufferIndices $ map fromIntegral $ _meshData^.mDataIndices
-            loadedVertexBuffer.at mesh ?= (_meshModToken, buff, ebo)
-
-    updateVertexBuffer :: Mesh -> ResourceManager ()
-    updateVertexBuffer mesh@Mesh{_meshData, _meshAttr} = do
-        res <- get
-        let (oldtoken, buff, ebo) = res^.loadedVertexBuffer.at mesh ^?!_Just
-            currentToken          = _meshModToken mesh 
-        unless (oldtoken == currentToken) $ do
-            io $ do
-                _ <- updateVertexBufferF (_meshData^.to _meshAttr) buff
-                GL.bindBuffer GL.ElementArrayBuffer $= Just ebo
-                replaceIndices $ map fromIntegral $ _meshData^.mDataIndices
-                GL.bindBuffer GL.ElementArrayBuffer $= Nothing
-            loadedVertexBuffer.at mesh ?= (currentToken, buff, ebo)
-
-    prefetchVertexArray :: Mesh -> ShaderResource -> ResourceManager ()
-    prefetchVertexArray mesh shRes = do
-        res <- get
-        unless (res^.loadedVertexArrays.contains (mesh, shRes)) $ do
-            let shaderProg = res^.loadedShaders.at shRes ^?!_Just
-            vao            <- loadVertexArray mesh shaderProg
-            loadedVertexArrays.at (mesh, shRes) ?= vao
-
-    prefetchTexture :: TextureResource -> ResourceManager ()
-    prefetchTexture texture = do
-        res <- get
-        unless (res^.loadedTextures.contains texture) $ do
-            texObj <- loadTexture texture
-            loadedTextures.at texture ?= texObj
-
-
-    prefetchRenderbuffer :: RenderbufferResource -> ResourceManager ()
-    prefetchRenderbuffer rbuff = do
-        res <- get
-        unless (res^.loadedRenderbuffers.contains rbuff) $ do
-            rObj <- loadRenderbuffer rbuff
-            loadedRenderbuffers.at rbuff ?= rObj
-
-
-    -- | creates vbo and ebo, sets shader attributes and creates finally a vao
-    loadVertexArray :: Mesh -> ShaderProgram -> ResourceManager VAO
-    loadVertexArray mesh shaderProg = do
-        res <- get
-        let (_, buff, ebo) = res^.loadedVertexBuffer.at mesh ^?!_Just
-        io $ makeVAO $ do
-            GL.bindBuffer GL.ArrayBuffer        $= Just (vbo buff) -- not part of state, neccessary for vad
-            mapM_ (setVertexAttribute shaderProg) (attribVADs buff) -- just this relevant?
-
-            -- is really part of vao:
-            -- http://stackoverflow.com/questions/8973690/vao-and-element-array-buffer-state
-            GL.bindBuffer GL.ElementArrayBuffer $= Just ebo  
-
-    setVertexAttribute prog (VertexDescriptor name vad) = do
-        enableAttrib prog name -- not neccessary ?
-        setAttrib prog name GL.ToFloat vad
-
-    -- | compiles shader
-    loadShader :: ShaderResource -> ResourceManager ShaderProgram
-    loadShader res = io $!
-        simpleShaderProgram (encodeString $ res^.srVertSrc) (encodeString $ res^.srFragSrc)
-
+requestTexture :: TextureResource -> ResourceManager GLTexture
+requestTexture = requestResource loadedTextures loadTexture
+    where
     -- | pushes texture to opengl
-    loadTexture :: TextureResource -> ResourceManager GL.TextureObject
+    loadTexture :: TextureResource -> ResourceManager GLTexture
     loadTexture (TextureImage _ img) = io $
         handleTexObj =<< Tex.readTextureImg img
 
@@ -222,17 +128,74 @@ runResourceManager res rm = io $ runStateT rm res
             Left msg  -> error msg
             Right obj -> return obj
 
+
+requestRenderbuffer :: RenderbufferResource -> ResourceManager GLRenderbuffer
+requestRenderbuffer = requestResource loadedRenderbuffers loadRenderbuffer
+    where
+
     loadRenderbuffer (RenderbufferResource _ (GLRenderbufferSpec format (w,h))) = io $ do
         rObj <- GL.genObjectName
         GL.bindRenderbuffer GL.Renderbuffer $= rObj
         GL.renderbufferStorage GL.Renderbuffer format (GL.RenderbufferSize (fromIntegral w) (fromIntegral h))
         return rObj
---}
+
+
+requestShader :: ShaderResource -> ResourceManager GLShader
+requestShader = requestResource loadedShaders loadShader
+    where
+    loadShader :: ShaderResource -> ResourceManager ShaderProgram
+    loadShader res = io $!
+        simpleShaderProgram (encodeString $ res^.srVertSrc) (encodeString $ res^.srFragSrc)
+
+
+
+requestVertexbuffer :: Mesh -> ResourceManager GLVertexbuffer
+requestVertexbuffer mesh = do
+    buff <- requestResource loadedVertexBuffer loadVertexBuffer mesh
+    updateVertexBuffer mesh buff
+    return buff
+    
+    where
+    loadVertexBuffer :: Mesh -> ResourceManager GLVertexbuffer
+    loadVertexBuffer Mesh{_meshModToken, _meshData, _meshAttr} =
+        io $ (_meshModToken,,)
+                <$> makeVertexBufferF (_meshData^.to _meshAttr)
+                <*> (bufferIndices $ map fromIntegral $ _meshData^.mDataIndices)
+
+    updateVertexBuffer :: Mesh -> GLVertexbuffer -> ResourceManager ()
+    updateVertexBuffer mesh@Mesh{_meshModToken, _meshData, _meshAttr} (oldtoken, buff, ebo) = do
+        unless (_meshModToken == oldtoken) $ do
+            io $ do
+                _ <- updateVertexBufferF (_meshData^.to _meshAttr) buff
+                GL.bindBuffer GL.ElementArrayBuffer $= Just ebo
+                replaceIndices $ map fromIntegral $ _meshData^.mDataIndices
+                GL.bindBuffer GL.ElementArrayBuffer $= Nothing
+            loadedVertexBuffer.at mesh ?= (_meshModToken, buff, ebo)
+
+
+requestRenderItem :: Mesh -> ShaderResource -> ResourceManager GLVertexArray
+requestRenderItem mesh shader = requestResource loadedVertexArrays (uncurry loadVertexArray) (mesh,shader)
+    where
+    loadVertexArray :: Mesh -> ShaderResource -> ResourceManager GLVertexArray
+    loadVertexArray mesh shader = do
+        (_, buff, ebo)  <- requestVertexbuffer mesh
+        shaderProg      <- requestShader shader
+        io $ makeVAO $ do
+            GL.bindBuffer GL.ArrayBuffer        $= Just (vbo buff) -- not part of state, neccessary for vad
+            mapM_ (setVertexAttribute shaderProg) (attribVADs buff) -- just this relevant?
+
+            -- is really part of vao:
+            -- http://stackoverflow.com/questions/8973690/vao-and-element-array-buffer-state
+            GL.bindBuffer GL.ElementArrayBuffer $= Just ebo  
+
+    setVertexAttribute prog (VertexDescriptor name vad) = do
+        enableAttrib prog name -- not neccessary ?
+        setAttrib prog name GL.ToFloat vad
 
 ---------------------------------------------------------------------------------------------------
-initialGLRenderResources :: GLRenderResources
-initialGLRenderResources = mempty
-
+initialGLRenderResources :: GLResources
+initialGLRenderResources = 
+    GLResources mempty mempty mempty mempty mempty mempty
 
 defaultFramebuffer :: Framebuffer
 defaultFramebuffer = Framebuffer GL.defaultFramebufferObject mempty (const (return ()))

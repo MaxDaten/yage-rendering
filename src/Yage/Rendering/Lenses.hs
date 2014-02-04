@@ -19,8 +19,10 @@ makeLenses ''ShaderResource
 makeLenses ''RenderDefinition
 makeLenses ''RenderScene
 makeLenses ''RenderEntity
+makeLenses ''Viewport
 makeLenses ''RenderTransformation
 makeLenses ''MeshData
+makeLenses ''CameraPlanes
 --makeLenses ''Mesh
 
 -- for Program
@@ -28,8 +30,9 @@ shaderRes = _1
 shaderDef = _2
 
 cameraHandle :: Lens' Camera CameraHandle
-cameraHandle f (Camera3D h fov) = fmap (`Camera3D` fov) (f h)
-cameraHandle f (Camera2D h) = fmap Camera2D (f h)
+cameraHandle f (Camera3D hnd planes fov) = fmap (\h -> Camera3D h planes fov) (f hnd)
+cameraHandle f (Camera2D hnd planes) = fmap (`Camera2D` planes) (f hnd)
+
 
 entityPosition = entityTransformation.transPosition
 entityScale = entityTransformation.transScale
@@ -37,8 +40,10 @@ entityOrientation = entityTransformation.transOrientation
 
 meshId :: Lens' Mesh Int
 meshId f (m@Mesh{ _meshId }) = fmap (\ident -> m{_meshId = ident}) (f _meshId)
+
 meshName :: Lens' Mesh String
 meshName f (m@Mesh{ _meshName }) = fmap (\name -> m{_meshName = name}) (f _meshName)
+
 meshModToken :: Lens' Mesh ModificationToken
 meshModToken f (m@Mesh{ _meshModToken }) = fmap (\token -> m{_meshModToken = token}) (f _meshModToken)
 

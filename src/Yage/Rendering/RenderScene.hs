@@ -9,7 +9,7 @@ import           Yage.Prelude
 
 import           Data.List (length)
 
-import           Linear (V3(..), V4(..), Conjugate, Epsilon, M44, Quaternion)
+import           Linear (V3(..), V4(..), Conjugate, Epsilon, M44, Quaternion, _x, _y)
 import qualified Graphics.GLUtil.Camera3D as Cam
 
 import           Yage.Rendering.Lenses
@@ -18,7 +18,7 @@ import           Yage.Rendering.Types
 
 
 emptyRenderScene :: Camera -> RenderScene
-emptyRenderScene = RenderScene []-- ) (Cam.projectionMatrix (Cam.deg2rad 60) 1 1 45)
+emptyRenderScene = RenderScene []
 
 addRenderable :: (Renderable r) => RenderScene -> r -> RenderScene
 addRenderable scene r = scene & sceneEntities <>~ [SomeRenderable r]
@@ -58,6 +58,22 @@ roll = flip Cam.roll
 --fov :: Camera -> Float -> Camera
 --fov cam d = cam & cameraProj +~ d 
 
+cameraProjectionMatrix :: (Conjugate a, Epsilon a, RealFloat a)
+                       => Camera -> Viewport -> M44 a
+cameraProjectionMatrix (Camera2D _ planes )     v =
+    orthographicMatrix 
+        ( fromIntegral $ v^.vpXY._x ) 
+        ( fromIntegral $ v^.vpXY._x + v^.vpSize._x )
+        ( fromIntegral $ v^.vpXY._y )
+        ( fromIntegral $ v^.vpXY._y + v^.vpSize._y )
+        ( realToFrac $ planes^.camZNear )
+        ( realToFrac $ planes^.camZFar )
+cameraProjectionMatrix (Camera3D _ planes fov ) v = 
+    Cam.projectionMatrix
+        ( realToFrac $ fov )
+        ( fromIntegral (v^.vpSize._x) / fromIntegral (v^.vpSize._y) )
+        ( realToFrac $ planes^.camZNear )
+        ( realToFrac $ planes^.camZFar )
 
 orthographicMatrix :: (Conjugate a, Epsilon a, RealFloat a)
                     => a -> a -> a -> a -> a -> a -> M44 a

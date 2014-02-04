@@ -11,7 +11,6 @@ import             Yage.Prelude                    hiding (log)
 import             Control.Monad.Reader            (ReaderT)
 import             Control.Monad.RWS.Strict        (RWST)
 
-import             Linear                          (V2, M44, M33)
 import qualified   Graphics.Rendering.OpenGL       as GL
 import             Graphics.Rendering.OpenGL.GL    as GLReExports (Color4(..))
 
@@ -20,23 +19,7 @@ import             Yage.Rendering.Backend.Shader   ()
 import             Yage.Rendering.Backend.Framebuffer
 
 
-type Renderer = RWST RenderSettings RenderLog RenderState IO
-
-data RenderSettings = RenderSettings
-    { _reRenderConfig         :: !RenderConfig    -- ^ The current settings for the frame
-    , _reRenderTarget         :: !RenderTarget
-    }
-
-
-data RenderTarget = RenderTarget
-    { _targetXY     :: V2 Int
-    , _targetSize   :: V2 Int      -- ^ (width, height)
-    , _targetFactor :: !Double      -- ^ for retina use 2
-    , _targetZNear  :: !Double
-    , _targetZFar   :: !Double
-    , _targetDirty  :: !Bool
-    --, _targetBuffer :: !Framebuffer
-    }
+type Renderer = RWST () RenderLog RenderState IO
 
 
 data RenderConfig = RenderConfig
@@ -96,15 +79,6 @@ data RenderData = RenderData -- TODO rename RenderResource
 
 instance Show RenderData where
     show RenderData{..} = "RenderData: { vao: {0}, texs: {1}, mode: {2}, elem# {3} }"
----------------------------------------------------------------------------------------------------
-
-
--- TODO : RenderScene -- RenderView overlap
-data RenderView = RenderView
-    { _rvViewMatrix        :: !(M44 Float)
-    , _rvProjectionMatrix  :: !(M44 Float)
-    } deriving Show
-
 ---------------------------------------------------------------------------------------------------
 
 instance Monoid RenderLog where

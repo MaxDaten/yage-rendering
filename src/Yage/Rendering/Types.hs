@@ -16,7 +16,7 @@ module Yage.Rendering.Types
 
     , Renderable(..), SomeRenderable(..), renderableType, fromRenderable, toRenderable
     , RenderDefinition(..)
-    , RenderScene(..), Camera(..), CameraHandle
+    , RenderScene(..), Camera(..), CameraHandle, CameraPlanes(..), Viewport(..)
     , RenderTransformation(..), idTransformation
     , RenderEntity(..)
     , Mesh(..), MeshData(..), ModificationToken
@@ -41,7 +41,7 @@ import           GHC.Generics                        (Generic)
 
 import           Control.Monad.State                 ()
 import           Control.Monad.Writer                ()
-import           Linear                              (M22, M33, M44, Quaternion, V3 (..), zero, axisAngle)
+import           Linear                              (M22, M33, M44, Quaternion, V3 (..), V2, zero, axisAngle)
 ---------------------------------------------------------------------------------------------------
 import           Graphics.GLUtil
 import qualified Graphics.GLUtil.Camera3D            as Cam
@@ -152,9 +152,15 @@ instance Renderable SomeRenderable where
 
 type CameraHandle = Cam.Camera Float
 
+data CameraPlanes = CameraPlanes
+    { _camZNear  :: !Double
+    , _camZFar   :: !Double
+    } deriving (Show)
+
+
 data Camera =
-      Camera3D !CameraHandle !Float
-    | Camera2D !CameraHandle
+      Camera3D !CameraHandle CameraPlanes !Float
+    | Camera2D !CameraHandle CameraPlanes
     deriving (Show)
 
 deriving instance Show CameraHandle
@@ -166,6 +172,12 @@ data RenderScene = RenderScene
     , _sceneCamera           :: !Camera
     } deriving (Typeable)
 
+
+data Viewport = Viewport
+    { _vpXY     :: V2 Int
+    , _vpSize   :: V2 Int       -- ^ (width, height)
+    , _vpFactor :: !Double      -- ^ for retina use 2
+    }
 
 ---------------------------------------------------------------------------------------------------
 
