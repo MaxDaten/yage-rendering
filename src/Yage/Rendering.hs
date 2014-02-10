@@ -89,8 +89,9 @@ mkRenderSystem toRender pipeline = do
 
 createDeferredRenderSystem :: DeferredLightingDescr -> RenderScene -> ViewportD -> RenderSystem ()
 createDeferredRenderSystem DeferredLightingDescr{..} scene viewport = do
-    ((geoSetup, {-- lightSetup,--} screenSetup, pipelineData), res) <- loadPipelineResources =<< get
+    ((geoSetup, {-- lightSetup,--} screenSetup, pipelineData), res, resLog) <- loadPipelineResources =<< get
     put res
+    scribe resourceLog resLog
     mkRenderSystem pipelineData $ 
         deferredLighting 
             (mkGeoPass geoSetup)

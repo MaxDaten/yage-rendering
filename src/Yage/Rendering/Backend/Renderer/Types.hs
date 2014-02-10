@@ -33,6 +33,7 @@ data RenderLog = RenderLog
     { _rlLogObjCount :: !Int
     , _rlLogTriCount :: !Int
     , _rlLog         :: ![String]
+    , _resourceLog   :: ![String]
     } deriving (Show, Eq)
 
 
@@ -83,6 +84,6 @@ instance Show RenderData where
 ---------------------------------------------------------------------------------------------------
 
 instance Monoid RenderLog where
-    mempty = RenderLog 0 0 []
-    mappend (RenderLog ca ta la) (RenderLog cb tb lb) = RenderLog (ca + cb) (ta + tb) (mappend la lb)
+    mempty = RenderLog 0 0 [] []
+    mappend (RenderLog ca ta la ra) (RenderLog cb tb lb rb) = RenderLog (ca + cb) (ta + tb) (mappend la lb) (mappend ra rb)
 

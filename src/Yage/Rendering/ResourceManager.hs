@@ -16,8 +16,7 @@ import           Yage.Prelude
 import           Foreign.Ptr                      (nullPtr)
 import           Data.List
 
-import           Control.Monad
-import           Control.Monad.Trans.State.Strict
+import           Control.Monad.RWS
 
 
 import           Graphics.GLUtil                  hiding (loadShader, loadTexture)
@@ -40,8 +39,8 @@ import           Linear ( V2(..), _x, _y )
 
 
 
-runResourceManager :: (MonadIO m) => GLResources -> ResourceManager a -> m (a, GLResources)
-runResourceManager res rm = io $ runStateT rm res
+runResourceManager :: (MonadIO m) => GLResources -> ResourceManager a -> m (a, GLResources, [String])
+runResourceManager res rm = io $ runRWST rm () res
 
 
 requestResource :: (Ord key) 
@@ -71,7 +70,7 @@ requestFramebuffer (fboIdent, spec) =
     -- | creates a new framebuffer according to the given specs
     compileFBO :: FramebufferSpec TextureResource RenderbufferResource -> ResourceManager (Either GL.FramebufferStatus GLFramebuffer)
     compileFBO spec = do
-        io $ print $ format "create fbo {0}" [ fboIdent ]
+        tell [format "create fbo {0}" [ fboIdent ]]
         fbo <- io $ GL.genObjectName
         io $ GL.bindFramebuffer GL.Framebuffer $= fbo
         
@@ -143,22 +142,22 @@ requestTexture res = requestResource loadedTextures loadTexture (resizeTexture r
                 texObj  <- handleTexObj =<< (Tex.readTextureImg img)
                 return (imgSpec img, texObj)
 
-    loadTexture (TextureBuffer name target spec) = io $ do
+    loadTexture (TextureBuffer name target spec) =
         let size    = fromIntegral <$> spec^.glBufferSize
             texSize = GL.TextureSize2D (size^._x) (size^._y)
-            fmt     = spec^.glBufferFormat  
-        
-        print $ format "create tex {0} to {1}" [name, show size]
-        
-        texObj <- GL.genObjectName
-        GL.textureBinding target $= Just texObj
-        
-        GL.textureLevelRange target $= (0,0)
-        GL.textureFilter target     $= ((GL.Nearest, Nothing), GL.Nearest) -- TODO Def
-        GL.texImage2D target GL.NoProxy 0 fmt texSize 0 (GL.PixelData (texFormat fmt) GL.UnsignedByte nullPtr)
-        
-        GL.textureBinding target $= Nothing
-        return (spec, texObj)
+            fmt     = spec^.glBufferFormat
+        in do
+            tell [ format "create tex {0} to {1}" [name, show size] ]
+            io $ do        
+                texObj <- GL.genObjectName
+                GL.textureBinding target $= Just texObj
+
+                GL.textureLevelRange target $= (0,0)
+                GL.textureFilter target     $= ((GL.Nearest, Nothing), GL.Nearest) -- TODO Def
+                GL.texImage2D target GL.NoProxy 0 fmt texSize 0 (GL.PixelData (texFormat fmt) GL.UnsignedByte nullPtr)
+
+                GL.textureBinding target $= Nothing
+                return (spec, texObj)
 
     imgSpec :: Tex.DynamicImage -> GLBufferSpec
     imgSpec img = GLBufferSpec GL.RGB8 $ V2 (Tex.dynamicMap Tex.imageWidth img) (Tex.dynamicMap Tex.imageHeight img)
@@ -184,11 +183,12 @@ requestTexture res = requestResource loadedTextures loadTexture (resizeTexture r
         let newSize = fromIntegral <$> newSpec^.glBufferSize
             texSize = GL.TextureSize2D (newSize^._x) (newSize^._y)
             fmt     = newSpec^.glBufferFormat
-        when (newSpec^.glBufferSize /= currentSpec^.glBufferSize) $ io $ do
-            print $ format "resize tex {0} to {1}" [name, show newSize]
-            GL.textureBinding target $= Just texObj
-            GL.texImage2D target GL.NoProxy 0 fmt texSize 0 (GL.PixelData (texFormat fmt) GL.UnsignedByte nullPtr)
-            GL.textureBinding target $= Nothing
+        when (newSpec^.glBufferSize /= currentSpec^.glBufferSize) $ do
+            tell [ format "resize tex {0} to {1}" [name, show newSize] ]
+            io $ do
+                GL.textureBinding target $= Just texObj
+                GL.texImage2D target GL.NoProxy 0 fmt texSize 0 (GL.PixelData (texFormat fmt) GL.UnsignedByte nullPtr)
+                GL.textureBinding target $= Nothing
         return (newSpec, texObj)
     resizeTexture _ (old, texObj) = return (old, texObj)
 
@@ -198,24 +198,27 @@ requestRenderbuffer :: RenderbufferResource -> ResourceManager GLRenderbuffer
 requestRenderbuffer res = requestResource loadedRenderbuffers loadRenderbuffer (resizeBuffer res) res
     where
 
-    loadRenderbuffer (RenderbufferResource name spec@(GLBufferSpec fmt sz)) = io $ do
+    loadRenderbuffer (RenderbufferResource name spec@(GLBufferSpec fmt sz)) =
         let size = GL.RenderbufferSize (fromIntegral $ sz^._x) (fromIntegral $ sz^._y)
-        print $ format "create buffer {0} to {1}" [name, show sz]
-        rObj <- GL.genObjectName
-        GL.bindRenderbuffer GL.Renderbuffer $= rObj
-        GL.renderbufferStorage GL.Renderbuffer fmt size
-        GL.bindRenderbuffer GL.Renderbuffer $= GL.noRenderbufferObject
-        return (spec, rObj)
+        in do 
+            tell [ format "create buffer {0} to {1}" [name, show sz] ]
+            io $ do
+                rObj <- GL.genObjectName
+                GL.bindRenderbuffer GL.Renderbuffer $= rObj
+                GL.renderbufferStorage GL.Renderbuffer fmt size
+                GL.bindRenderbuffer GL.Renderbuffer $= GL.noRenderbufferObject
+                return (spec, rObj)
 
     resizeBuffer (RenderbufferResource name newSpec) (currentSpec, rObj) = do
         let newSize  = fromIntegral <$> newSpec^.glBufferSize
             buffSize = GL.RenderbufferSize (newSize^._x) (newSize^._y)
             fmt      = newSpec^.glBufferFormat
-        when (newSpec^.glBufferSize /= currentSpec^.glBufferSize) $ io $ do
-            io $ print $ format "resize buffer {0} to {1}" [name, show newSize]
-            GL.bindRenderbuffer GL.Renderbuffer $= rObj
-            GL.renderbufferStorage GL.Renderbuffer fmt buffSize
-            GL.bindRenderbuffer GL.Renderbuffer $= GL.noRenderbufferObject
+        when (newSpec^.glBufferSize /= currentSpec^.glBufferSize) $ do
+            tell [ format "resize buffer {0} to {1}" [name, show newSize] ] 
+            io $ do
+                GL.bindRenderbuffer GL.Renderbuffer $= rObj
+                GL.renderbufferStorage GL.Renderbuffer fmt buffSize
+                GL.bindRenderbuffer GL.Renderbuffer $= GL.noRenderbufferObject
         return (newSpec, rObj)
 
 

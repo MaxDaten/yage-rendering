@@ -7,8 +7,7 @@ module Yage.Rendering.ResourceManager.Types where
 
 import           Yage.Prelude
 
-import           Control.Monad.State (MonadState)
-import           Control.Monad.Trans.State.Strict
+import           Control.Monad.RWS
 
 import qualified Graphics.Rendering.OpenGL as GL
 
@@ -57,6 +56,6 @@ makeLenses ''GLResources
 --    mempty = GLRenderResources mempty mempty mempty mempty mempty mempty
 
 
-type ResourceManager = StateT GLResources IO
+type ResourceManager = RWST () [String] GLResources IO
 
 
