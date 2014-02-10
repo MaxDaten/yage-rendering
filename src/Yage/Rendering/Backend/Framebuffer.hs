@@ -1,5 +1,4 @@
 {-# LANGUAGE TemplateHaskell            #-}
-{-# LANGUAGE ExistentialQuantification  #-}
 module Yage.Rendering.Backend.Framebuffer
     ( module Yage.Rendering.Backend.Framebuffer
     ) where
@@ -7,7 +6,7 @@ module Yage.Rendering.Backend.Framebuffer
 import Yage.Prelude
 
 import qualified   Graphics.Rendering.OpenGL       as GL
-
+-- https://developer.apple.com/library/mac/documentation/graphicsimaging/conceptual/opengl-macprogguide/opengl_offscreen/opengl_offscreen.html
 
 data FBOTarget = DrawTarget
                | FramebufferTarget
@@ -37,6 +36,7 @@ data FramebufferSpec tex rbuff = FramebufferSpec
     { _fboColors       :: [FramebufferAttachment tex rbuff]
     , _fboDepth        :: Maybe (FramebufferAttachment tex rbuff)
     , _fboStencil      :: Maybe (FramebufferAttachment tex rbuff)
+    , _fboDepthStencil :: Maybe (FramebufferAttachment tex rbuff)
     -- | GL Spec: Attaching a level of a texture to GL_DEPTH_STENCIL_ATTACHMENT 
     -- is equivalent to attaching that level to both the GL_DEPTH_ATTACHMENT and 
     -- the GL_STENCIL_ATTACHMENT attachment points simultaneously
@@ -45,10 +45,9 @@ data FramebufferSpec tex rbuff = FramebufferSpec
 makeLenses ''FramebufferSpec
 
 
-data Framebuffer = forall tex rbuff. Framebuffer 
+data Framebuffer tex rbuff = Framebuffer 
     { _fbo      :: GL.FramebufferObject 
-    , _spec     :: (FramebufferSpec tex rbuff)
-    , _fboInit  :: (Framebuffer -> IO ())  -- TODO will be replaced by settings
+    , _spec     :: FramebufferSpec tex rbuff
     }
 
 makeLenses ''Framebuffer
@@ -74,11 +73,12 @@ data BufferSettings = BufferSettings
 
 
 instance Monoid (FramebufferSpec tex rbff) where
-    mempty = FramebufferSpec mempty Nothing Nothing
-    mappend (FramebufferSpec c d s) (FramebufferSpec c' d' s') 
-        = FramebufferSpec (c  <> c') 
-                          (d' <|> d) 
-                          (s' <|> s)
+    mempty = FramebufferSpec mempty Nothing Nothing Nothing
+    mappend (FramebufferSpec c d s ds) (FramebufferSpec c' d' s' ds') 
+        = FramebufferSpec (c   <>  c') 
+                          (d'  <|> d ) 
+                          (s'  <|> s )
+                          (ds' <|> ds)
 
 
 mkEmptyFramebuffer :: FramebufferSpec tex rbuff
@@ -86,12 +86,10 @@ mkEmptyFramebuffer = mempty
 
 
 attach :: FramebufferSpec tex rbuff -> FramebufferAttachment tex rbuff -> FramebufferSpec tex rbuff
-attach spec a@(FramebufferAttachment ColorAttachment _)        = spec & fboColors <>~ [a]
-attach spec a@(FramebufferAttachment DepthAttachment _)        = spec & fboDepth   ?~ a
-attach spec a@(FramebufferAttachment StencilAttachment _)      = spec & fboStencil ?~ a
-attach spec (FramebufferAttachment DepthStencilAttachment target)   
-    = spec `attach` (FramebufferAttachment DepthAttachment target) 
-           `attach` (FramebufferAttachment StencilAttachment target)
+attach spec a@(FramebufferAttachment ColorAttachment _)        = spec & fboColors       <>~ [a]
+attach spec a@(FramebufferAttachment DepthAttachment _)        = spec & fboDepth        ?~ a
+attach spec a@(FramebufferAttachment StencilAttachment _)      = spec & fboStencil      ?~ a
+attach spec a@(FramebufferAttachment DepthStencilAttachment _) = spec & fboDepthStencil ?~ a
 
 colorAttachment :: AttachmentTarget tex rbuff -> FramebufferSpec tex rbuff
 colorAttachment = (attach mempty) . FramebufferAttachment ColorAttachment

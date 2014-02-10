@@ -54,7 +54,7 @@ runRenderer renderer = do
 
 
 
-renderToFramebuffer :: [RenderData] -> Framebuffer -> Renderer ()
+renderToFramebuffer :: [RenderData] -> Framebuffer tex rbuff -> Renderer ()
 renderToFramebuffer rdata toFramebuffer = 
     withFramebuffer toFramebuffer DrawTarget $ \_fb -> 
         renderFrame rdata
@@ -221,17 +221,17 @@ shaderEnv = ask
 
 -- | the current bound fbo is NOT restored (lack of support by the OpenGL lib),
 -- instead the default is restored 
-withFramebuffer :: Framebuffer -> FBOTarget -> (Framebuffer -> Renderer a) -> Renderer a
-withFramebuffer fb@(Framebuffer fbo _ setup) t action = 
+withFramebuffer :: Framebuffer tex rbuff -> FBOTarget -> (Framebuffer tex rbuff -> Renderer a) -> Renderer a
+withFramebuffer fb@(Framebuffer fbo _) t action = 
     let target = getGLTarget t in do
     -- old <- return GL.FramebufferObject 0 -- TODO get real git glGetIntegerv GL_FRAMEBUFFER_BINDING
-    currentFramebuffer ?= fb
+    --currentFramebuffer ?= fb
     io $ GL.bindFramebuffer target $= fbo
     
     result <- action fb
     
     io $ GL.bindFramebuffer target $= GL.defaultFramebufferObject
-    currentFramebuffer .= Nothing
+    --currentFramebuffer .= Nothing
     return result
 
 

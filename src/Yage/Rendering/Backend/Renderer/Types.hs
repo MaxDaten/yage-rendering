@@ -38,11 +38,12 @@ data RenderLog = RenderLog
 
 
 data RenderState = RenderState
-    { _currentFramebuffer :: Maybe Framebuffer
-    , _currentShader      :: Maybe ShaderProgram
+    { -- _currentFramebuffer :: Maybe GLFramebuffer
+     _currentShader      :: Maybe ShaderProgram
     }
 
-initRenderState = RenderState Nothing Nothing
+initRenderState = RenderState Nothing
+
 
 
 {--

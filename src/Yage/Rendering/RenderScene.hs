@@ -56,22 +56,26 @@ roll :: CameraHandle -> Float -> CameraHandle
 roll = flip Cam.roll
 
 --fov :: Camera -> Float -> Camera
---fov cam d = cam & cameraProj +~ d 
+--fov cam d = cam & cameraProj +~ d
 
+-- | creates the projectiom matrix for the given viewport
+-- for Camera2D: create an orthographic matrix with origin at the
+-- top left corner of the screen
+-- for Camera3D: creates a perspective projection matrix 
 cameraProjectionMatrix :: (Conjugate a, Epsilon a, RealFloat a)
-                       => Camera -> Viewport -> M44 a
+                       => Camera -> Viewport a -> M44 a
 cameraProjectionMatrix (Camera2D _ planes )     v =
-    orthographicMatrix 
-        ( fromIntegral $ v^.vpXY._x ) 
-        ( fromIntegral $ v^.vpXY._x + v^.vpSize._x )
-        ( fromIntegral $ v^.vpXY._y )
-        ( fromIntegral $ v^.vpXY._y + v^.vpSize._y )
+    orthographicMatrix -- 0/0 top left
+        ( v^.vpXY._x ) 
+        ( v^.vpXY._x + v^.vpSize._x )
+        ( v^.vpXY._y )
+        ( v^.vpXY._y + v^.vpSize._y )
         ( realToFrac $ planes^.camZNear )
         ( realToFrac $ planes^.camZFar )
 cameraProjectionMatrix (Camera3D _ planes fov ) v = 
     Cam.projectionMatrix
         ( realToFrac $ fov )
-        ( fromIntegral (v^.vpSize._x) / fromIntegral (v^.vpSize._y) )
+        ( (v^.vpSize._x) / (v^.vpSize._y) )
         ( realToFrac $ planes^.camZNear )
         ( realToFrac $ planes^.camZFar )
 

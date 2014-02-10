@@ -32,6 +32,8 @@ import qualified Yage.Rendering.Texture           as Tex
 import           Yage.Rendering.Types             hiding (Index)
 import           Yage.Rendering.VertexSpec
 
+import           Linear ( V2(..), _x, _y )
+
 
 ---------------------------------------------------------------------------------------------------
 
@@ -42,84 +44,134 @@ runResourceManager :: (MonadIO m) => GLResources -> ResourceManager a -> m (a, G
 runResourceManager res rm = io $ runStateT rm res
 
 
-requestResource :: (Ord d) => Lens' GLResources (Map d r) -> (d -> ResourceManager r) -> d -> ResourceManager r 
-requestResource accessor loader resource = do
+requestResource :: (Ord key) 
+                => Lens' GLResources (Map key res)          -- ^ state-field accessor
+                -> (key -> ResourceManager res)             -- ^ loading function
+                -> (res -> ResourceManager res)             -- ^ updating function
+                -> key                                      -- ^ resource to load
+                -> ResourceManager res
+requestResource accessor loader updater resource = do
     resmap <- use accessor
-    unless (resmap^.contains resource) $ do
-        item <- loader resource
-        accessor.at resource ?= item
-    use accessor <&> \m -> m^.at resource ^?! _Just
+    item <- maybe
+        (loader resource)
+        (updater)
+        (resmap^.at resource)
+    
+    accessor.at resource ?= item
+    return $ item
 
 
-requestFramebuffer :: (String, FramebufferSpec TextureResource RenderbufferResource) -> ResourceManager Framebuffer
+requestFramebuffer :: (String, FramebufferSpec TextureResource RenderbufferResource) -> ResourceManager GLFramebuffer
 requestFramebuffer (fboIdent, spec) =
     let compiler = const $ compileFBO spec <&> flip (^?!) folded -- unsafe head 
-    in requestResource compiledFBOs compiler fboIdent
+    in requestResource compiledFBOs compiler (updateFramebuffer spec) fboIdent
 
     where 
 
     -- | creates a new framebuffer according to the given specs
-    compileFBO :: FramebufferSpec TextureResource RenderbufferResource -> ResourceManager (Either GL.FramebufferStatus Framebuffer)
+    compileFBO :: FramebufferSpec TextureResource RenderbufferResource -> ResourceManager (Either GL.FramebufferStatus GLFramebuffer)
     compileFBO spec = do
+        io $ print $ format "create fbo {0}" [ fboIdent ]
         fbo <- io $ GL.genObjectName
         io $ GL.bindFramebuffer GL.Framebuffer $= fbo
         
-        doAttachments
-        when (null $ spec^.fboColors) $ io $ GL.drawBuffer $= GL.NoBuffers
+        doAttachments spec
+        if (null $ spec^.fboColors)
+            then io $ GL.drawBuffer  $= GL.NoBuffers
+            else io $ GL.drawBuffers $= (mapColorAttachments $ spec^.fboColors)
         
         status <- io . GL.get $ GL.framebufferStatus GL.Framebuffer
         return $ case status of
-            GL.Complete -> Right $ Framebuffer fbo spec (const (return ()))
+            GL.Complete -> Right $ Framebuffer fbo spec
             _           -> Left status 
         
-        where
+    doAttachments spec = do
+        attaching $ spec^.fboColors
+        attaching $ spec^.fboStencil^..traverse
+        attaching $ spec^.fboDepth^..traverse
+        attaching $ spec^.fboDepthStencil^..traverse
 
-        doAttachments = do
-            attaching $ spec^.fboColors
-            attaching $ spec^.fboStencil^..traverse
-            attaching $ spec^.fboDepth^..traverse
+    --attachTargetToFBO :: Int -> FramebufferAttachment -> IO ()
+    attaching = imapM_ attachTargetToFBO
 
-        --attachTargetToFBO :: Int -> FramebufferAttachment -> IO ()
-        attaching = imapM_ attachTargetToFBO
+    attachTargetToFBO index attchmnt = 
+        case toGLAttachment attchmnt index of
+            (glAt, TextureTarget tt2d tex level) -> do
+                (_, texObj) <- requestTexture tex
+                io $ GL.framebufferTexture2D GL.Framebuffer glAt tt2d texObj level
+            (glAt, RenderbufferTarget rbuff)     -> do
+                (_, robj) <- requestRenderbuffer rbuff 
+                io $ GL.framebufferRenderbuffer GL.Framebuffer glAt GL.Renderbuffer robj
 
-        attachTargetToFBO index attchmnt = 
-            case toGLAttachment attchmnt index of
-                (glAt, TextureTarget tt2d tex level) -> do
-                    texObj <- requestTexture tex
-                    io $ GL.framebufferTexture2D GL.Framebuffer glAt tt2d texObj level
-                (glAt, RenderbufferTarget rbuff)     -> do
-                    robj <- requestRenderbuffer rbuff 
-                    io $ GL.framebufferRenderbuffer GL.Framebuffer glAt GL.Renderbuffer robj
+    toGLAttachment :: FramebufferAttachment TextureResource RenderbufferResource -> Int -> (GL.FramebufferObjectAttachment, AttachmentTarget TextureResource RenderbufferResource)
+    toGLAttachment (FramebufferAttachment ColorAttachment target) index    = (GL.ColorAttachment (fromIntegral index), target)
+    toGLAttachment (FramebufferAttachment DepthAttachment target) _        = (GL.DepthAttachment, target)
+    toGLAttachment (FramebufferAttachment StencilAttachment target) _      = (GL.StencilAttachment, target)
+    toGLAttachment (FramebufferAttachment DepthStencilAttachment target) _ = (GL.DepthStencilAttachment, target)
 
-        toGLAttachment :: FramebufferAttachment TextureResource RenderbufferResource -> Int -> (GL.FramebufferObjectAttachment, AttachmentTarget TextureResource RenderbufferResource)
-        toGLAttachment (FramebufferAttachment ColorAttachment target) index    = (GL.ColorAttachment (fromIntegral index), target)
-        toGLAttachment (FramebufferAttachment DepthAttachment target) _        = (GL.DepthAttachment, target)
-        toGLAttachment (FramebufferAttachment StencilAttachment target) _      = (GL.StencilAttachment, target)
-        toGLAttachment (FramebufferAttachment DepthStencilAttachment target) _ = (GL.DepthStencilAttachment, target)
+    mapColorAttachments = imap toBufferMode
+    toBufferMode index _ = GL.FBOColorAttachment $ fromIntegral index
 
+    updateFramebuffer :: FramebufferSpec TextureResource RenderbufferResource -> GLFramebuffer -> ResourceManager GLFramebuffer 
+    updateFramebuffer newspec f@(Framebuffer _fbo _oldspec) = do
+        let attachments = (newspec^.fboColors) ++ 
+                          (newspec^.fboStencil^..traverse) ++ 
+                          (newspec^.fboDepth^..traverse) ++ 
+                          (newspec^.fboDepthStencil^..traverse)
+        mapM_ requestAttachment attachments 
+        return $ f{_spec = newspec}
+
+    requestAttachment :: FramebufferAttachment TextureResource RenderbufferResource -> ResourceManager ()
+    requestAttachment (FramebufferAttachment _ (TextureTarget _ tex _))    = void $ requestTexture tex
+    requestAttachment (FramebufferAttachment _ (RenderbufferTarget rbuff)) = void $ requestRenderbuffer rbuff 
 
 
 requestTexture :: TextureResource -> ResourceManager GLTexture
-requestTexture = requestResource loadedTextures loadTexture
+requestTexture res = requestResource loadedTextures loadTexture (resizeTexture res) res
+    -- RESIZE HERE
     where
     -- | pushes texture to opengl
     loadTexture :: TextureResource -> ResourceManager GLTexture
     loadTexture (TextureImage _ img) = io $
-        handleTexObj =<< Tex.readTextureImg img
+        (imgSpec img,) <$> (handleTexObj =<< Tex.readTextureImg img)
 
-    loadTexture (TextureFile texFile) = io $
-        handleTexObj =<< (Tex.readTexture . encodeString $ texFile)
+    loadTexture (TextureFile texFile) = io $ do
+        eimg     <- Tex.readImage $ encodeString texFile
+        case eimg of
+            Left msg    -> error msg
+            Right img   -> do 
+                texObj  <- handleTexObj =<< (Tex.readTextureImg img)
+                return (imgSpec img, texObj)
 
-    loadTexture (TextureBuffer _ (GLTextureSpec target format (w,h))) = io $ do
+    loadTexture (TextureBuffer name target spec) = io $ do
+        let size    = fromIntegral <$> spec^.glBufferSize
+            texSize = GL.TextureSize2D (size^._x) (size^._y)
+            fmt     = spec^.glBufferFormat  
+        
+        print $ format "create tex {0} to {1}" [name, show size]
+        
         texObj <- GL.genObjectName
         GL.textureBinding target $= Just texObj
-        GL.texImage2D target GL.NoProxy 0 format 
-            (GL.TextureSize2D (fromIntegral w) (fromIntegral h)) 0 
-            (GL.PixelData GL.RGB GL.UnsignedByte nullPtr)
-        GL.textureFilter GL.Texture2D $= ((GL.Linear', Nothing), GL.Linear') -- TODO Def
+        
+        GL.textureLevelRange target $= (0,0)
+        GL.textureFilter target     $= ((GL.Nearest, Nothing), GL.Nearest) -- TODO Def
+        GL.texImage2D target GL.NoProxy 0 fmt texSize 0 (GL.PixelData (texFormat fmt) GL.UnsignedByte nullPtr)
+        
         GL.textureBinding target $= Nothing
-        -- TODO release binding
-        return texObj
+        return (spec, texObj)
+
+    imgSpec :: Tex.DynamicImage -> GLBufferSpec
+    imgSpec img = GLBufferSpec GL.RGB8 $ V2 (Tex.dynamicMap Tex.imageWidth img) (Tex.dynamicMap Tex.imageHeight img)
+
+    texFormat :: GL.PixelInternalFormat -> GL.PixelFormat
+    texFormat GL.DepthComponent24  = GL.DepthComponent
+    texFormat GL.DepthComponent32  = GL.DepthComponent
+    texFormat GL.DepthComponent32f = GL.DepthComponent
+    texFormat GL.DepthComponent16  = GL.DepthComponent
+    texFormat GL.RGB8              = GL.RGB
+    texFormat GL.RGBA8             = GL.RGBA
+    texFormat GL.RGBA'             = GL.RGBA
+    texFormat _ = error "Yage.Rendering.ResourceManager.texFormat: not supported internal format"
 
     handleTexObj res = do
         GL.textureFilter GL.Texture2D $= ((GL.Linear', Nothing), GL.Linear') -- TODO Def
@@ -128,20 +180,48 @@ requestTexture = requestResource loadedTextures loadTexture
             Left msg  -> error msg
             Right obj -> return obj
 
+    resizeTexture (TextureBuffer name target newSpec) (currentSpec, texObj) = do
+        let newSize = fromIntegral <$> newSpec^.glBufferSize
+            texSize = GL.TextureSize2D (newSize^._x) (newSize^._y)
+            fmt     = newSpec^.glBufferFormat
+        when (newSpec^.glBufferSize /= currentSpec^.glBufferSize) $ io $ do
+            print $ format "resize tex {0} to {1}" [name, show newSize]
+            GL.textureBinding target $= Just texObj
+            GL.texImage2D target GL.NoProxy 0 fmt texSize 0 (GL.PixelData (texFormat fmt) GL.UnsignedByte nullPtr)
+            GL.textureBinding target $= Nothing
+        return (newSpec, texObj)
+    resizeTexture _ (old, texObj) = return (old, texObj)
+
+
 
 requestRenderbuffer :: RenderbufferResource -> ResourceManager GLRenderbuffer
-requestRenderbuffer = requestResource loadedRenderbuffers loadRenderbuffer
+requestRenderbuffer res = requestResource loadedRenderbuffers loadRenderbuffer (resizeBuffer res) res
     where
 
-    loadRenderbuffer (RenderbufferResource _ (GLRenderbufferSpec format (w,h))) = io $ do
+    loadRenderbuffer (RenderbufferResource name spec@(GLBufferSpec fmt sz)) = io $ do
+        let size = GL.RenderbufferSize (fromIntegral $ sz^._x) (fromIntegral $ sz^._y)
+        print $ format "create buffer {0} to {1}" [name, show sz]
         rObj <- GL.genObjectName
         GL.bindRenderbuffer GL.Renderbuffer $= rObj
-        GL.renderbufferStorage GL.Renderbuffer format (GL.RenderbufferSize (fromIntegral w) (fromIntegral h))
-        return rObj
+        GL.renderbufferStorage GL.Renderbuffer fmt size
+        GL.bindRenderbuffer GL.Renderbuffer $= GL.noRenderbufferObject
+        return (spec, rObj)
+
+    resizeBuffer (RenderbufferResource name newSpec) (currentSpec, rObj) = do
+        let newSize  = fromIntegral <$> newSpec^.glBufferSize
+            buffSize = GL.RenderbufferSize (newSize^._x) (newSize^._y)
+            fmt      = newSpec^.glBufferFormat
+        when (newSpec^.glBufferSize /= currentSpec^.glBufferSize) $ io $ do
+            io $ print $ format "resize buffer {0} to {1}" [name, show newSize]
+            GL.bindRenderbuffer GL.Renderbuffer $= rObj
+            GL.renderbufferStorage GL.Renderbuffer fmt buffSize
+            GL.bindRenderbuffer GL.Renderbuffer $= GL.noRenderbufferObject
+        return (newSpec, rObj)
+
 
 
 requestShader :: ShaderResource -> ResourceManager GLShader
-requestShader = requestResource loadedShaders loadShader
+requestShader = requestResource loadedShaders loadShader return
     where
     loadShader :: ShaderResource -> ResourceManager ShaderProgram
     loadShader res = io $!
@@ -151,7 +231,7 @@ requestShader = requestResource loadedShaders loadShader
 
 requestVertexbuffer :: Mesh -> ResourceManager GLVertexbuffer
 requestVertexbuffer mesh = do
-    buff <- requestResource loadedVertexBuffer loadVertexBuffer mesh
+    buff <- requestResource loadedVertexBuffer loadVertexBuffer return mesh
     updateVertexBuffer mesh buff
     return buff
     
@@ -164,7 +244,7 @@ requestVertexbuffer mesh = do
 
     updateVertexBuffer :: Mesh -> GLVertexbuffer -> ResourceManager ()
     updateVertexBuffer mesh@Mesh{_meshModToken, _meshData, _meshAttr} (oldtoken, buff, ebo) = do
-        unless (_meshModToken == oldtoken) $ do
+        when (_meshModToken /= oldtoken) $ do
             io $ do
                 _ <- updateVertexBufferF (_meshData^.to _meshAttr) buff
                 GL.bindBuffer GL.ElementArrayBuffer $= Just ebo
@@ -174,7 +254,7 @@ requestVertexbuffer mesh = do
 
 
 requestRenderItem :: Mesh -> ShaderResource -> ResourceManager GLVertexArray
-requestRenderItem mesh shader = requestResource loadedVertexArrays (uncurry loadVertexArray) (mesh,shader)
+requestRenderItem mesh shader = requestResource loadedVertexArrays (uncurry loadVertexArray) return (mesh,shader)
     where
     loadVertexArray :: Mesh -> ShaderResource -> ResourceManager GLVertexArray
     loadVertexArray mesh shader = do
@@ -197,8 +277,8 @@ initialGLRenderResources :: GLResources
 initialGLRenderResources = 
     GLResources mempty mempty mempty mempty mempty mempty
 
-defaultFramebuffer :: Framebuffer
-defaultFramebuffer = Framebuffer GL.defaultFramebufferObject mempty (const (return ()))
+defaultFramebuffer :: GLFramebuffer
+defaultFramebuffer = Framebuffer GL.defaultFramebufferObject mempty
 
 replaceIndices :: [Word32] -> IO ()
 replaceIndices = replaceBuffer GL.ElementArrayBuffer

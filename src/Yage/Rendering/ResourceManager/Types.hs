@@ -33,9 +33,9 @@ import           Yage.Rendering.Backend.Framebuffer
 type GLVertexbuffer        = (ModificationToken, VertexBufferObject, EBO)
 type GLVertexArray         = VAO
 type GLShader              = ShaderProgram
-type GLTexture             = GL.TextureObject
-type GLRenderbuffer        = GL.RenderbufferObject
-type GLFramebuffer         = Framebuffer
+type GLTexture             = (GLBufferSpec, GL.TextureObject)
+type GLRenderbuffer        = (GLBufferSpec, GL.RenderbufferObject)
+type GLFramebuffer         = Framebuffer TextureResource RenderbufferResource
 
 
 data GLResources = GLResources

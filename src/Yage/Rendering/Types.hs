@@ -2,6 +2,7 @@
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE DeriveGeneric              #-}
+{-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE ExistentialQuantification  #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE NamedFieldPuns             #-}
@@ -16,16 +17,16 @@ module Yage.Rendering.Types
 
     , Renderable(..), SomeRenderable(..), renderableType, fromRenderable, toRenderable
     , RenderDefinition(..)
-    , RenderScene(..), Camera(..), CameraHandle, CameraPlanes(..), Viewport(..)
+    , RenderScene(..), Camera(..), CameraHandle, CameraPlanes(..), Viewport(..), ViewportI, ViewportD
     , RenderTransformation(..), idTransformation
     , RenderEntity(..)
     , Mesh(..), MeshData(..), ModificationToken
     , Index, Position, Orientation, Scale
     , ShaderResource(..), ShaderProgram(..)
-    , TextureDefinition(..), TextureResource(..), TextureChannel, GLTextureSpec(..)
-    , RenderbufferResource(..), GLRenderbufferSpec(..)
+    , TextureDefinition(..), TextureResource(..), TextureChannel, GLBufferSpec(..)
+    , RenderbufferResource(..)
 
-    , toIndex1, GL.Color4(..), GL.PixelInternalFormat(..), GL.TextureTarget2D(..)
+    , toIndex1, toGLViewport, GL.Color4(..), GL.PixelInternalFormat(..), GL.TextureTarget2D(..)
     , module GLRawTypes
     ) where
 
@@ -41,7 +42,7 @@ import           GHC.Generics                        (Generic)
 
 import           Control.Monad.State                 ()
 import           Control.Monad.Writer                ()
-import           Linear                              (M22, M33, M44, Quaternion, V3 (..), V2, zero, axisAngle)
+import           Linear                              (M22, M33, M44, Quaternion, V3 (..), V2, zero, axisAngle, _x, _y)
 ---------------------------------------------------------------------------------------------------
 import           Graphics.GLUtil
 import qualified Graphics.GLUtil.Camera3D            as Cam
@@ -59,15 +60,17 @@ type FBO = GL.FramebufferObject
 
 ---------------------------------------------------------------------------------------------------
 
-data GLTextureSpec = GLTextureSpec GL.TextureTarget2D GL.PixelInternalFormat (Int, Int)
-data GLRenderbufferSpec = GLRenderbufferSpec GL.PixelInternalFormat (Int, Int)
+data GLBufferSpec = GLBufferSpec 
+    { _glBufferFormat    :: !GL.PixelInternalFormat 
+    , _glBufferSize      :: V2 Int
+    }
 
-data RenderbufferResource = RenderbufferResource String GLRenderbufferSpec
+data RenderbufferResource = RenderbufferResource String GLBufferSpec
 
 data TextureResource =
       TextureFile FilePath
     | TextureImage String DynamicImage
-    | TextureBuffer String GLTextureSpec -- only backed by opengl
+    | TextureBuffer String GL.TextureTarget2D GLBufferSpec -- only backed by opengl
     deriving (Typeable)
 
 
@@ -75,19 +78,19 @@ data TextureResource =
 instance Ord TextureResource where
     compare (TextureFile pathA   ) (TextureFile pathB   )    = compare pathA pathB
     compare (TextureImage nameA _) (TextureImage nameB _)    = compare nameA nameB
-    compare (TextureBuffer nameA _) (TextureBuffer nameB _)  = compare nameA nameB
+    compare (TextureBuffer nameA _ _) (TextureBuffer nameB _ _)  = compare nameA nameB
     compare (TextureFile _) _ = GT
     compare _ _               = LT
 
 instance Show TextureResource where
     show (TextureFile path)     = show path
     show (TextureImage name _ ) = show name
-    show (TextureBuffer name _)  = show name
+    show (TextureBuffer name _ _)  = show name
 
 instance Eq TextureResource where
     (==) (TextureFile name1) (TextureFile name2)           = name1 == name2
     (==) (TextureImage name1 _ ) (TextureImage name2 _ )   = name1 == name2
-    (==) (TextureBuffer name1 _) (TextureBuffer name2 _)   = name1 == name2
+    (==) (TextureBuffer name1 _ _) (TextureBuffer name2 _ _)   = name1 == name2
     (==) _ _ = False
 
 instance Show RenderbufferResource where
@@ -173,11 +176,20 @@ data RenderScene = RenderScene
     } deriving (Typeable)
 
 
-data Viewport = Viewport
-    { _vpXY     :: V2 Int
-    , _vpSize   :: V2 Int       -- ^ (width, height)
+type ViewportI = Viewport Int
+type ViewportD = Viewport Double
+data Viewport a = Viewport
+    { _vpXY     :: V2 a
+    , _vpSize   :: V2 a       -- ^ (width, height)
     , _vpFactor :: !Double      -- ^ for retina use 2
-    }
+    } 
+    deriving ( Typeable, Functor )
+
+toGLViewport :: ViewportI -> (GL.Position, GL.Size)
+toGLViewport Viewport{..} = 
+    let pos  = fromIntegral <$> _vpXY
+        size = fromIntegral . (floor _vpFactor *) <$> _vpSize
+    in ( GL.Position (pos^._x) (pos^._y), GL.Size (size^._x) (size^._y) )
 
 ---------------------------------------------------------------------------------------------------
 
@@ -189,7 +201,7 @@ data RenderTransformation = RenderTransformation
     { _transPosition    :: !Position
     , _transOrientation :: !Orientation
     , _transScale       :: !Scale
-    }
+    } deriving ( Show, Typeable )
 
 idTransformation :: RenderTransformation
 idTransformation =
@@ -222,7 +234,7 @@ data MeshData v = MeshData
     { _mDataVertices :: ![v]
     , _mDataIndices  :: ![Index]
     , _mDataTriCount :: !Int
-    } deriving (Show, Generic)
+    } deriving ( Show, Generic )
 
 instance Show Mesh where
     show Mesh{..} =
@@ -284,6 +296,6 @@ instance Hashable TextureResource where
         salt `hashWithSalt` file
     hashWithSalt salt (TextureImage name _) =
         salt `hashWithSalt` name
-    hashWithSalt salt (TextureBuffer name _) =
+    hashWithSalt salt (TextureBuffer name _ _) =
         salt `hashWithSalt` name
 

@@ -41,7 +41,7 @@ import           Yage.Rendering.RenderScene             as RenderScene
 import           Yage.Rendering.Mesh                    as Mesh
 import           Yage.Rendering.VertexSpec              as VertexSpec ((@=), vPosition, vNormal, vColor, vTexture)
 import           Yage.Rendering.ResourceManager
-import           Yage.Rendering.ResourceManager         as ResourceManager (initialGLRenderResources)
+import           Yage.Rendering.ResourceManager         as ResourceManager (GLResources, initialGLRenderResources)
 import           Yage.Rendering.ResourceManager         as Framebuffer (defaultFramebuffer)
 import           Yage.Rendering.Types                   as Types
 import           Yage.Rendering.Backend.RenderPipeline
@@ -52,19 +52,26 @@ type RenderSystem = RWST () RenderLog GLResources IO
 
 
 
-data DeferredLightingDefinition = DeferredLightingDefinition
-    { dfGeoPassDefinition       :: PassDefinition -- see Rendering
-    , dfLightingPassDefinitin   :: PassDefinition
+data DeferredLightingDescr = DeferredLightingDescr
+    { dfGeoPassDescr        :: PassDescr
+    , dfLightingPassDescr   :: PassDescr
+    , dfFinalScreen         :: PassDescr
     }
 
  
 
+data TargetFramebuffer =
+      DefaultFramebuffer 
+    | CustomFramebuffer (String, FramebufferSpec TextureResource RenderbufferResource)
 
-data PassDefinition = PassDefinition
-    { fbSpec           :: (String, FramebufferSpec TextureResource RenderbufferResource)
-    , fbShader         :: ShaderResource
-    , fbGlobalUniforms :: RenderScene    -> ShaderDefinition ()
-    , fbEntityUniforms :: RenderEntity   -> ShaderDefinition () 
+data PassDescr = PassDescr
+    { passFBSpec         :: TargetFramebuffer
+    , passShader         :: ShaderResource
+    , passGlobalUniforms :: RenderScene    -> ShaderDefinition ()
+    , passEntityUniforms :: RenderEntity   -> ShaderDefinition ()
+    , passGlobalTextures :: [TextureDefinition]
+    , passPreRendering   :: Renderer ()
+    , passPostRendering  :: Renderer ()
     }
 
 
@@ -80,31 +87,38 @@ mkRenderSystem toRender pipeline = do
     tell rlog
 
 
-createDeferredRenderSystem :: DeferredLightingDefinition -> RenderScene -> RenderSystem ()
-createDeferredRenderSystem DeferredLightingDefinition{..} scene = do
-    ((geoSetup, lightSetup, pipelineData), res) <- loadPipelineResources =<< get
+createDeferredRenderSystem :: DeferredLightingDescr -> RenderScene -> ViewportD -> RenderSystem ()
+createDeferredRenderSystem DeferredLightingDescr{..} scene viewport = do
+    ((geoSetup, {-- lightSetup,--} screenSetup, pipelineData), res) <- loadPipelineResources =<< get
     put res
-    mkRenderSystem pipelineData $ deferredLighting (mkGeoPass geoSetup) (mkLightPass lightSetup)
+    mkRenderSystem pipelineData $ 
+        deferredLighting 
+            (mkGeoPass geoSetup)
+            --(mkLightPass lightSetup)
+            (mkScreenPass screenSetup)
 
     where
 
     loadPipelineResources res = 
         runResourceManager res $ 
-            (,,) <$> loadFramebufferSetup dfGeoPassDefinition
-                 <*> loadFramebufferSetup dfLightingPassDefinitin
+           (,,) <$> loadFramebufferSetup dfGeoPassDescr
+                 -- <*> loadFramebufferSetup dfLightingPassDescr
+                 <*> loadFramebufferSetup dfFinalScreen
                  <*> loadPipelineData
 
 
-    loadFramebufferSetup :: PassDefinition
+    loadFramebufferSetup :: PassDescr
                          -> ResourceManager FramebufferSetup
-    loadFramebufferSetup PassDefinition{..} = 
+    loadFramebufferSetup PassDescr{..} = 
         FramebufferSetup 
-            <$> requestFramebuffer fbSpec
-            <*> requestShader fbShader
-            <*> pure (fbGlobalUniforms scene) -- renderView to this here plz
-            -- <*> pure []
-            <*> pure (return ())
-            <*> pure (return ())
+            <$> case passFBSpec of
+                CustomFramebuffer spec -> requestFramebuffer spec
+                DefaultFramebuffer     -> pure defaultFramebuffer
+            <*> requestShader passShader
+            <*> pure (passGlobalUniforms scene)
+            <*> forM passGlobalTextures makeTexAssignment
+            <*> pure passPreRendering
+            <*> pure passPostRendering
 
         
 
@@ -112,14 +126,20 @@ createDeferredRenderSystem DeferredLightingDefinition{..} scene = do
     loadPipelineData :: ResourceManager DeferredLightingData
     loadPipelineData = 
         let sceneEnts       = scene^.sceneEntities
-            rEntities       = map toRenderEntity sceneEnts  -- TODO Filter out items with forward shader
-            geoShader       = fbShader dfGeoPassDefinition
-            lightShader     = fbShader dfLightingPassDefinitin
-            getGeoUniforms  = fbEntityUniforms dfGeoPassDefinition
+            rEntities       = map toRenderEntity sceneEnts  -- TODO Filter out items with dedicated shaders for forward shader
+            geoShader       = passShader dfGeoPassDescr
+            getGeoUniforms  = passEntityUniforms dfGeoPassDescr
+            
+            lightShader     = passShader dfLightingPassDescr
+            
+            screenShader    = passShader dfFinalScreen
+            getScreenUnis   = passEntityUniforms dfFinalScreen 
+            
         in do
             geos     <- forM rEntities $ loadRenderEntity geoShader getGeoUniforms
             lights   <- return []
-            return $ DeferredLightingData geos lights
+            screen   <- loadRenderEntity screenShader getScreenUnis (toRenderEntity viewport)
+            return $ DeferredLightingData geos lights screen
 
 
 
@@ -135,37 +155,37 @@ loadRenderEntity withProgram entityUniforms ent =
                <*> forM (rdef^.rdefTextures) makeTexAssignment
                <*> pure (rdef^.rdefMode)
                <*> pure (meshTriangleCount (rdef^.rdefData))
-    
-    where 
-    
-    makeTexAssignment tex =
-        let ch = tex^.texChannel & _1 %~ fromIntegral
-        in (,ch) <$> requestTexture (tex^.texResource)
+
+
+makeTexAssignment :: TextureDefinition -> ResourceManager TextureAssignment
+makeTexAssignment tex =
+    let ch = tex^.texChannel & _1 %~ fromIntegral
+    in (,ch) . snd <$> requestTexture (tex^.texResource)
 
 
 ---------------------------------------------------------------------------------------------------
 
-newtype ZOrderedRenderable = ZOrderedRenderable RenderEntity
-    deriving (Typeable, Renderable)
+--newtype ZOrderedRenderable = ZOrderedRenderable RenderEntity
+--    deriving (Typeable, Renderable)
 
-instance Eq ZOrderedRenderable where
-    a == b =
-        let aZ = (renderTransformation a)^.transPosition._z
-            bZ = (renderTransformation b)^.transPosition._z
-        in aZ == bZ
+--instance Eq ZOrderedRenderable where
+--    a == b =
+--        let aZ = (renderTransformation a)^.transPosition._z
+--            bZ = (renderTransformation b)^.transPosition._z
+--        in aZ == bZ
 
-instance Ord ZOrderedRenderable where
-    compare a b =
-        let aZ = (renderTransformation a)^.transPosition._z
-            bZ = (renderTransformation b)^.transPosition._z
-        in compare aZ bZ
+--instance Ord ZOrderedRenderable where
+--    compare a b =
+--        let aZ = (renderTransformation a)^.transPosition._z
+--            bZ = (renderTransformation b)^.transPosition._z
+--        in compare aZ bZ
 
-newtype PositionOrderedEntity = PositionOrderedEntity { unPositionOrderedEntity :: RenderEntity }
-    deriving (Typeable, Renderable)
+--newtype PositionOrderedEntity = PositionOrderedEntity { unPositionOrderedEntity :: RenderEntity }
+--    deriving (Typeable, Renderable)
 
 
-instance Eq PositionOrderedEntity where
-    a == b = (renderTransformation a)^.transPosition == (renderTransformation b)^.transPosition
+--instance Eq PositionOrderedEntity where
+--    a == b = (renderTransformation a)^.transPosition == (renderTransformation b)^.transPosition
 
-instance Ord PositionOrderedEntity where
-    compare a b = ((renderTransformation a)^.transPosition) `compare` ((renderTransformation b)^.transPosition)
+--instance Ord PositionOrderedEntity where
+--    compare a b = ((renderTransformation a)^.transPosition) `compare` ((renderTransformation b)^.transPosition)

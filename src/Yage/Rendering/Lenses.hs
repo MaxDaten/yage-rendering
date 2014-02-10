@@ -15,6 +15,7 @@ import           Linear (V3, Quaternion)
 
 
 makeLenses ''TextureDefinition
+makeLenses ''GLBufferSpec
 makeLenses ''ShaderResource
 makeLenses ''RenderDefinition
 makeLenses ''RenderScene

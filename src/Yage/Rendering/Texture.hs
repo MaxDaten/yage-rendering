@@ -3,7 +3,7 @@
 {-# LANGUAGE RankNTypes #-}
 module Yage.Rendering.Texture (
       TexColor(), TexInfo()
-    , readTextureImg, readTexInfoImg
+    , readTextureImg, readTexInfoImgWith
     , module JT
     ) where
 
@@ -11,10 +11,9 @@ import Yage.Prelude
 
 import Graphics.GLUtil.JuicyTextures as JT
 import Codec.Picture as JT
+import Codec.Picture.Types as JT
 import Graphics.GLUtil.Textures
-import Codec.Picture.Types (convertImage)
 import Graphics.Rendering.OpenGL (TextureObject)
-
 
 deriving instance Show TexColor
 
@@ -23,8 +22,8 @@ instance Show (TexInfo a) where
 
 
 -- http://hackage.haskell.org/package/GLUtil-0.7/docs/src/Graphics-GLUtil-JuicyTextures.html#readTexture
-readTexInfoImg :: DynamicImage -> (forall a. IsPixelData a => TexInfo a -> IO b) -> IO (Either String b)
-readTexInfoImg img k = getTexInfo img
+readTexInfoImgWith :: DynamicImage -> (forall a. IsPixelData a => TexInfo a -> IO b) -> IO (Either String b)
+readTexInfoImgWith img k = getTexInfo img
     where
         getTexInfo (ImageY8    (Image w h p)) = Right <$> k (texInfo w h TexMono p)
         getTexInfo (ImageYF    (Image w h p)) = Right <$> k (texInfo w h TexMono p)
@@ -37,5 +36,5 @@ readTexInfoImg img k = getTexInfo img
 
 
 readTextureImg :: DynamicImage -> IO (Either String TextureObject)
-readTextureImg img = readTexInfoImg img loadTexture
+readTextureImg res = readTexInfoImgWith res loadTexture
 
