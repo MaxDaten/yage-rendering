@@ -5,11 +5,7 @@ import Control.Lens (makeLenses)
 
 import Yage.Rendering.Backend.Renderer.Types 
 
-makeLenses ''ViewDefinition
-makeLenses ''RenderView
-makeLenses ''RenderTarget
-makeLenses ''ShaderEnv
 makeLenses ''RenderLog
-makeLenses ''RenderSettings
 makeLenses ''RenderConfig
+makeLenses ''RenderState
 makeLenses ''RenderData

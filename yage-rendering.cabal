@@ -37,23 +37,26 @@ library
                         Yage.Rendering.Lenses
                         Yage.Rendering.Texture
                         Yage.Rendering.Mesh
-                        Yage.Rendering.Shader
-                        Yage.Rendering.RenderWorld
+                        Yage.Rendering.ResourceManager
                         Yage.Rendering.RenderScene
                         Yage.Rendering.RenderEntity
                         Yage.Rendering.VertexSpec
                         Yage.Rendering.Primitives
+                        Yage.Rendering.Lighting
                         
                         Yage.Rendering.Backend.Shader
                         Yage.Rendering.Backend.Renderer
+                        Yage.Rendering.Backend.Framebuffer
                         Yage.Rendering.Backend.Renderer.Logging
+                        Yage.Rendering.Backend.Renderer.DeferredLighting
+                        Yage.Rendering.Backend.RenderPipeline
   other-modules:
                         Paths_yage_rendering
                         Yage.Rendering.Utils
 
                         Yage.Rendering.Backend.Renderer.Types
                         Yage.Rendering.Backend.Renderer.Lenses
-                        Yage.Rendering.RenderWorld.Types
+                        Yage.Rendering.ResourceManager.Types
 
   If flag(perf)
     ghc-options:        -threaded -O2
@@ -78,6 +81,7 @@ library
                         , JuicyPixels             >= 3
 
                         , mtl                     >= 2.1
+                        , stm                     >= 2.4
                         , containers              >= 0.5
                         , unordered-containers    >= 0.2
                         , hashable                >= 1

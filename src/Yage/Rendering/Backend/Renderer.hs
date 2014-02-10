@@ -6,9 +6,10 @@
 module Yage.Rendering.Backend.Renderer (
       module Types
     , runRenderer, renderFrame
-    , (!=), shaderEnv
+    , (!=), shaderEnv, runUniform
     , logRenderM
     , version
+    , withFramebuffer, withShader, withTexturesAt
     ) where
 ---------------------------------------------------------------------------------------------------
 import           Yage.Prelude                            hiding (log)
@@ -20,14 +21,14 @@ import           Control.Monad                           (forM_, mapM_, when)
 import           Control.Monad.Reader                    (ask, runReaderT)
 import           Control.Monad.RWS.Strict                (runRWST)
 
-import           Graphics.GLUtil                         hiding (makeVAO,
-                                                          offset0)
+import qualified Graphics.GLUtil                         as GLU hiding (makeVAO, offset0)
+import           Graphics.GLUtil                         (ShaderProgram(..))
 import qualified Graphics.Rendering.OpenGL               as GL
 import           Graphics.Rendering.OpenGL.GL            (($=))
 
 import           Linear                                  (V2(..))
 ---------------------------------------------------------------------------------------------------
-import           Yage.Rendering.Shader
+import           Yage.Rendering.Backend.Framebuffer
 
 import           Yage.Rendering.Backend.Renderer.Lenses  as Types
 import           Yage.Rendering.Backend.Renderer.Logging
@@ -37,16 +38,12 @@ import           Yage.Rendering.Backend.Renderer.Types   as Types
 import           Paths_yage_rendering
 
 
-data RenderBatch r = RenderBatch
-    { withBatch     :: ([r] -> Renderer ()) -> Renderer ()
-    , perItemAction :: r -> Renderer ()
-    , batch         :: [r]
-    }
-
 
 -- TODO :: combine this with the scene setup
-runRenderer :: Renderer a -> RenderSettings -> IO (a, (), RenderLog)
-runRenderer renderer env = runRWST render env ()
+runRenderer :: Renderer a -> IO (a, RenderLog)
+runRenderer renderer = do
+    (a, _st, rlog) <- runRWST render () initRenderState
+    return (a, rlog)
     where
         render = do
             beforeRender
@@ -55,55 +52,49 @@ runRenderer renderer env = runRWST render env ()
             return a
 
 
---renderView :: RenderView -> [ViewDefinition] -> Renderer ()
---renderView view vdefs = renderFrame view vdefs >> afterFrame
+
+
+renderToFramebuffer :: [RenderData] -> Framebuffer tex rbuff -> Renderer ()
+renderToFramebuffer rdata toFramebuffer = 
+    withFramebuffer toFramebuffer DrawTarget $ \_fb -> 
+        renderFrame rdata
+
+
+renderFrame :: [RenderData] -> Renderer ()
+renderFrame rdata = do
+    forM_ rdata renderRenderData
 
 
 
---afterFrame :: Renderer ()
---afterFrame = return ()
 
+{--
 
-renderFrame :: RenderView -> [ViewDefinition] -> Renderer ()
-renderFrame view vdefs = do
-    --- beforeRender
+data RenderBatch r = RenderBatch
+    { withBatch     :: ([r] -> Renderer ()) -> Renderer ()
+    , perItemAction :: r -> Renderer ()
+    , batch         :: [r]
+    }
 
-    (_a, _time) <- ioTime $ doRender view vdefs
-    return ()
-    --let stats = RenderStatistics
-    --        { lastObjectCount    = -1
-    --        , lastRenderDuration = renderTime
-    --        , lastTriangleCount  = -1 -- sum $! map (triCount . model) $ entities scene
-    --        , loadedShadersCount = shCount
-    --        , loadedMeshesCount  = mshCount
-    --        }
-    --logRenderM $ show stats
-
-    -- afterRender
-
-
-doRender :: RenderView -> [ViewDefinition] -> Renderer ()
+doRender :: RenderView -> [RenderData] -> Renderer ()
 doRender view vdefs =
     let batches = createShaderBatches view vdefs
     in forM_ batches $ renderBatch view
 
-
-
-renderBatch :: RenderView -> RenderBatch ViewDefinition -> Renderer ()
+renderBatch :: RenderView -> RenderBatch RenderData -> Renderer ()
 renderBatch view RenderBatch{..} = withBatch $
-    mapM_ (perItemAction >> renderViewDefinition view)
+    mapM_ (perItemAction >> renderViewEntity view)
 
 
-createShaderBatches :: RenderView -> [ViewDefinition] -> [RenderBatch ViewDefinition]
+createShaderBatches :: RenderView -> [ViewEntity] -> [RenderBatch ViewEntity]
 createShaderBatches _view vdefs =
     let shaderGroups = groupBy sameShader vdefs
     in map mkShaderBatch shaderGroups
     where
-        sameShader :: ViewDefinition -> ViewDefinition -> Bool
+        sameShader :: ViewEntity -> ViewEntity -> Bool
         sameShader a b = a^.vdRenderData.shaderProgram.to program 
                          == b^.vdRenderData.shaderProgram.to program
 
-        mkShaderBatch :: [ViewDefinition] -> RenderBatch ViewDefinition
+        mkShaderBatch :: [ViewEntity] -> RenderBatch ViewEntity
         mkShaderBatch []         = error "empty RenderBatch: should be at least one for all items"
         mkShaderBatch defs@(v:_) =
             let batchShader = v^.vdRenderData.shaderProgram
@@ -112,20 +103,22 @@ createShaderBatches _view vdefs =
                 , perItemAction = \_ -> return ()
                 , batch         = defs
                 }
+--}
 
 
 
 beforeRender :: Renderer ()
-beforeRender = setupFrame
+beforeRender = return ()
 
+{--
 
 setupFrame :: Renderer ()
 setupFrame = do
-    clearC <- view $ reRenderConfig.rcConfClearColor
+    --clearC <- undefined --  TODO view $ reRenderConfig.rcConfClearColor
     wire   <- view $ reRenderConfig.rcConfWireframe
     target <- view reRenderTarget
     io $! do
-        GL.clearColor  $= realToFrac <$> clearC
+        --GL.clearColor  $= realToFrac <$> clearC
         GL.depthFunc   $= Just GL.Less    -- TODO to init
         GL.depthMask   $= GL.Enabled      -- TODO to init
         GL.blend       $= GL.Enabled      -- TODO to init/render target
@@ -150,6 +143,7 @@ setupFrame = do
                 V2 x y = fromIntegral <$> target^.targetXY
             in GL.viewport $= ( GL.Position (factor * x) (factor * y)
                               , GL.Size (factor * w) (factor * h))
+--}
 
 
 ---------------------------------------------------------------------------------------------------
@@ -162,33 +156,29 @@ afterRender = return ()
 
 ---------------------------------------------------------------------------------------------------
 
-renderViewDefinition :: RenderView -> ViewDefinition -> Renderer ()
-renderViewDefinition _view vdef =
-    let rdata = vdef^.vdRenderData
-    in do
-        checkErr "start rendering"
-        io $! withVAO (rdata^.vao) . withTexturesAt GL.Texture2D (rdata^.to tUnits) $! do
+renderRenderData :: RenderData -> Renderer ()
+renderRenderData rdata = do
+    checkErr "start rendering"
+    mshader <- use currentShader
+    withVAO (rdata^.vao) . withTexturesAt GL.Texture2D (rdata^.textureChannels) $! do
 
-            checkErr "preuniform"
-            let (shaderDef, shaderEnv) = vdef^.vdUniformDef
-            -- runUniform (udefs >> mapTextureSamplers texObjs) shaderEnv -- why no texture samplers anymore?
-            runUniform shaderDef $ shaderEnv & seViewDef .~ vdef
+        checkErr "preuniform"
+        -- runUniform (udefs >> mapTextureSamplers texObjs) shaderEnv -- why no texture samplers anymore?
+        when (isJust mshader) $ runUniform (rdata^.uniformDefs) (mshader^?!_Just) -- ugly
 
-            checkErr "postuniform"
+        checkErr "postuniform"
 
-            drawNow (rdata^.drawMode) rdata
-            checkErr "after draw"
-        logCountObj
-        logCountTriangles (rdata^.elementCount)
-        checkErr "end render"
+        drawNow (rdata^.drawMode) rdata
+        checkErr "after draw"
+    logCountObj
+    logCountTriangles (rdata^.elementCount)
+    checkErr "end render"
     where
-        checkErr msg = io $ throwErrorMsg msg
+        checkErr msg = io $ GLU.throwErrorMsg msg
 
-        tUnits d = over (mapped._2) (^._1) (d^.texObjs)
-
-        drawNow mode@GL.Triangles rdata = GL.drawElements mode (getCnt mode rdata) GL.UnsignedInt nullPtr
-        drawNow mode@GL.Points    rdata = GL.drawElements mode (getCnt mode rdata) GL.UnsignedInt nullPtr
-        drawNow mode@GL.Lines     rdata = GL.drawElements mode (getCnt mode rdata) GL.UnsignedInt nullPtr
+        drawNow mode@GL.Triangles rdata = io $ GL.drawElements mode (getCnt mode rdata) GL.UnsignedInt nullPtr
+        drawNow mode@GL.Points    rdata = io $ GL.drawElements mode (getCnt mode rdata) GL.UnsignedInt nullPtr
+        drawNow mode@GL.Lines     rdata = io $ GL.drawElements mode (getCnt mode rdata) GL.UnsignedInt nullPtr
         drawNow mode _ = error $ format "primitive mode {0} not supported" [show mode]
 
         getCnt GL.Triangles rdata = fromIntegral $ 3 * rdata^.elementCount
@@ -211,18 +201,74 @@ mapTextureSamplers texObjs =
 
 -- | runs the renderer in the given environment to render one frame.
 
-runUniform :: ShaderDefinition a -> ShaderEnv -> IO a
+runUniform :: ShaderDefinition a -> ShaderProgram -> Renderer a
 runUniform = runReaderT
 
 ---------------------------------------------------------------------------------------------------
 
 infixr 2 !=
-(!=) :: (AsUniform u) => String -> u -> ShaderDefinition ()
+(!=) :: (GLU.AsUniform u) => String -> u -> ShaderDefinition ()
 name != uni = do
-    sp <- view seProgram
+    sp <- ask
     io $ 
-        uni `asUniform` getUniform sp name 
+        uni `GLU.asUniform` GLU.getUniform sp name 
             `catch` \(e::SomeException) -> print $ format "warning: {0}" [show e]
 
-shaderEnv :: ShaderDefinition ShaderEnv
+shaderEnv :: ShaderDefinition ShaderProgram
 shaderEnv = ask
+
+
+
+-- | the current bound fbo is NOT restored (lack of support by the OpenGL lib),
+-- instead the default is restored 
+withFramebuffer :: Framebuffer tex rbuff -> FBOTarget -> (Framebuffer tex rbuff -> Renderer a) -> Renderer a
+withFramebuffer fb@(Framebuffer fbo _) t action = 
+    let target = getGLTarget t in do
+    -- old <- return GL.FramebufferObject 0 -- TODO get real git glGetIntegerv GL_FRAMEBUFFER_BINDING
+    --currentFramebuffer ?= fb
+    io $ GL.bindFramebuffer target $= fbo
+    
+    result <- action fb
+    
+    io $ GL.bindFramebuffer target $= GL.defaultFramebufferObject
+    --currentFramebuffer .= Nothing
+    return result
+
+
+withShader :: ShaderProgram -> (ShaderProgram -> Renderer a) -> Renderer a
+withShader shader m = do
+    currentShader ?= shader
+    io $! GL.currentProgram $= Just (program shader)
+    
+    res <- m shader
+    
+    io $! GL.currentProgram $= Nothing
+    currentShader .= Nothing
+    return res
+
+
+-- https://github.com/acowley/GLUtil/blob/master/src/Graphics/GLUtil
+
+withVAO :: GL.VertexArrayObject -> Renderer r -> Renderer r
+withVAO v ma = do
+    io $ GL.bindVertexArrayObject $= Just v
+    r <- ma
+    io $ GL.bindVertexArrayObject $= Nothing
+    return r
+
+
+-- from GLUtil do pull it into my Renderer monad
+withTexturesAt :: GL.BindableTextureTarget t
+               => t -> [TextureAssignment]-> Renderer a -> Renderer a
+withTexturesAt tt ts m = do 
+    mapM_ aux ts
+    r <- m
+    mapM_ (cleanup . (^._2._1)) ts
+    return r
+    where 
+        aux (t,(i,_)) = io $ do 
+            GL.activeTexture $= GL.TextureUnit i
+            GL.textureBinding tt $= Just t
+        cleanup i = io $ do 
+            GL.activeTexture $= GL.TextureUnit i
+            GL.textureBinding tt $= Nothing

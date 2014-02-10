@@ -1,9 +1,14 @@
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE RecordWildCards            #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE FunctionalDependencies     #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE TupleSections              #-}
+
 module Yage.Rendering
-    ( (!=), shaderEnv, RenderResources
+    ( (!=), shaderEnv
     , module Types
     , module Yage.Rendering
     , module Lenses
@@ -13,102 +18,175 @@ module Yage.Rendering
     , module VertexSpec
     , module Mesh
     , module LinExport
+    , module Framebuffer
+    , module ResourceManager
     ) where
 
-import           Data.List                              (map)
-import           GHC.Float                              (double2Float)
 import           Yage.Prelude
+import           Yage.Math
+
+import           Data.List                              (map)
 
 import           Control.Monad.RWS
 
-import           Linear                                 as Linear (V2(..), M44, _x, _y, _z)
 import           Linear                                 as LinExport
 
 import           Yage.Rendering.Backend.Renderer        as Renderer
 import           Yage.Rendering.Backend.Renderer.Lenses as RendererExports
-import           Yage.Rendering.Backend.Renderer.Types  as RendererExports (RenderConfig (..), RenderLog (..), RenderSettings (..), RenderTarget (..), ShaderDefinition)
+import           Yage.Rendering.Backend.Renderer.Types  as RendererExports (RenderConfig (..), RenderLog (..), ShaderDefinition)
+import           Yage.Rendering.Backend.Framebuffer     as Framebuffer
 import           Yage.Rendering.Lenses                  as Lenses
 import           Yage.Rendering.RenderEntity            as RenderEntity
 import           Yage.Rendering.RenderScene             as RenderScene
 import           Yage.Rendering.Mesh                    as Mesh
 import           Yage.Rendering.VertexSpec              as VertexSpec ((@=), vPosition, vNormal, vColor, vTexture)
-import           Yage.Rendering.RenderWorld
+import           Yage.Rendering.ResourceManager
+import           Yage.Rendering.ResourceManager         as ResourceManager (GLResources, initialGLRenderResources)
+import           Yage.Rendering.ResourceManager         as Framebuffer (defaultFramebuffer)
 import           Yage.Rendering.Types                   as Types
+import           Yage.Rendering.Backend.RenderPipeline
+import           Yage.Rendering.Backend.Renderer.DeferredLighting
 
-data RenderUnit = RenderUnit
-    { _renderSubject :: RenderScene
-    --, _renderSettings  :: RenderSettings
+
+type RenderSystem = RWST () RenderLog GLResources IO
+
+
+
+data DeferredLightingDescr = DeferredLightingDescr
+    { dfGeoPassDescr        :: PassDescr
+    , dfLightingPassDescr   :: PassDescr
+    , dfFinalScreen         :: PassDescr
     }
-makeLenses ''RenderUnit
+
+ 
+
+data TargetFramebuffer =
+      DefaultFramebuffer 
+    | CustomFramebuffer (String, FramebufferSpec TextureResource RenderbufferResource)
+
+data PassDescr = PassDescr
+    { passFBSpec         :: TargetFramebuffer
+    , passShader         :: ShaderResource
+    , passGlobalUniforms :: RenderScene    -> ShaderDefinition ()
+    , passEntityUniforms :: RenderEntity   -> ShaderDefinition ()
+    , passGlobalTextures :: [TextureDefinition]
+    , passPreRendering   :: Renderer ()
+    , passPostRendering  :: Renderer ()
+    }
 
 
-type RenderSystem = RWST RenderSettings RenderLog RenderResources IO
 
+runRenderSystem :: (MonadIO m) => RenderSystem () -> GLResources -> m (GLResources, RenderLog)
+runRenderSystem sys res = io $ execRWST sys () res
 
-runRenderSystem :: (MonadIO m) => RenderSystem () -> RenderSettings -> RenderResources -> m (RenderResources, RenderLog)
-runRenderSystem sys settings res = io $ execRWST sys settings res
 
 -- TODO individual settings
-mkRenderSystem :: RenderUnit -> RenderSystem ()
-mkRenderSystem unit = do
-    settings      <- ask
-    sceneRenderer <- unit^.renderSubject.to mkSceneRenderer
-    (_, _, rlog)  <- (io $ Renderer.runRenderer sceneRenderer settings)
+mkRenderSystem :: (WithSetup s Renderer) => a -> RenderPipeline s Renderer a b -> RenderSystem ()
+mkRenderSystem toRender pipeline = do
+    (_, rlog)     <- io $ Renderer.runRenderer $ runPipeline pipeline toRender
     tell rlog
 
 
-mkSceneRenderer :: RenderScene -> RenderSystem (Renderer ())
-mkSceneRenderer scene = do
-    renderSettings <- ask
-    renderResources <- get
-    let renderTarget        = renderSettings^.reRenderTarget
+createDeferredRenderSystem :: DeferredLightingDescr -> RenderScene -> ViewportD -> RenderSystem ()
+createDeferredRenderSystem DeferredLightingDescr{..} scene viewport = do
+    ((geoSetup, {-- lightSetup,--} screenSetup, pipelineData), res, resLog) <- loadPipelineResources =<< get
+    put res
+    scribe resourceLog resLog
+    mkRenderSystem pipelineData $ 
+        deferredLighting 
+            (mkGeoPass geoSetup)
+            --(mkLightPass lightSetup)
+            (mkScreenPass screenSetup)
 
-        viewMatrix          = scene^.sceneCamera.cameraHandle.to camMatrix
-        projMatrix          = getProjection (scene^.sceneCamera) renderTarget
-        renderView          = RenderView viewMatrix projMatrix
-
-        worldEnv            = RenderWorldEnv $ map toRenderEntity $ scene^.sceneEntities
-
-    (viewDefs, renderRes') <- io $ runRenderWorld renderView worldEnv renderResources
-    put renderRes'
-    return $ renderFrame renderView viewDefs
     where
-        getProjection :: Camera -> RenderTarget -> M44 Float
-        getProjection (Camera3D _ fov) target =
-            let V2 w h      = fromIntegral <$> target^.targetSize
-                (n, f)      = double2Float <$$> (target^.targetZNear, target^.targetZFar)
-                aspect      = (w/h)
-            in projectionMatrix fov aspect n f -- TODO : move zfar/znear
 
-        getProjection (Camera2D _) target =
-            let V2 w h      = fromIntegral <$> target^.targetSize
-                V2 x y      = fromIntegral <$> target^.targetXY
-                (n, f)      = double2Float <$$> (target^.targetZNear, target^.targetZFar)
-            in orthographicMatrix x w y h n f
+    loadPipelineResources res = 
+        runResourceManager res $ 
+           (,,) <$> loadFramebufferSetup dfGeoPassDescr
+                 -- <*> loadFramebufferSetup dfLightingPassDescr
+                 <*> loadFramebufferSetup dfFinalScreen
+                 <*> loadPipelineData
+
+
+    loadFramebufferSetup :: PassDescr
+                         -> ResourceManager FramebufferSetup
+    loadFramebufferSetup PassDescr{..} = 
+        FramebufferSetup 
+            <$> case passFBSpec of
+                CustomFramebuffer spec -> requestFramebuffer spec
+                DefaultFramebuffer     -> pure defaultFramebuffer
+            <*> requestShader passShader
+            <*> pure (passGlobalUniforms scene)
+            <*> forM passGlobalTextures makeTexAssignment
+            <*> pure passPreRendering
+            <*> pure passPostRendering
+
+        
+
+
+    loadPipelineData :: ResourceManager DeferredLightingData
+    loadPipelineData = 
+        let sceneEnts       = scene^.sceneEntities
+            rEntities       = map toRenderEntity sceneEnts  -- TODO Filter out items with dedicated shaders for forward shader
+            geoShader       = passShader dfGeoPassDescr
+            getGeoUniforms  = passEntityUniforms dfGeoPassDescr
+            
+            lightShader     = passShader dfLightingPassDescr
+            
+            screenShader    = passShader dfFinalScreen
+            getScreenUnis   = passEntityUniforms dfFinalScreen 
+            
+        in do
+            geos     <- forM rEntities $ loadRenderEntity geoShader getGeoUniforms
+            lights   <- return []
+            screen   <- loadRenderEntity screenShader getScreenUnis (toRenderEntity viewport)
+            return $ DeferredLightingData geos lights screen
+
+
+
+loadRenderEntity :: ShaderResource 
+                -> (RenderEntity -> ShaderDefinition ())
+                -> RenderEntity 
+                -> ResourceManager RenderData
+loadRenderEntity withProgram entityUniforms ent =
+    let rdef    = ent^.entityRenderDef
+    in
+    RenderData <$> requestRenderItem (rdef^.rdefData) withProgram
+               <*> pure (entityUniforms ent)
+               <*> forM (rdef^.rdefTextures) makeTexAssignment
+               <*> pure (rdef^.rdefMode)
+               <*> pure (meshTriangleCount (rdef^.rdefData))
+
+
+makeTexAssignment :: TextureDefinition -> ResourceManager TextureAssignment
+makeTexAssignment tex =
+    let ch = tex^.texChannel & _1 %~ fromIntegral
+    in (,ch) . snd <$> requestTexture (tex^.texResource)
+
 
 ---------------------------------------------------------------------------------------------------
 
-newtype ZOrderedRenderable = ZOrderedRenderable RenderEntity
-    deriving (Typeable, Renderable)
+--newtype ZOrderedRenderable = ZOrderedRenderable RenderEntity
+--    deriving (Typeable, Renderable)
 
-instance Eq ZOrderedRenderable where
-    a == b =
-        let aZ = (renderTransformation a)^.transPosition._z
-            bZ = (renderTransformation b)^.transPosition._z
-        in aZ == bZ
+--instance Eq ZOrderedRenderable where
+--    a == b =
+--        let aZ = (renderTransformation a)^.transPosition._z
+--            bZ = (renderTransformation b)^.transPosition._z
+--        in aZ == bZ
 
-instance Ord ZOrderedRenderable where
-    compare a b =
-        let aZ = (renderTransformation a)^.transPosition._z
-            bZ = (renderTransformation b)^.transPosition._z
-        in compare aZ bZ
+--instance Ord ZOrderedRenderable where
+--    compare a b =
+--        let aZ = (renderTransformation a)^.transPosition._z
+--            bZ = (renderTransformation b)^.transPosition._z
+--        in compare aZ bZ
 
-newtype PositionOrderedEntity = PositionOrderedEntity { unPositionOrderedEntity :: RenderEntity }
-    deriving (Typeable, Renderable)
+--newtype PositionOrderedEntity = PositionOrderedEntity { unPositionOrderedEntity :: RenderEntity }
+--    deriving (Typeable, Renderable)
 
 
-instance Eq PositionOrderedEntity where
-    a == b = (renderTransformation a)^.transPosition == (renderTransformation b)^.transPosition
+--instance Eq PositionOrderedEntity where
+--    a == b = (renderTransformation a)^.transPosition == (renderTransformation b)^.transPosition
 
-instance Ord PositionOrderedEntity where
-    compare a b = ((renderTransformation a)^.transPosition) `compare` ((renderTransformation b)^.transPosition)
+--instance Ord PositionOrderedEntity where
+--    compare a b = ((renderTransformation a)^.transPosition) `compare` ((renderTransformation b)^.transPosition)
