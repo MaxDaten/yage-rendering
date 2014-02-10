@@ -10,7 +10,7 @@ import           Yage.Rendering.Primitives
 import           Yage.Rendering.VertexSpec
 import           Yage.Rendering.Mesh
 
-import           Linear                     (V3(..), _x, _y)
+import           Linear                     (V2(..), V3(..), _x, _y)
 
 
 mkRenderEntity :: RenderDefinition -> RenderEntity
@@ -35,7 +35,7 @@ instance (RealFloat a, Typeable a) => Renderable (Viewport a) where
     renderDefinition _      =
         let shader    = ShaderResource "nooooo" "noootooo"
             shdef     = return ()
-            mesh      = quadMesh
+            mesh      = quadMesh $ V2 1 1
             attribs   = \m ->
                         [ "in_vert_position" @= m^.mDataVertices^..traverse.vPosition
                         , "in_vert_texture"  @= m^.mDataVertices^..traverse.vTexture

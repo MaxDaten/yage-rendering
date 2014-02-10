@@ -57,6 +57,10 @@ library
                         Yage.Rendering.Backend.Renderer.Types
                         Yage.Rendering.Backend.Renderer.Lenses
                         Yage.Rendering.ResourceManager.Types
+                        Yage.Rendering.Primitives.Grid
+                        Yage.Rendering.Primitives.Quad
+                        Yage.Rendering.Primitives.Cube
+                        Yage.Rendering.Primitives.Basic
 
   If flag(perf)
     ghc-options:        -threaded -O2
