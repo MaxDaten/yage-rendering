@@ -2,7 +2,7 @@ module Yage.Rendering.Primitives.Basic where
 
 import Yage.Prelude hiding (Index)
 
-import Data.List (map, take, length, (!!), repeat, zipWith4, unzip)
+import Data.List
 
 import Yage.Rendering.Types
 import Yage.Rendering.Lenses
@@ -40,11 +40,15 @@ uv10  = V2 1 0
 uv11  = 1
 
 
+data Triangle v = Triangle v v v
+triangleToList :: Triangle v -> [v]
+triangleToList (Triangle v0 v1 v2) = [v0, v1, v2]
 
 data Face v = Face v v v v
-faceToVertexList :: Face v -> [v]
-faceToVertexList (Face v0 v1 v2 v3) = [v0, v1, v2, v3]
+faceToList :: Face v -> [v]
+faceToList (Face v0 v1 v2 v3) = [v0, v1, v2, v3]
 
+data NormalSmoothness = FacetteNormals | SphericalNormals
 
 ---------------------------------------------------------------------------------------------------
 
@@ -75,10 +79,9 @@ addFaceToMesh :: Face Vertex3P4C2T -> MeshData Vertex3P3N3C4T2 -> MeshData Verte
 addFaceToMesh face@(Face v0 v1 v2 _) meshData = 
   let (normal, _, _)  = plainNormalForm (v2^.vPosition) (v1^.vPosition) (v0^.vPosition)
       vertexCount     = length $ meshData^.mDataVertices
-  in   mDataVertices  <>~ map (\(Vertex p () c t) -> Vertex p normal c t) (faceToVertexList face) -- ++ meshData^.vertices 
-     $ mDataIndices   <>~ map (vertexCount+) [0, 1, 2, 2, 3, 0] -- ++ map (+4) indices
-     $ mDataTriCount  +~ 2
-     $ meshData
+  in meshData &  mDataVertices  <>~ map (\(Vertex p () c t) -> Vertex p normal c t) (faceToList face) -- ++ meshData^.vertices 
+              & mDataIndices   <>~ map (vertexCount+) [0, 1, 2, 2, 3, 0] -- ++ map (+4) indices
+              & mDataTriCount  +~ 2
 
 addFaceToMesh _ _     = error "invalid face" 
 
@@ -95,7 +98,40 @@ extractMeshByIndices mesh =
   let verts'  = map ((mesh^.mDataVertices)!!) $ mesh^.mDataIndices
       count   = length verts'
       ixs'    = [0..count]
-  in  mDataVertices .~ verts'
-    $ mDataIndices  .~ ixs'
-    $ mDataTriCount .~ count `div` 3
-    $ mesh
+  in mesh & mDataVertices .~ verts'
+          & mDataIndices  .~ ixs'
+          & mDataTriCount .~ count `div` 3
+
+
+trianglesToMesh :: (Real v) => [Triangle (V3 v)] -> (Triangle (V3 v) -> (Normal3f, Normal3f, Normal3f)) -> MeshData Vertex3P3N
+trianglesToMesh tris triNormals = MeshData
+  { _mDataVertices  = concatMap toVertices tris
+  , _mDataIndices   = take (3 * length tris) [0..]
+  , _mDataTriCount  = length tris
+  }
+  where
+  toVertices tri@(Triangle a b c) =
+    let (na, nb, nc) = triNormals tri
+    in [Vertex (realToFrac <$> a) na () (), Vertex (realToFrac <$> b) nb () (), Vertex (realToFrac <$> c) nc () ()] 
+
+
+cut :: (Functor f, Num (f a), Num a, Epsilon a, Metric f, Floating a) 
+    => a -> Triangle (f a) -> [Triangle (f a)]
+cut r tri@(Triangle a b c) = [Triangle a ab ac, Triangle b bc ab, Triangle c ac bc, Triangle ab bc ac]
+    where ab = hr *^ normalize (a + b)
+          bc = hr *^ normalize (b + c)
+          ac = hr *^ normalize (a + c)
+          hr = r
+
+ 
+triangulate :: (Functor f, Num (f a), Num a, Epsilon a, Metric f, Floating a) 
+            => Int -> [Triangle (f a)] -> [Triangle (f a)]
+triangulate iter src    = iterate subdivide src !! iter
+    where subdivide     = concatMap cutR
+          cutR          = cut (norm . fst3 . head $ src)
+          fst3 (Triangle a _ _) = a
+
+
+normalCalculator :: (Epsilon v, Floating v) => NormalSmoothness -> (Triangle (V3 v) -> (V3 v, V3 v, V3 v))
+normalCalculator SphericalNormals = \(Triangle a b c) -> (normalize a, normalize b, normalize c) 
+normalCalculator FacetteNormals   = \(Triangle a b c) -> let (n, _, _) = plainNormalForm c b a in (n, n, n)  
