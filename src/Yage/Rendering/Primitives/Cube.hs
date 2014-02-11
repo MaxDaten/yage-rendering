@@ -26,7 +26,7 @@ cubeMesh dim =
     , Face (Vertex (V3   x    y   z ) () white uv01) (Vertex (V3   x  (-y)   z ) () white uv00) (Vertex (V3   x  (-y) (-z)) () white uv10) (Vertex (V3   x   y (-z)) () white uv11)
     , Face (Vertex (V3 (-x)   y (-z)) () white uv01) (Vertex (V3 (-x)   y    z ) () white uv00) (Vertex (V3   x    y    z ) () white uv10) (Vertex (V3   x   y (-z)) () white uv11)
     , Face (Vertex (V3 (-x) (-y)  z ) () white uv01) (Vertex (V3 (-x) (-y) (-z)) () white uv00) (Vertex (V3   x  (-y) (-z)) () white uv10) (Vertex (V3   x (-y)  z ) () white uv11)
-    , Face (Vertex (V3   x    y (-z)) () white uv01) (Vertex (V3   x  (-y) (-z)) () white uv00) (Vertex (V3 (-x) (-y) (-z)) () white uv10) (Vertex (V3   x   y (-z)) () white uv11)
+    , Face (Vertex (V3   x    y (-z)) () white uv01) (Vertex (V3   x  (-y) (-z)) () white uv00) (Vertex (V3 (-x) (-y) (-z)) () white uv10) (Vertex (V3 (-x)  y (-z)) () white uv11)
     ]
 
 

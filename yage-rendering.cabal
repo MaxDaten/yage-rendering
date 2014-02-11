@@ -60,7 +60,9 @@ library
                         Yage.Rendering.Primitives.Grid
                         Yage.Rendering.Primitives.Quad
                         Yage.Rendering.Primitives.Cube
+                        Yage.Rendering.Primitives.Cone
                         Yage.Rendering.Primitives.Sphere
+                        Yage.Rendering.Primitives.Pyramid
                         Yage.Rendering.Primitives.Icosahedron
                         Yage.Rendering.Primitives.Basic
 

@@ -9,7 +9,7 @@ import Yage.Rendering.VertexSpec
 
 
 
-icosahedron :: (Floating v, Enum v, Show v) => Float -> [Triangle (V3 v)]
+icosahedron :: (Floating v, Enum v) => Float -> [Triangle (V3 v)]
 icosahedron radius = top ++ middleTop ++ middleBottom ++ bottom 
     where r             = realToFrac radius
           north         = V3 0   r  0
@@ -18,11 +18,10 @@ icosahedron radius = top ++ middleTop ++ middleBottom ++ bottom
           botv          = [ V3 (r * cos a * sin theta) ((-r) * cos theta) (r * sin a * sin theta)   | a <- init [ pi / 5, 3 * pi / 5 .. 2 * pi + pi / 5 ] ]
           V3 _ y _      = signorm $ V3 0 1 ((1 + sqrt 5)/2)
           theta         = acos y
-          top           = [ Triangle north a b | (a, b) <- zip topv (cycle topv) ]
-          bottom        = [ Triangle south a b | (a, b) <- zip (cycle botv) (botv) ]
-          middleTop     = zipWith3 Triangle (cycle topv) topv (cycle botv)
-          middleBottom  = zipWith3 Triangle botv (cycle botv) (topv)
-          cycle list    = last list : init list
+          top           = [ Triangle north a b | (a, b) <- zip topv (shift topv) ]
+          bottom        = [ Triangle south a b | (a, b) <- zip (shift botv) (botv) ]
+          middleTop     = zipWith3 Triangle (shift topv) topv (shift botv)
+          middleBottom  = zipWith3 Triangle botv (shift botv) (topv)
 
 
 icosahedronMesh :: NormalSmoothness -> Float -> MeshData Vertex3P3N
