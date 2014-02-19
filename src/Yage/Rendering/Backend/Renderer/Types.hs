@@ -8,6 +8,7 @@ module Yage.Rendering.Backend.Renderer.Types (
 
 import             Yage.Prelude                    hiding (log)
 
+import             Data.Vinyl
 import             Control.Monad.Reader            (ReaderT)
 import             Control.Monad.RWS.Strict        (RWST)
 
@@ -16,7 +17,6 @@ import             Graphics.Rendering.OpenGL.GL    as GLReExports (Color4(..))
 
 import             Graphics.GLUtil
 import             Yage.Rendering.Backend.Shader   ()
-import             Yage.Rendering.Backend.Framebuffer
 
 
 type Renderer = RWST () RenderLog RenderState IO
@@ -43,6 +43,7 @@ data RenderState = RenderState
      _currentShader      :: Maybe ShaderProgram
     }
 
+initRenderState :: RenderState
 initRenderState = RenderState Nothing
 
 
@@ -70,17 +71,17 @@ type ShaderDefinition = ReaderT ShaderProgram Renderer
 type TextureAssignment = (GL.TextureObject, (GL.GLuint, String))
 ---------------------------------------------------------------------------------------------------
 
-data RenderData = RenderData -- TODO rename RenderResource
+data RenderSet urec = RenderSet -- TODO rename RenderResource
     { _vao             :: GL.VertexArrayObject
-    , _uniformDefs     :: ShaderDefinition () -- to monoid
+    , _uniformDefs     :: PlainRec urec -- to monoid
     , _textureChannels :: [TextureAssignment]
     , _drawMode        :: !GL.PrimitiveMode
-    , _elementCount    :: !Int
+    , _vertexCount     :: !GL.GLsizei
     }
 
 
-instance Show RenderData where
-    show RenderData{..} = "RenderData: { vao: {0}, texs: {1}, mode: {2}, elem# {3} }"
+instance Show (RenderSet urec) where
+    show RenderSet{..} = "RenderSet: { vao: {0}, texs: {1}, mode: {2}, elem# {3} }"
 ---------------------------------------------------------------------------------------------------
 
 instance Monoid RenderLog where

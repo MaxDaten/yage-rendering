@@ -13,8 +13,8 @@ logRenderM msg = scribe rlLog [msg]
 logCountObj :: Renderer ()
 logCountObj = scribe rlLogObjCount 1
 
-logCountTriangles :: Int -> Renderer ()
-logCountTriangles = scribe rlLogTriCount
+logCountTriangles :: (Integral i) => i -> Renderer ()
+logCountTriangles = scribe rlLogTriCount . fromIntegral
 
 logRenderMf :: String -> [String] -> Renderer ()
 logRenderMf msg args = logRenderM $ format msg args

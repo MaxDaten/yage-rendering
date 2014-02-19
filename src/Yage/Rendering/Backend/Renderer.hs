@@ -2,11 +2,12 @@
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections       #-}
+{-# LANGUAGE ConstraintKinds     #-}
+{-# LANGUAGE FlexibleContexts    #-}
 
 module Yage.Rendering.Backend.Renderer (
       module Types
     , runRenderer, renderFrame
-    , (!=), shaderEnv, runUniform
     , logRenderM
     , version
     , withFramebuffer, withShader, withTexturesAt
@@ -14,19 +15,15 @@ module Yage.Rendering.Backend.Renderer (
 ---------------------------------------------------------------------------------------------------
 import           Yage.Prelude                            hiding (log)
 
-import           Foreign.Ptr                             (nullPtr)
-import           Data.List                               (groupBy, map)
-
 import           Control.Monad                           (forM_, mapM_, when)
-import           Control.Monad.Reader                    (ask, runReaderT)
 import           Control.Monad.RWS.Strict                (runRWST)
 
-import qualified Graphics.GLUtil                         as GLU hiding (makeVAO, offset0)
 import           Graphics.GLUtil                         (ShaderProgram(..))
 import qualified Graphics.Rendering.OpenGL               as GL
 import           Graphics.Rendering.OpenGL.GL            (($=))
-
-import           Linear                                  (V2(..))
+import           Graphics.VinylGL.Uniforms
+import           Data.Vinyl
+import           Yage.Rendering.Resources.ResTypes
 ---------------------------------------------------------------------------------------------------
 import           Yage.Rendering.Backend.Framebuffer
 
@@ -53,16 +50,17 @@ runRenderer renderer = do
 
 
 
-
-renderToFramebuffer :: [RenderData] -> Framebuffer tex rbuff -> Renderer ()
+{--
+renderToFramebuffer :: UniformFields (PlainRec urec) => [RenderSet urec] -> Framebuffer tex rbuff -> Renderer ()
 renderToFramebuffer rdata toFramebuffer = 
     withFramebuffer toFramebuffer DrawTarget $ \_fb -> 
         renderFrame rdata
+--}
 
 
-renderFrame :: [RenderData] -> Renderer ()
+renderFrame :: UniformFields (PlainRec urec) => [RenderSet urec] -> Renderer ()
 renderFrame rdata = do
-    forM_ rdata renderRenderData
+    forM_ rdata renderRenderSet
 
 
 
@@ -110,41 +108,6 @@ createShaderBatches _view vdefs =
 beforeRender :: Renderer ()
 beforeRender = return ()
 
-{--
-
-setupFrame :: Renderer ()
-setupFrame = do
-    --clearC <- undefined --  TODO view $ reRenderConfig.rcConfClearColor
-    wire   <- view $ reRenderConfig.rcConfWireframe
-    target <- view reRenderTarget
-    io $! do
-        --GL.clearColor  $= realToFrac <$> clearC
-        GL.depthFunc   $= Just GL.Less    -- TODO to init
-        GL.depthMask   $= GL.Enabled      -- TODO to init
-        GL.blend       $= GL.Enabled      -- TODO to init/render target
-        GL.blendFunc   $= (GL.SrcAlpha, GL.OneMinusSrcAlpha) -- TODO to init/render target
-        GL.polygonMode $= if wire then (GL.Line, GL.Line) else (GL.Fill, GL.Fill)
-        --GL.cullFace    $= Just GL.Back
-        
-        -- TODO to renderdef or shader?
-        GL.pointSize   $= 2.0
-        -- line width greater than 1 leads to an InvalidValue
-        -- http://lwjgl.org/forum/index.php?action=printpage;topic=3106.0
-        GL.lineWidth   $= 1.0
-
-        -- for gl_PointSize in shader
-        -- GL.vertexProgramPointSize   $= GL.Enabled
-
-        GL.clear [GL.ColorBuffer, GL.DepthBuffer]
-
-        when (target^.targetDirty) $
-            let factor = fromIntegral . floor $ target^.targetFactor
-                V2 w h = fromIntegral <$> target^.targetSize
-                V2 x y = fromIntegral <$> target^.targetXY
-            in GL.viewport $= ( GL.Position (factor * x) (factor * y)
-                              , GL.Size (factor * w) (factor * h))
---}
-
 
 ---------------------------------------------------------------------------------------------------
 
@@ -156,35 +119,26 @@ afterRender = return ()
 
 ---------------------------------------------------------------------------------------------------
 
-renderRenderData :: RenderData -> Renderer ()
-renderRenderData rdata = do
-    checkErr "start rendering"
+renderRenderSet :: UniformFields (PlainRec urec) => RenderSet urec -> Renderer ()
+renderRenderSet rset = do
     mshader <- use currentShader
-    withVAO (rdata^.vao) . withTexturesAt GL.Texture2D (rdata^.textureChannels) $! do
+    withVAO (rset^.vao) . withTexturesAt GL.Texture2D (rset^.textureChannels) $! do
 
-        checkErr "preuniform"
         -- runUniform (udefs >> mapTextureSamplers texObjs) shaderEnv -- why no texture samplers anymore?
-        when (isJust mshader) $ runUniform (rdata^.uniformDefs) (mshader^?!_Just) -- ugly
+        when (isJust mshader) $ io $ setAllUniforms (mshader^?!_Just) (rset^.uniformDefs)
 
-        checkErr "postuniform"
 
-        drawNow (rdata^.drawMode) rdata
-        checkErr "after draw"
+        drawNow (rset^.drawMode) rset
     logCountObj
-    logCountTriangles (rdata^.elementCount)
-    checkErr "end render"
+    logCountTriangles (rset^.vertexCount)
     where
-        checkErr msg = io $ GLU.throwErrorMsg msg
+        -- checkErr msg = io $ GLU.throwErrorMsg msg
 
-        drawNow mode@GL.Triangles rdata = io $ GL.drawElements mode (getCnt mode rdata) GL.UnsignedInt nullPtr
-        drawNow mode@GL.Points    rdata = io $ GL.drawElements mode (getCnt mode rdata) GL.UnsignedInt nullPtr
-        drawNow mode@GL.Lines     rdata = io $ GL.drawElements mode (getCnt mode rdata) GL.UnsignedInt nullPtr
-        drawNow mode _ = error $ format "primitive mode {0} not supported" [show mode]
-
-        getCnt GL.Triangles rdata = fromIntegral $ 3 * rdata^.elementCount
-        getCnt GL.Points    rdata = fromIntegral $ 3 * rdata^.elementCount
-        getCnt GL.Lines     rdata = fromIntegral $ 3 * rdata^.elementCount -- TODO missing 2 lines in cube
-        getCnt _ _ = error "the impossible happend"
+        drawNow mode rset = io $ GL.drawArrays mode 0 (traceShowS' "count" $ rset^.vertexCount)
+        --drawNow mode@GL.Triangles rset = io $ GL.drawElements mode (getCnt mode rset) GL.UnsignedInt nullPtr
+        --drawNow mode@GL.Points    rset = io $ GL.drawElements mode (getCnt mode rset) GL.UnsignedInt nullPtr
+        --drawNow mode@GL.Lines     rset = io $ GL.drawElements mode (getCnt mode rset) GL.UnsignedInt nullPtr
+        --drawNow mode _ = error $ format "primitive mode {0} not supported" [show mode]
 
 
 ---------------------------------------------------------------------------------------------------
@@ -196,27 +150,6 @@ mapTextureSamplers texObjs =
         sp <- asks shaderEnv'Program
         io $ mapM_ (\(i, n) -> i `asUniform` getUniform sp n) texUnitToUniform
 --}
-
----------------------------------------------------------------------------------------------------
-
--- | runs the renderer in the given environment to render one frame.
-
-runUniform :: ShaderDefinition a -> ShaderProgram -> Renderer a
-runUniform = runReaderT
-
----------------------------------------------------------------------------------------------------
-
-infixr 2 !=
-(!=) :: (GLU.AsUniform u) => String -> u -> ShaderDefinition ()
-name != uni = do
-    sp <- ask
-    io $ 
-        uni `GLU.asUniform` GLU.getUniform sp name 
-            `catch` \(e::SomeException) -> print $ format "warning: {0}" [show e]
-
-shaderEnv :: ShaderDefinition ShaderProgram
-shaderEnv = ask
-
 
 
 -- | the current bound fbo is NOT restored (lack of support by the OpenGL lib),

@@ -86,10 +86,10 @@ mkEmptyFramebuffer = mempty
 
 
 attach :: FramebufferSpec tex rbuff -> FramebufferAttachment tex rbuff -> FramebufferSpec tex rbuff
-attach spec a@(FramebufferAttachment ColorAttachment _)        = spec & fboColors       <>~ [a]
-attach spec a@(FramebufferAttachment DepthAttachment _)        = spec & fboDepth        ?~ a
-attach spec a@(FramebufferAttachment StencilAttachment _)      = spec & fboStencil      ?~ a
-attach spec a@(FramebufferAttachment DepthStencilAttachment _) = spec & fboDepthStencil ?~ a
+attach s a@(FramebufferAttachment ColorAttachment _)        = s & fboColors       <>~ [a]
+attach s a@(FramebufferAttachment DepthAttachment _)        = s & fboDepth        ?~ a
+attach s a@(FramebufferAttachment StencilAttachment _)      = s & fboStencil      ?~ a
+attach s a@(FramebufferAttachment DepthStencilAttachment _) = s & fboDepthStencil ?~ a
 
 colorAttachment :: AttachmentTarget tex rbuff -> FramebufferSpec tex rbuff
 colorAttachment = (attach mempty) . FramebufferAttachment ColorAttachment

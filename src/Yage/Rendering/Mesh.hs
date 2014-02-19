@@ -1,28 +1,83 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
+{-# LANGUAGE ExistentialQuantification   #-}
+{-# LANGUAGE NamedFieldPuns              #-}
+{-# LANGUAGE FlexibleContexts            #-}
 module Yage.Rendering.Mesh where
 
 import           Yage.Prelude                        hiding (Index)
-import           Data.List (length)
+
+import           GHC.Generics                        (Generic)
 import           Foreign                             (Storable)
+import qualified Data.Vector.Storable                as V
+import qualified Data.Digest.XXHash                  as XH
+import qualified Data.Vector.Storable.ByteString     as BS
 
 
-import Yage.Rendering.Types
-import Yage.Rendering.VertexSpec
+import Yage.Geometry.Vertex
 
 
-type GetVertexAttributes v = (MeshData v -> [VertexAttribute])
+--type GetVertexAttributes v = (MeshData v -> [VertexAttribute])
 
-makeMeshFromVerts :: (Storable v) => Int -> String -> [v] -> [Index] -> GetVertexAttributes v -> Mesh
--- TODO some assertions for invalid meshes
-makeMeshFromVerts ident name vs ixs attribs =
-    let meshdata = MeshData vs ixs $ length ixs `quot` 3
-    in Mesh ident name meshdata attribs 0
+---------------------------------------------------------------------------------------------------
 
-makeMesh :: (Storable v) => Int -> String -> MeshData v -> GetVertexAttributes v -> Mesh
-makeMesh ident name meshdata getAttribs = Mesh ident name meshdata getAttribs 0
+type MeshHash = XH.XXHash
+type MeshId   = String
 
-emptyMeshData :: MeshData v
-emptyMeshData = MeshData [] [] 0
+data Mesh v = Mesh
+    { _meshId         :: !MeshId
+    , _meshData       :: V.Vector (Vertex v)
+    , _meshHash       :: !MeshHash
+    }
+    deriving ( Typeable, Generic )
 
-meshTriangleCount :: Mesh -> Int
-meshTriangleCount (Mesh _ _ (MeshData _ _ cnt) _ _) = cnt
+instance Show (Mesh v) where
+    show Mesh{..} =
+        format "Mesh {id = {0}, attribs = N/A, meshHash = {1}}"
+               [show _meshId, show _meshHash]
+
+instance Eq (Mesh v) where
+    a == b = _meshId a == _meshId b
+
+instance Ord (Mesh v) where
+    compare a b = compare (_meshId a) (_meshId b)
+
+
+dataCount :: (Storable (Vertex v)) => Mesh v -> Int
+dataCount Mesh{_meshData} = V.length _meshData
+
+---------------------------------------------------------------------------------------------------
+
+makeMesh :: (Storable (Vertex v)) => String -> [Vertex v] -> Mesh v
+makeMesh ident verts = 
+    let vec         = V.fromList verts
+        hash        = XH.xxHash' . BS.vectorToByteString $ vec
+    in Mesh ident vec hash
+
+
+emptyMesh :: (Storable (Vertex v)) => Mesh v
+emptyMesh = Mesh "" V.empty 0
+
+
+updateMesh :: (Storable (Vertex v)) => Mesh v -> [Vertex v] -> Mesh v
+updateMesh mesh verts =  
+    let vec         = V.fromList verts
+        hash        = XH.xxHash' . BS.vectorToByteString $ vec
+    in mesh{_meshData = vec, _meshHash = hash}
+
+pushToBack :: (Storable (Vertex v)) => Mesh v -> [Vertex v] -> Mesh v
+pushToBack mesh@Mesh{ _meshData, _meshHash } verts =
+    let newdata = _meshData V.++ V.fromList verts 
+        newHash = XH.xxHash' . BS.vectorToByteString $ newdata
+    in mesh{ _meshData = newdata, _meshHash = newHash }
+
+{--
+
+extractMeshByIndices :: MeshData v -> MeshData v
+extractMeshByIndices mesh = 
+  let verts'  = map ((mesh^.mDataVertices)!!) $ mesh^.mDataIndices
+      count   = length verts'
+      ixs'    = [0..count]
+  in mesh & mDataVertices .~ verts'
+          & mDataIndices  .~ ixs'
+          & mDataTriCount .~ count `div` 3
+--}

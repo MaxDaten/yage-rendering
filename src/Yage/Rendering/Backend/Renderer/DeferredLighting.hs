@@ -3,79 +3,82 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Yage.Rendering.Backend.Renderer.DeferredLighting where
 
 import Yage.Prelude
 
-import Control.Arrow (returnA)
-
 import Yage.Rendering.Types
 import Yage.Rendering.Backend.RenderPipeline
 import Yage.Rendering.Backend.Renderer
-import Yage.Rendering.Backend.Renderer.Types
 import Yage.Rendering.Backend.Framebuffer
-import Yage.Rendering.ResourceManager.Types
+import Yage.Rendering.Resources.Types
 
-data DeferredLightingData = DeferredLightingData
-    { geometries   :: [ RenderData ]
-    , lights       :: [ RenderData ]
-    , screen       :: RenderData
+data DeferredLightingData gu lu su = DeferredLightingData
+    { geometries   :: [ RenderSet gu ]
+    , lights       :: [ RenderSet lu ]
+    , screen       :: RenderSet su
     }
 
 
-data FramebufferSetup = FramebufferSetup
+data FramebufferSetup u = FramebufferSetup
     { framebuffer       :: GLFramebuffer
     , fbShader          :: ShaderProgram
-    , fbGlobalUniforms  :: ShaderDefinition ()
+    , fbGlobalUniforms  :: PlainRec u
     , globalTextures    :: [TextureAssignment]
     , preRendering      :: Renderer ()
     , postRendering     :: Renderer ()
     }
 
 
-instance WithSetup FramebufferSetup Renderer where
+instance UniformFields (PlainRec unirec) => WithSetup (FramebufferSetup unirec) Renderer where
     withSetup FramebufferSetup{..} ma = do
         withFramebuffer framebuffer DrawTarget $ \_fb ->
-         withShader fbShader                  $ \sh -> do
+         withShader fbShader                   $ \sh -> do
           withTexturesAt Texture2D globalTextures $ do
             preRendering
-            runUniform fbGlobalUniforms sh
+            io $ setAllUniforms sh fbGlobalUniforms
             r <- ma
             postRendering
             return r
 
+type DeferredPipeline    = RenderPipeline () Renderer
+type DeferredPass ur     = RenderPipeline (FramebufferSetup ur) Renderer
+type GeoPass ur gr       = DeferredPass ur ([ RenderSet gr ]) GLFramebuffer
+type LightPass ur lr     = DeferredPass ur (GLFramebuffer, [ RenderSet lr ]) GLFramebuffer
+type ScreenPass ur sr    = DeferredPass ur (GLFramebuffer, RenderSet sr) ()
 
-type DeferredPipeline = RenderPipeline FramebufferSetup Renderer
-type GeoPass          = DeferredPipeline ([RenderData]) GLFramebuffer
-type LightPass        = DeferredPipeline (GLFramebuffer, [RenderData]) GLFramebuffer
-type ScreenPass       = DeferredPipeline (GLFramebuffer, RenderData) ()
+type HasPassUniforms a b = (UniformFields (PlainRec a), UniformFields (PlainRec b)) 
 
-
-deferredLighting :: GeoPass -> ScreenPass -> DeferredPipeline DeferredLightingData ()
-deferredLighting geoPass {--lightPass--} screenPass = proc (DeferredLightingData geos lights screen) -> do
-    gbuffer <- geoPass    -< geos
+deferredLighting :: (HasPassUniforms gGlo gLoc, HasPassUniforms sGlo sLoc) 
+                 => GeoPass gGlo gLoc -> ScreenPass sGlo sLoc -> DeferredLightingData gLoc lLoc sLoc -> Renderer ()
+deferredLighting geoPass screenPass (DeferredLightingData geos _lights screen) = do
+    gbuffer <- runPipeline geoPass geos
     --lbuffer <- lightPass  -< (gbuffer, lights)
-    fin     <- screenPass -< (gbuffer, screen)
-    returnA -< fin
+    fin     <- runPipeline screenPass (gbuffer, screen)
+    return fin
 
 
 
-
-mkGeoPass :: FramebufferSetup -> GeoPass
+mkGeoPass :: (HasPassUniforms global local) 
+          => FramebufferSetup global -> GeoPass global local
 mkGeoPass setup = 
     mkRenderPass setup $ \geos -> do
         renderFrame geos
         return $ framebuffer setup
 
-mkLightPass :: FramebufferSetup -> LightPass
+mkLightPass :: (HasPassUniforms global local) 
+            => FramebufferSetup global -> LightPass global local
 mkLightPass setup = 
-    mkRenderPass setup $ \(gbuffer, lights) -> do
+    mkRenderPass setup $ \(_gbuffer, lights) -> do
         renderFrame lights
         return $ framebuffer setup
 
-mkScreenPass :: FramebufferSetup -> ScreenPass
+mkScreenPass :: (HasPassUniforms global local) 
+             => FramebufferSetup global -> ScreenPass global local
 mkScreenPass setup =
-    mkRenderPass setup $ \(buff, screen) -> do
+    mkRenderPass setup $ \(_buff, screen) -> do
         renderFrame [screen]
         return ()

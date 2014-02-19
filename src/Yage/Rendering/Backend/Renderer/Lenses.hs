@@ -8,4 +8,4 @@ import Yage.Rendering.Backend.Renderer.Types
 makeLenses ''RenderLog
 makeLenses ''RenderConfig
 makeLenses ''RenderState
-makeLenses ''RenderData
+makeLenses ''RenderSet
