@@ -21,15 +21,13 @@ import           Control.Monad.RWS.Strict                (runRWST)
 import           Graphics.GLUtil                         (ShaderProgram(..))
 import qualified Graphics.Rendering.OpenGL               as GL
 import           Graphics.Rendering.OpenGL.GL            (($=))
-import           Graphics.VinylGL.Uniforms
-import           Data.Vinyl
-import           Yage.Rendering.Resources.ResTypes
 ---------------------------------------------------------------------------------------------------
 import           Yage.Rendering.Backend.Framebuffer
 
 import           Yage.Rendering.Backend.Renderer.Lenses  as Types
 import           Yage.Rendering.Backend.Renderer.Logging
 import           Yage.Rendering.Backend.Renderer.Types   as Types
+import           Yage.Rendering.Uniforms
 {-=================================================================================================-}
 
 import           Paths_yage_rendering
@@ -58,7 +56,7 @@ renderToFramebuffer rdata toFramebuffer =
 --}
 
 
-renderFrame :: UniformFields (PlainRec urec) => [RenderSet urec] -> Renderer ()
+renderFrame :: UniformFields (Uniforms urec) => [RenderSet urec] -> Renderer ()
 renderFrame rdata = do
     forM_ rdata renderRenderSet
 

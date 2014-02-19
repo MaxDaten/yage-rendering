@@ -9,7 +9,6 @@ module Yage.Rendering.Backend.Renderer.Types (
 import             Yage.Prelude                    hiding (log)
 
 import             Data.Vinyl
-import             Control.Monad.Reader            (ReaderT)
 import             Control.Monad.RWS.Strict        (RWST)
 
 import qualified   Graphics.Rendering.OpenGL       as GL
@@ -64,10 +63,7 @@ data RenderStatistics = RenderStatistics
 emptyRenderLog :: RenderLog
 emptyRenderLog = mempty
 
----------------------------------------------------------------------------------------------------
-
-type ShaderDefinition = ReaderT ShaderProgram Renderer
-  
+---------------------------------------------------------------------------------------------------  
 type TextureAssignment = (GL.TextureObject, (GL.GLuint, String))
 ---------------------------------------------------------------------------------------------------
 

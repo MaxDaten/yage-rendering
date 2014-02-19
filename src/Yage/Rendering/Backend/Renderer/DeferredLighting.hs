@@ -15,6 +15,10 @@ import Yage.Rendering.Backend.RenderPipeline
 import Yage.Rendering.Backend.Renderer
 import Yage.Rendering.Backend.Framebuffer
 import Yage.Rendering.Resources.Types
+import Yage.Rendering.Uniforms
+
+type HasPassUniforms global local = (UniformFields (Uniforms global), UniformFields (Uniforms local))
+
 
 data DeferredLightingData gu lu su = DeferredLightingData
     { geometries   :: [ RenderSet gu ]
@@ -23,17 +27,18 @@ data DeferredLightingData gu lu su = DeferredLightingData
     }
 
 
+
 data FramebufferSetup u = FramebufferSetup
     { framebuffer       :: GLFramebuffer
     , fbShader          :: ShaderProgram
-    , fbGlobalUniforms  :: PlainRec u
+    , fbGlobalUniforms  :: Uniforms u
     , globalTextures    :: [TextureAssignment]
     , preRendering      :: Renderer ()
     , postRendering     :: Renderer ()
     }
 
 
-instance UniformFields (PlainRec unirec) => WithSetup (FramebufferSetup unirec) Renderer where
+instance UniformFields (Uniforms u) => WithSetup (FramebufferSetup u) Renderer where
     withSetup FramebufferSetup{..} ma = do
         withFramebuffer framebuffer DrawTarget $ \_fb ->
          withShader fbShader                   $ \sh -> do
@@ -50,7 +55,7 @@ type GeoPass ur gr       = DeferredPass ur ([ RenderSet gr ]) GLFramebuffer
 type LightPass ur lr     = DeferredPass ur (GLFramebuffer, [ RenderSet lr ]) GLFramebuffer
 type ScreenPass ur sr    = DeferredPass ur (GLFramebuffer, RenderSet sr) ()
 
-type HasPassUniforms a b = (UniformFields (PlainRec a), UniformFields (PlainRec b)) 
+
 
 deferredLighting :: (HasPassUniforms gGlo gLoc, HasPassUniforms sGlo sLoc) 
                  => GeoPass gGlo gLoc -> ScreenPass sGlo sLoc -> DeferredLightingData gLoc lLoc sLoc -> Renderer ()

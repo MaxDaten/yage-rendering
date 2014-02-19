@@ -17,25 +17,20 @@
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE FunctionalDependencies     #-}
 module Yage.Rendering.Types
-    ( Program
-    , GL.PrimitiveMode(..)
-
-    , Renderable(..), SomeRenderable(..), renderableType, fromRenderable
+    ( Renderable(..), SomeRenderable(..), renderableType, fromRenderable
     , RenderDefinition(..)
     , Index, Position, Orientation, Scale
     , ShaderResource(..), ShaderProgram(..)
     , TextureDefinition(..), TextureResource(..), TextureChannel, GLBufferSpec(..)
     , RenderbufferResource(..)
 
-    , toIndex1, GL.PixelInternalFormat(..), GL.TextureTarget2D(..)
+    , toIndex1, GL.PixelInternalFormat(..), GL.TextureTarget2D(..), GL.PrimitiveMode(..)
     , module GLRawTypes
     , module Mesh
-    , module Vertex
     , module ResTypes
     ) where
 
 import           Yage.Prelude                        hiding (log, Index)
-import           Yage.Geometry.Vertex                as Vertex
 
 import           Data.Hashable                       ()
 import           Filesystem.Path.CurrentOS           (encode)
@@ -53,7 +48,7 @@ import qualified Graphics.Rendering.OpenGL           as GL
 import           Graphics.Rendering.OpenGL.Raw.Types as GLRawTypes
 ---------------------------------------------------------------------------------------------------
 import           Yage.Rendering.Mesh                 as Mesh
-import           Yage.Rendering.Backend.Renderer.Types as RendererTypes (ShaderDefinition)
+import           Yage.Rendering.Vertex
 import           Yage.Rendering.Resources.ResTypes   as ResTypes
 import           Yage.Rendering.Transformation
 -- =================================================================================================
@@ -108,7 +103,7 @@ type Index        = Int
 toIndex1 :: a -> GL.Index1 a
 toIndex1 = GL.Index1
 
-type Program = (ShaderResource, ShaderDefinition ())
+--type Program = (ShaderResource, ShaderDefinition ())
 
 
 ---------------------------------------------------------------------------------------------------

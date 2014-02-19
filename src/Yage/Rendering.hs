@@ -17,8 +17,11 @@ module Yage.Rendering
     , module Lenses
     , module RendererExports
     , module RenderEntity
-    , module Vertex
+    
     , module Mesh
+    , module Vertex
+    , module Uniforms
+    
     , module LinExport
     , module Framebuffer
     , module ResourceManager
@@ -26,7 +29,6 @@ module Yage.Rendering
 
 import           Yage.Prelude
 import           Yage.Math
-import           Yage.Geometry.Vertex                   as Vertex (Vertex)
 
 import           Data.List                              (map, head)
 
@@ -36,15 +38,19 @@ import           Linear                                 as LinExport
 
 import           Yage.Rendering.Backend.Renderer        as Renderer
 import           Yage.Rendering.Backend.Renderer.Lenses as RendererExports
-import           Yage.Rendering.Backend.Renderer.Types  as RendererExports (RenderConfig (..), RenderLog (..), ShaderDefinition)
+import           Yage.Rendering.Backend.Renderer.Types  as RendererExports (RenderConfig (..), RenderLog (..))
 import           Yage.Rendering.Backend.Framebuffer     as Framebuffer
 import           Yage.Rendering.Lenses                  as Lenses
 import           Yage.Rendering.RenderEntity            as RenderEntity
-import           Yage.Rendering.Mesh                    as Mesh
 import           Yage.Rendering.ResourceManager
 import           Yage.Rendering.ResourceManager         as ResourceManager (GLResources, initialGLRenderResources)
 import           Yage.Rendering.ResourceManager         as Framebuffer (defaultFramebuffer)
 import           Yage.Rendering.Types                   as Types
+
+import           Yage.Rendering.Mesh                    as Mesh
+import           Yage.Rendering.Uniforms                as Uniforms
+import           Yage.Rendering.Vertex                  as Vertex
+
 import           Yage.Rendering.Backend.Renderer.DeferredLighting
 
 
@@ -69,8 +75,8 @@ data TargetFramebuffer =
 data PassDescr g l v = PassDescr
     { passFBSpec         :: TargetFramebuffer
     , passShader         :: ShaderResource
-    , passGlobalUniforms :: PlainRec g
-    , passEntityUniforms :: RenderEntity v -> PlainRec l
+    , passGlobalUniforms :: Uniforms g
+    , passEntityUniforms :: RenderEntity v -> Uniforms l
     , passGlobalTextures :: [TextureDefinition]
     , passPreRendering   :: Renderer ()
     , passPostRendering  :: Renderer ()

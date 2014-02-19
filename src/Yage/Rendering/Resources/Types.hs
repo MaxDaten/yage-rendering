@@ -1,12 +1,4 @@
 {-# LANGUAGE TemplateHaskell                    #-}
-{-# LANGUAGE Rank2Types                         #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving         #-}
-{-# LANGUAGE MultiParamTypeClasses              #-}
-{-# LANGUAGE FunctionalDependencies             #-}
-{-# LANGUAGE ExistentialQuantification          #-}
-{-# LANGUAGE RecordWildCards                    #-}
-{-# LANGUAGE NamedFieldPuns                     #-}
-{-# LANGUAGE ScopedTypeVariables                #-}
 module Yage.Rendering.Resources.Types where
 
 import           Yage.Prelude
@@ -56,34 +48,6 @@ data GLResources = GLResources
 
 makeLenses ''GLResources
 
-{--
-loadedShaders :: Lens' GLResources (Map ShaderResource GLShader)
-loadedShaders f res@GLResources{_loadedShaders} 
-    = fmap (\s -> res{_loadedShaders = s}) (f _loadedShaders)
-
---loadedVertexBuffer :: Lens' GLResources (Map MeshId (GLVertexbuffer vr))
---loadedVertexBuffer f res@(GLResources sh vb va ts rb fb) 
---    = fmap (\b -> GLResources sh b va ts rb fb) 
---           (f (get res))
---    where get res = _hole
-
-loadedVertexArrays :: Lens' GLResources (Map (MeshId, ShaderResource) GLVertexArray)
-loadedVertexArrays f res@GLResources{_loadedVertexArrays}
-    = fmap (\a -> res{_loadedVertexArrays = a}) (f _loadedVertexArrays)
-
-loadedTextures :: Lens' GLResources (Map TextureResource GLTexture)
-loadedTextures f res@GLResources{_loadedTextures}
-    = fmap (\t -> res{_loadedTextures = t}) (f _loadedTextures)
-
-
-loadedRenderbuffers :: Lens' GLResources (Map RenderbufferResource GLRenderbuffer)
-loadedRenderbuffers f res@GLResources{_loadedRenderbuffers}
-    = fmap (\r -> res{_loadedRenderbuffers = r}) (f _loadedRenderbuffers)
-
-compiledFBOs :: Lens' GLResources (Map String GLFramebuffer)
-compiledFBOs f res@GLResources{_compiledFBOs}
-    = fmap (\r -> res{_compiledFBOs = r}) (f _compiledFBOs)
---}
 
 --instance Monoid GLRenderResources where
 --    mappend (GLRenderResources sA vA aA tA fA rA) (GLRenderResources sB vB aB tB fB rB)

@@ -35,8 +35,13 @@ library
                         Yage.Rendering
                         Yage.Rendering.Types
                         Yage.Rendering.Lenses
-                        Yage.Rendering.Texture
+                        
+                        Yage.Rendering.Vertex
+                        Yage.Rendering.Uniforms
+                        
                         Yage.Rendering.Mesh
+                        Yage.Rendering.Texture
+                        
                         Yage.Rendering.ResourceManager
                         Yage.Rendering.RenderEntity
                         Yage.Rendering.Lighting

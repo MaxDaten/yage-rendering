@@ -26,7 +26,6 @@ import           Control.Monad.RWS
 import           Graphics.GLUtil                      hiding (loadShader, loadTexture)
 import           Graphics.Rendering.OpenGL            (($=))
 import qualified Graphics.Rendering.OpenGL            as GL
-import           Graphics.VinylGL.Vertex              as Vertex
 
 
 import           Yage.Rendering.Backend.Framebuffer
@@ -37,6 +36,7 @@ import           Foreign.Storable
 
 import           Yage.Rendering.Lenses
 import qualified Yage.Rendering.Texture               as Tex
+import           Yage.Rendering.Vertex
 import           Yage.Rendering.Types                 hiding (Index)
 
 
@@ -256,11 +256,11 @@ requestVertexbuffer mesh = do
     where
 
     loadVertexBuffer = 
-        io $ Vertex.bufferVertices (mesh^.meshData)
+        io $ bufferVertices (mesh^.meshData)
 
     updateVertexBuffer (oldHash, buff) = do
         let vBuff = BufferedVertices buff
-        when (mesh^.meshHash /= oldHash) $ io $ Vertex.reloadVertices vBuff (mesh^.meshData)
+        when (mesh^.meshHash /= oldHash) $ io $ reloadVertices vBuff (mesh^.meshData)
         return vBuff
 
 
@@ -274,8 +274,8 @@ requestRenderSet mesh shader = requestResource loadedVertexArrays (uncurry loadV
         vbuff           <- requestVertexbuffer mesh
         shaderProg      <- requestShader shader
         io $ makeVAO $ do
-            Vertex.bindVertices vbuff
-            Vertex.enableVertices' shaderProg vbuff -- just this relevant?
+            bindVertices vbuff
+            enableVertices' shaderProg vbuff -- just this relevant?
             -- is really part of vao:
             -- http://stackoverflow.com/questions/8973690/vao-and-element-array-buffer-state
             --GL.bindBuffer GL.ElementArrayBuffer $= Just ebo

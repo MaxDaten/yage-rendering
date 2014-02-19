@@ -1,16 +1,9 @@
 {-# LANGUAGE ConstraintKinds                    #-}
-module Yage.Rendering.Resources.ResTypes
-    ( module Yage.Rendering.Resources.ResTypes
-    , module VinylGL
-    ) where
+module Yage.Rendering.Resources.ResTypes where
 
 import           Yage.Prelude
-import           Foreign.Storable
 
 import qualified Graphics.Rendering.OpenGL as GL
-import           Graphics.VinylGL.Uniforms as VinylGL
-import           Graphics.VinylGL.Vertex   as VinylGL
-import           Data.Vinyl.Reflect
 
 import           Yage.Rendering.Texture
 
@@ -65,14 +58,6 @@ instance Ord RenderbufferResource where
     compare (RenderbufferResource nameA _) (RenderbufferResource nameB _) = compare nameA nameB
 
 
-
-type ViableVertex t = ( HasFieldNames t
-                      , HasFieldSizes t
-                      , HasFieldDims t
-                      , HasFieldGLTypes t
-                      , Storable t )
-
-type UniformFields a = (HasFieldNames a, HasFieldGLTypes a, SetUniformFields a)
 
 data ShaderResource = ShaderResource
     { _srVertSrc :: FilePath

@@ -12,6 +12,7 @@ import Yage.Prelude
 
 import           Yage.Rendering.Types
 import           Yage.Rendering.Transformation
+import           Yage.Rendering.Vertex
 
 
 
