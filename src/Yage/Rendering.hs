@@ -11,6 +11,7 @@
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 
+
 module Yage.Rendering
     ( module Types
     , module Yage.Rendering
@@ -30,7 +31,7 @@ module Yage.Rendering
 import           Yage.Prelude
 import           Yage.Math
 
-import           Data.List                              (map, head)
+import           Data.List                              (head)
 
 import           Control.Monad.RWS
 
@@ -83,12 +84,21 @@ data PassDescr g l v = PassDescr
     }
 
 
-class HasRenderEntities a vrec where
-    renderEntities :: a -> [RenderEntity vrec]
+class ViableVertex (Vertex grec) => HasGeoData a grec where
+    getGeoEntities  :: a -> [RenderEntity grec]
+    getGeoEntities _ = []
+    
+class ViableVertex (Vertex lrec) => HasLightData a lrec where
+    getLightEntities :: a -> [RenderEntity lrec]
+    getLightEntities _ = []
+    
+    
+class ViableVertex (Vertex srec) => HasScreenData a srec where    
+    getScrEntities :: a -> [RenderEntity srec]
+    getScrEntities _ = []
 
-type HasDeferredData a grec lrec srec 
-    = ( ViableVertex (Vertex grec), ViableVertex (Vertex lrec), ViableVertex (Vertex srec)
-      , HasRenderEntities a grec, HasRenderEntities a lrec, HasRenderEntities a srec)
+
+type HasDeferredData a geo lit scr = (HasGeoData a geo, HasLightData a lit, HasScreenData a scr)
 
 runRenderSystem :: (MonadIO m) => RenderSystem () -> GLResources -> m (GLResources, RenderLog)
 runRenderSystem sys res = io $ execRWST sys () (traceShow "runRenderSystem" res)
@@ -101,11 +111,11 @@ mkRenderSystem toRender = do
     tell rlog
 
 
-createDeferredRenderSystem :: forall g g' l l' s s' scene gv lv sv. 
-                            ( HasPassUniforms g g', HasPassUniforms l l', HasPassUniforms s s'
-                            , HasDeferredData scene gv lv sv ) 
-                           => DeferredLightingDescr g g' gv l l' lv s s' sv -> scene -> RenderSystem ()
-createDeferredRenderSystem DeferredLightingDescr{..} scene = do
+createDeferredRenderSystem :: forall gu gu' lu lu' su su' dd gv lv sv. 
+                            ( HasPassUniforms gu gu', HasPassUniforms lu lu', HasPassUniforms su su'
+                            , HasDeferredData dd gv lv sv ) 
+                           => DeferredLightingDescr gu gu' gv lu lu' lv su su' sv -> dd -> RenderSystem ()
+createDeferredRenderSystem DeferredLightingDescr{..} dd = do
     ((geoSetup, {-- lightSetup,--} screenSetup, pipelineData), res, resLog) <- loadPipelineResources =<< get
     put res
     scribe resourceLog resLog
@@ -136,15 +146,12 @@ createDeferredRenderSystem DeferredLightingDescr{..} scene = do
         
 
 
-    loadPipelineData :: (UniformFields (PlainRec g'), UniformFields (PlainRec l'), UniformFields (PlainRec s')) 
-                     => ResourceManager (DeferredLightingData g' l' s')
+    loadPipelineData :: (UniformFields (PlainRec gu'), UniformFields (PlainRec lu'), UniformFields (PlainRec su')) 
+                     => ResourceManager (DeferredLightingData gu' lu' su')
     loadPipelineData = 
-        let geoEnts         = renderEntities scene :: [RenderEntity gv]
-            lightEnts       = renderEntities scene :: [RenderEntity lv]
-            screenEnts      = renderEntities scene :: [RenderEntity sv]
-            geoRs           = map toRenderEntity geoEnts
-            lightRs         = map toRenderEntity lightEnts
-            screenRs        = map toRenderEntity screenEnts
+        let geoEnts         = getGeoEntities dd   :: [RenderEntity gv]
+            lightEnts       = getLightEntities dd :: [RenderEntity lv]
+            screenEnts      = getScrEntities dd   :: [RenderEntity sv]
             
             geoShader       = passShader dfGeoPassDescr
             getGeoUniforms  = passEntityUniforms dfGeoPassDescr
@@ -156,9 +163,9 @@ createDeferredRenderSystem DeferredLightingDescr{..} scene = do
             getScreenUnis   = passEntityUniforms dfFinalScreen 
             
         in do
-            geos     <- forM geoRs    $ loadRenderEntity geoShader getGeoUniforms
-            lights   <- forM lightRs  $ loadRenderEntity lightShader getLightUniforms
-            screen   <- forM screenRs $ loadRenderEntity screenShader getScreenUnis
+            geos     <- forM geoEnts    $ loadRenderEntity geoShader getGeoUniforms
+            lights   <- forM lightEnts  $ loadRenderEntity lightShader getLightUniforms
+            screen   <- forM screenEnts $ loadRenderEntity screenShader getScreenUnis
             return $ DeferredLightingData geos lights (head screen)
 
 
