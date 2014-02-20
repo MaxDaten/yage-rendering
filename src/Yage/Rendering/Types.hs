@@ -17,7 +17,7 @@
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE FunctionalDependencies     #-}
 module Yage.Rendering.Types
-    ( Renderable(..), SomeRenderable(..), renderableType, fromRenderable
+    ( Renderable(..)
     , RenderDefinition(..)
     , Index, Position, Orientation, Scale
     , ShaderResource(..), ShaderProgram(..)
@@ -34,14 +34,10 @@ import           Yage.Prelude                        hiding (log, Index)
 
 import           Data.Hashable                       ()
 import           Filesystem.Path.CurrentOS           (encode)
-import           Foreign.C.Types                     (CFloat (..))
 
-import           Data.Typeable
-import           Data.Typeable                       as Ty (cast)
 
 import           Control.Monad.State                 ()
 import           Control.Monad.Writer                ()
-import           Linear                              (M22, M33, M44)
 ---------------------------------------------------------------------------------------------------
 import           Graphics.GLUtil
 import qualified Graphics.Rendering.OpenGL           as GL
@@ -79,25 +75,6 @@ class (ViableVertex (Vertex vr)) => Renderable r vr | r -> vr where
     renderDefinition      :: r -> RenderDefinition vr
     renderTransformation  :: r -> Transformation
 
---{--
-data SomeRenderable vr = forall r. (Typeable r, Renderable r vr) 
-                   => SomeRenderable r
-    deriving (Typeable)
-
-
-fromRenderable :: (Typeable r) => SomeRenderable rv -> Maybe r
-fromRenderable (SomeRenderable r) = Ty.cast r
-
-renderableType :: SomeRenderable rv -> TypeRep
-renderableType (SomeRenderable r) = typeOf r
-
-
-instance (Typeable vr, ViableVertex (Vertex vr)) => Renderable (SomeRenderable vr) vr where
-    renderDefinition     (SomeRenderable r) = renderDefinition r
-    renderTransformation (SomeRenderable r) = renderTransformation r
-
---}
-
 ---------------------------------------------------------------------------------------------------
 type Index        = Int
 toIndex1 :: a -> GL.Index1 a
@@ -106,19 +83,6 @@ toIndex1 = GL.Index1
 --type Program = (ShaderResource, ShaderDefinition ())
 
 
----------------------------------------------------------------------------------------------------
-
-instance AsUniform Float where
-    asUniform = asUniform . CFloat
-
-instance AsUniform (M44 Float) where
-    asUniform m = asUniform $ over (mapped.mapped) CFloat m
-
-instance AsUniform (M33 Float) where
-    asUniform m = asUniform $ over (mapped.mapped) CFloat m
-
-instance AsUniform (M22 Float) where
-    asUniform m = asUniform $ over (mapped.mapped) CFloat m
 
 ---------------------------------------------------------------------------------------------------
 
