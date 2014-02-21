@@ -5,18 +5,18 @@ import Yage.Prelude
 import Yage.Math
 
 
-type Orientation  = Quaternion Float
-type Scale        = V3 Float
-type Position     = V3 Float
+type Orientation a = Quaternion a
+type Scale a       = V3 a
+type Position a    = V3 a
 
-data Transformation = Transformation
-    { _transPosition    :: !Position
-    , _transOrientation :: !Orientation
-    , _transScale       :: !Scale
+data Transformation a = Transformation
+    { _transPosition    :: !(Position a)
+    , _transOrientation :: !(Orientation a)
+    , _transScale       :: !(Scale a)
     } deriving ( Show, Typeable )
 
 
 makeLenses ''Transformation
 
-idTransformation :: Transformation
+idTransformation :: (RealFloat a, Epsilon a) => Transformation a
 idTransformation = Transformation zero (axisAngle (V3 0 1 0) (deg2rad 0)) (V3 1 1 1)

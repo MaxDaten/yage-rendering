@@ -16,8 +16,9 @@ import           Yage.Rendering.Vertex
 
 
 
+
 data RenderEntity vr = RenderEntity
-    { _entityTransformation :: !Transformation
+    { _entityTransformation :: !(Transformation GLfloat)
     , _entityRenderDef      :: !(RenderDefinition vr)
     } deriving (Typeable)
 
@@ -42,16 +43,12 @@ instance (ViableVertex (Vertex vr)) => Renderable (RenderEntity vr) vr where
     renderTransformation    = _entityTransformation
 
 
---instance (RealFloat a, Typeable a) => Renderable (Viewport a) (P3 "pos" GLfloat) where
---    renderDefinition _      =
---        let quadVerts = (vertices . triangles $ quad 1)
---        in RenderDefinition
---            { _rdefData     = makeMesh "screen" quadVerts
---            --, _rdefProgram  = (shader, shdef)
---            , _rdefTextures = []
---            , _rdefMode     = Triangles
---            }
---    renderTransformation vp = 
---        let dim  = realToFrac <$> vp^.vpSize
---        in idTransformation & transPosition .~ 0
---                            & transScale    .~ V3 ( dim^._x ) ( dim^._y ) (1)
+entityPosition    :: Lens' (RenderEntity v) (Position GLfloat)
+entityPosition    = entityTransformation.transPosition
+
+entityScale       :: Lens' (RenderEntity v) (Scale GLfloat)
+entityScale       = entityTransformation.transScale
+
+entityOrientation :: Lens' (RenderEntity v) (Orientation GLfloat)
+entityOrientation = entityTransformation.transOrientation
+

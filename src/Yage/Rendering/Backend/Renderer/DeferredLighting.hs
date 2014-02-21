@@ -44,7 +44,7 @@ instance UniformFields (Uniforms u) => WithSetup (FramebufferSetup u) Renderer w
          withShader fbShader                   $ \sh -> do
           withTexturesAt Texture2D globalTextures $ do
             preRendering
-            io $ setAllUniforms sh fbGlobalUniforms
+            io $ setUniforms sh fbGlobalUniforms
             r <- ma
             postRendering
             return r

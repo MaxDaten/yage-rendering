@@ -123,16 +123,16 @@ renderRenderSet rset = do
     withVAO (rset^.vao) . withTexturesAt GL.Texture2D (rset^.textureChannels) $! do
 
         -- runUniform (udefs >> mapTextureSamplers texObjs) shaderEnv -- why no texture samplers anymore?
-        when (isJust mshader) $ io $ setAllUniforms (mshader^?!_Just) (rset^.uniformDefs)
+        when (isJust mshader) $ io $ setUniforms (mshader^?!_Just) (rset^.uniformDefs)
 
 
         drawNow (rset^.drawMode) rset
     logCountObj
-    logCountTriangles (rset^.vertexCount)
+    logCountTriangles (rset^.vertexCount `div` 3)
     where
         -- checkErr msg = io $ GLU.throwErrorMsg msg
 
-        drawNow mode rset = io $ GL.drawArrays mode 0 (traceShowS' "count" $ rset^.vertexCount)
+        drawNow mode rset = io $ GL.drawArrays mode 0 (rset^.vertexCount)
         --drawNow mode@GL.Triangles rset = io $ GL.drawElements mode (getCnt mode rset) GL.UnsignedInt nullPtr
         --drawNow mode@GL.Points    rset = io $ GL.drawElements mode (getCnt mode rset) GL.UnsignedInt nullPtr
         --drawNow mode@GL.Lines     rset = io $ GL.drawElements mode (getCnt mode rset) GL.UnsignedInt nullPtr

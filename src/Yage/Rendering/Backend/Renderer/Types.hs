@@ -69,7 +69,7 @@ type TextureAssignment = (GL.TextureObject, (GL.GLuint, String))
 
 data RenderSet urec = RenderSet -- TODO rename RenderResource
     { _vao             :: GL.VertexArrayObject
-    , _uniformDefs     :: PlainRec urec -- to monoid
+    , _uniformDefs     :: PlainRec urec
     , _textureChannels :: [TextureAssignment]
     , _drawMode        :: !GL.PrimitiveMode
     , _vertexCount     :: !GL.GLsizei

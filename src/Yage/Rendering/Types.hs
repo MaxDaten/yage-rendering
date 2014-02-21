@@ -73,7 +73,8 @@ data RenderDefinition vr = RenderDefinition
 
 class (ViableVertex (Vertex vr)) => Renderable r vr | r -> vr where
     renderDefinition      :: r -> RenderDefinition vr
-    renderTransformation  :: r -> Transformation
+    renderTransformation  :: r -> Transformation GLfloat
+
 
 ---------------------------------------------------------------------------------------------------
 type Index        = Int
