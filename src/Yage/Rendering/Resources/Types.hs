@@ -30,7 +30,7 @@ import           Yage.Rendering.Backend.Framebuffer
 --    --requestRenderItem    :: (Ord geoId, Ord shId) => (geoId, shId) -> rm iid
 
 type GLVertexbuffer        = (MeshHash, GL.BufferObject)
-type GLVertexArray         = VAO
+type GLVertexArray         = (VAO, Int)
 type GLShader              = ShaderProgram
 type GLTexture             = (GLBufferSpec, GL.TextureObject)
 type GLRenderbuffer        = (GLBufferSpec, GL.RenderbufferObject)

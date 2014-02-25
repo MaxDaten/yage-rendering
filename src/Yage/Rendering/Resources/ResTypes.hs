@@ -29,6 +29,10 @@ data TextureResource =
     deriving (Typeable)
 
 
+data VertexDataResource =
+    OBJFile FilePath
+    deriving ( Show )
+
 -- TODO
 instance Ord TextureResource where
     compare (TextureFile pathA   ) (TextureFile pathB   )    = compare pathA pathB

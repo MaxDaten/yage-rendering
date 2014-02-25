@@ -20,6 +20,8 @@ module Yage.Rendering.Types
     ( Renderable(..)
     , RenderDefinition(..)
     , Index, Position, Orientation, Scale
+
+    , DataResource
     , ShaderResource(..), ShaderProgram(..)
     , TextureDefinition(..), TextureResource(..), TextureChannel, GLBufferSpec(..)
     , RenderbufferResource(..)
@@ -59,9 +61,11 @@ data TextureDefinition = TextureDefinition
     } deriving (Typeable, Show, Eq, Ord)
 
 
+type DataResource vr = Either VertexDataResource (Mesh vr)
+
 
 data RenderDefinition vr = RenderDefinition
-    { _rdefData     :: Mesh vr
+    { _rdefData     :: DataResource vr
     --, _rdefProgram  :: Program
     , _rdefTextures :: [TextureDefinition] -- | (Resource, Shader TextureUnit)
     , _rdefMode     :: GL.PrimitiveMode
