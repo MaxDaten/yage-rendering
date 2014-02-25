@@ -241,9 +241,8 @@ requestShader = requestResource loadedShaders loadShader return
 
 
 
-requestVertexbuffer :: (Storable (Vertex vr)) => DataResource vr -> ResourceManager (BufferedVertices vr, Int)
-requestVertexbuffer (Left res) = error "requestVertexbuffer not defined"
-requestVertexbuffer (Right mesh) = do
+requestVertexbuffer :: (Storable (Vertex vr)) => Mesh vr -> ResourceManager (BufferedVertices vr)
+requestVertexbuffer mesh = do
     vMap <- use loadedVertexBuffer
 
     vbuff <- maybe
@@ -252,7 +251,7 @@ requestVertexbuffer (Right mesh) = do
                 (vMap^.at (mesh^.meshId))
 
     loadedVertexBuffer.at (mesh^.meshId) ?= (mesh^.meshHash, getVertexBuffer vbuff)
-    return (vbuff, dataCount mesh)
+    return vbuff
 
     where
 
@@ -267,20 +266,17 @@ requestVertexbuffer (Right mesh) = do
 
 
 
-requestRenderSet :: (ViableVertex (Vertex vr)) => DataResource vr -> ShaderResource -> ResourceManager GLVertexArray
-requestRenderSet dat shader = request dat 
+requestRenderSet :: (ViableVertex (Vertex vr)) => Mesh vr -> ShaderResource -> ResourceManager GLVertexArray
+requestRenderSet mesh shader = aux (mesh^.meshId,shader) 
     where
-    request (Left res)   = aux (show res,shader)
-    request (Right mesh) = aux (mesh^.meshId,shader)
     --loadVertexArray :: (ViableVertex (Vertex vr)) => Mesh vr -> MeshId -> ShaderResource -> ResourceManager GLVertexArray
     loadVertexArray _ _ = do
-        (vbuff, cnt)    <- requestVertexbuffer dat
+        vbuff           <- requestVertexbuffer mesh
         shaderProg      <- requestShader shader
-        tell [ format "RenderSet: {0} - {1}" [show dat, show shader] ] 
-        vao <- io $ makeVAO $ do
+        tell [ format "RenderSet: {0} - {1}" [show mesh, show shader] ] 
+        io $ makeVAO $ do
             bindVertices vbuff
             enableVertices' shaderProg vbuff
-        return (vao,cnt)
             -- is really part of vao:
             -- http://stackoverflow.com/questions/8973690/vao-and-element-array-buffer-state
             --GL.bindBuffer GL.ElementArrayBuffer $= Just ebo

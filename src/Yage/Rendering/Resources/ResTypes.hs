@@ -6,7 +6,6 @@ import           Yage.Prelude
 import qualified Graphics.Rendering.OpenGL as GL
 
 import           Yage.Rendering.Texture
-
 import           Linear
 
 type VBO = GL.BufferObject
@@ -28,10 +27,6 @@ data TextureResource =
     | TextureBuffer String GL.TextureTarget2D GLBufferSpec -- only backed by opengl
     deriving (Typeable)
 
-
-data VertexDataResource =
-    OBJFile FilePath
-    deriving ( Show )
 
 -- TODO
 instance Ord TextureResource where

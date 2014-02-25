@@ -173,12 +173,11 @@ loadRenderEntity :: (ViableVertex (Vertex vr), UniformFields (PlainRec u))
                 -> ResourceManager (RenderSet u)
 loadRenderEntity withProgram entityUniforms ent = do
     rdef@RenderDefinition{_rdefData} <- pure $ ent^.entityRenderDef 
-    (vao, cnt) <- requestRenderSet _rdefData withProgram
-    RenderSet  <$> pure vao
+    RenderSet  <$> (requestRenderSet _rdefData withProgram)
                <*> (pure (entityUniforms ent))
                <*> (forM (_rdefTextures rdef) makeTexAssignment)
                <*> (pure (_rdefMode rdef))
-               <*> (pure (fromIntegral $ cnt))
+               <*> (pure (fromIntegral $ dataCount _rdefData))
 
 
 makeTexAssignment :: TextureDefinition -> ResourceManager TextureAssignment
