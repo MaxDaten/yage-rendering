@@ -42,13 +42,3 @@ instance (ViableVertex (Vertex vr)) => Renderable (RenderEntity vr) vr where
     renderDefinition        = _entityRenderDef
     renderTransformation    = _entityTransformation
 
-
-entityPosition    :: Lens' (RenderEntity v) (Position GLfloat)
-entityPosition    = entityTransformation.transPosition
-
-entityScale       :: Lens' (RenderEntity v) (Scale GLfloat)
-entityScale       = entityTransformation.transScale
-
-entityOrientation :: Lens' (RenderEntity v) (Orientation GLfloat)
-entityOrientation = entityTransformation.transOrientation
-

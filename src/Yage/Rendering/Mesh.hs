@@ -51,12 +51,22 @@ dataCount Mesh{_meshData} = VS.length _meshData
 makeMesh :: (Storable (Vertex v)) => String -> [Vertex v] -> Mesh v
 makeMesh ident verts = makeMeshV ident (V.fromList verts)
 
+makeMesh' :: (Storable (Vertex v)) => [Vertex v] -> Mesh v
+makeMesh' verts = makeMeshV' (V.fromList verts)
+
 
 makeMeshV :: (Storable (Vertex v)) => String -> V.Vector (Vertex v) -> Mesh v
 makeMeshV ident verts = 
     let vec         = V.convert verts
         hash        = XH.xxHash' . BS.vectorToByteString $ vec
     in Mesh ident vec hash
+
+
+makeMeshV' :: (Storable (Vertex v)) => V.Vector (Vertex v) -> Mesh v
+makeMeshV' verts = 
+    let vec         = V.convert verts
+        hash        = XH.xxHash' . BS.vectorToByteString $ vec
+    in Mesh (show hash) vec hash
 
 
 emptyMesh :: (Storable (Vertex v)) => Mesh v

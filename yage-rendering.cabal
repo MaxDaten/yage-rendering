@@ -97,7 +97,6 @@ library
                         , OpenGL                  >= 2.9     &&   < 3
                         , GLUtil                  >= 0.7.1
                         , JuicyPixels             >= 3
-                        , xxhash                  == 0.0.1
                         , spool                   == 0.1
 
                         , mtl                     >= 2.1

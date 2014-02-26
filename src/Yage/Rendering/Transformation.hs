@@ -13,7 +13,7 @@ data Transformation a = Transformation
     { _transPosition    :: !(Position a)
     , _transOrientation :: !(Orientation a)
     , _transScale       :: !(Scale a)
-    } deriving ( Show, Typeable )
+    } deriving ( Show, Typeable, Functor )
 
 
 makeLenses ''Transformation
