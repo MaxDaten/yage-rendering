@@ -1,22 +1,17 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
+{-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 
-module Yage.Rendering.Backend.Renderer (
-      module Types
-    , runRenderer, renderFrame
-    , logRenderM
-    , version
-    , withFramebuffer, withShader, withTexturesAt
-    ) where
+module Yage.Rendering.Backend.Renderer where
 ---------------------------------------------------------------------------------------------------
 import           Yage.Prelude                            hiding (log)
 
 import           Control.Monad                           (forM_, mapM_, when)
-import           Control.Monad.RWS.Strict                (runRWST)
+import           Control.Monad.RWS.Strict                (RWST, runRWST)
 
 import           Graphics.GLUtil                         (ShaderProgram(..))
 import qualified Graphics.Rendering.OpenGL               as GL
@@ -24,13 +19,55 @@ import           Graphics.Rendering.OpenGL.GL            (($=))
 ---------------------------------------------------------------------------------------------------
 import           Yage.Rendering.Backend.Framebuffer
 
-import           Yage.Rendering.Backend.Renderer.Lenses  as Types
-import           Yage.Rendering.Backend.Renderer.Logging
-import           Yage.Rendering.Backend.Renderer.Types   as Types
 import           Yage.Rendering.Uniforms
 {-=================================================================================================-}
 
-import           Paths_yage_rendering
+-- import           Paths_yage_rendering
+
+
+data RenderLog = RenderLog 
+    { _rlLogObjCount :: !Int
+    , _rlLogTriCount :: !Int
+    , _rlLog         :: ![String]
+    , _resourceLog   :: ![String]
+    } deriving (Show, Eq)
+
+makeLenses ''RenderLog
+
+data RenderState = RenderState
+    { -- _currentFramebuffer :: Maybe GLFramebuffer
+     _currentShader      :: Maybe ShaderProgram
+    }
+
+makeLenses ''RenderState
+
+type Renderer = RWST () RenderLog RenderState IO
+
+---------------------------------------------------------------------------------------------------  
+type TextureAssignment = (GL.TextureObject, (GL.GLuint, String))
+---------------------------------------------------------------------------------------------------
+
+data RenderSet urec = RenderSet -- TODO rename RenderResource
+    { _vao             :: GL.VertexArrayObject
+    , _uniformDefs     :: PlainRec urec
+    , _textureChannels :: [TextureAssignment]
+    , _drawMode        :: !GL.PrimitiveMode
+    , _vertexCount     :: !GL.GLsizei
+    }
+
+makeLenses ''RenderSet
+
+
+
+
+data FramebufferSetup u = FramebufferSetup
+    { framebuffer       :: GL.FramebufferObject
+    , fbShader          :: ShaderProgram
+    , fbGlobalUniforms  :: Uniforms u
+    , globalTextures    :: [TextureAssignment]
+    , preRendering      :: Renderer ()
+    , postRendering     :: Renderer ()
+    }
 
 
 
@@ -46,60 +83,21 @@ runRenderer renderer = do
             afterRender
             return a
 
+withFramebufferSetup :: UniformFields (Uniforms u) => FramebufferSetup u -> Renderer a -> Renderer a
+withFramebufferSetup FramebufferSetup{..} ma = do
+    withFramebuffer framebuffer DrawTarget $ do
+     withShader fbShader                   $ \sh -> do
+      withTexturesAt GL.Texture2D globalTextures $ do
+        preRendering
+        io $ setUniforms sh fbGlobalUniforms
+        r <- ma
+        postRendering
+        return r
 
-
-{--
-renderToFramebuffer :: UniformFields (PlainRec urec) => [RenderSet urec] -> Framebuffer tex rbuff -> Renderer ()
-renderToFramebuffer rdata toFramebuffer = 
-    withFramebuffer toFramebuffer DrawTarget $ \_fb -> 
-        renderFrame rdata
---}
 
 
 renderFrame :: UniformFields (Uniforms urec) => [RenderSet urec] -> Renderer ()
-renderFrame rdata = do
-    forM_ rdata renderRenderSet
-
-
-
-
-{--
-
-data RenderBatch r = RenderBatch
-    { withBatch     :: ([r] -> Renderer ()) -> Renderer ()
-    , perItemAction :: r -> Renderer ()
-    , batch         :: [r]
-    }
-
-doRender :: RenderView -> [RenderData] -> Renderer ()
-doRender view vdefs =
-    let batches = createShaderBatches view vdefs
-    in forM_ batches $ renderBatch view
-
-renderBatch :: RenderView -> RenderBatch RenderData -> Renderer ()
-renderBatch view RenderBatch{..} = withBatch $
-    mapM_ (perItemAction >> renderViewEntity view)
-
-
-createShaderBatches :: RenderView -> [ViewEntity] -> [RenderBatch ViewEntity]
-createShaderBatches _view vdefs =
-    let shaderGroups = groupBy sameShader vdefs
-    in map mkShaderBatch shaderGroups
-    where
-        sameShader :: ViewEntity -> ViewEntity -> Bool
-        sameShader a b = a^.vdRenderData.shaderProgram.to program 
-                         == b^.vdRenderData.shaderProgram.to program
-
-        mkShaderBatch :: [ViewEntity] -> RenderBatch ViewEntity
-        mkShaderBatch []         = error "empty RenderBatch: should be at least one for all items"
-        mkShaderBatch defs@(v:_) =
-            let batchShader = v^.vdRenderData.shaderProgram
-            in RenderBatch
-                { withBatch     = \m -> withShader batchShader (const $ m defs)
-                , perItemAction = \_ -> return ()
-                , batch         = defs
-                }
---}
+renderFrame rdata = forM_ rdata renderRenderSet
 
 
 
@@ -112,12 +110,11 @@ beforeRender = return ()
 
 afterRender :: Renderer ()
 afterRender = return ()
-    --updateStatistics
 
 
 ---------------------------------------------------------------------------------------------------
 
-renderRenderSet :: UniformFields (PlainRec urec) => RenderSet urec -> Renderer ()
+renderRenderSet :: UniformFields (Uniforms urec) => RenderSet urec -> Renderer ()
 renderRenderSet rset = do
     mshader <- use currentShader
     withVAO (rset^.vao) . withTexturesAt GL.Texture2D (rset^.textureChannels) $! do
@@ -133,11 +130,6 @@ renderRenderSet rset = do
         -- checkErr msg = io $ GLU.throwErrorMsg msg
 
         drawNow mode rset = io $ GL.drawArrays mode 0 (rset^.vertexCount)
-        --drawNow mode@GL.Triangles rset = io $ GL.drawElements mode (getCnt mode rset) GL.UnsignedInt nullPtr
-        --drawNow mode@GL.Points    rset = io $ GL.drawElements mode (getCnt mode rset) GL.UnsignedInt nullPtr
-        --drawNow mode@GL.Lines     rset = io $ GL.drawElements mode (getCnt mode rset) GL.UnsignedInt nullPtr
-        --drawNow mode _ = error $ format "primitive mode {0} not supported" [show mode]
-
 
 ---------------------------------------------------------------------------------------------------
 {-- TODO INVESTIGATE
@@ -152,14 +144,14 @@ mapTextureSamplers texObjs =
 
 -- | the current bound fbo is NOT restored (lack of support by the OpenGL lib),
 -- instead the default is restored 
-withFramebuffer :: Framebuffer tex rbuff -> FBOTarget -> (Framebuffer tex rbuff -> Renderer a) -> Renderer a
-withFramebuffer fb@(Framebuffer fbo _) t action = 
+withFramebuffer :: GL.FramebufferObject -> FBOTarget -> Renderer a -> Renderer a
+withFramebuffer fbo t action = 
     let target = getGLTarget t in do
     -- old <- return GL.FramebufferObject 0 -- TODO get real git glGetIntegerv GL_FRAMEBUFFER_BINDING
     --currentFramebuffer ?= fb
     io $ GL.bindFramebuffer target $= fbo
     
-    result <- action fb
+    result <- action
     
     io $ GL.bindFramebuffer target $= GL.defaultFramebufferObject
     --currentFramebuffer .= Nothing
@@ -203,3 +195,37 @@ withTexturesAt tt ts m = do
         cleanup i = io $ do 
             GL.activeTexture $= GL.TextureUnit i
             GL.textureBinding tt $= Nothing
+
+---------------------------------------------------------------------------------------------------
+
+initRenderState :: RenderState
+initRenderState = RenderState Nothing
+
+
+emptyRenderLog :: RenderLog
+emptyRenderLog = mempty
+
+
+instance Show (RenderSet urec) where
+    show RenderSet{..} = "RenderSet: { vao: {0}, texs: {1}, mode: {2}, elem# {3} }"
+
+instance Monoid RenderLog where
+    mempty = RenderLog 0 0 [] []
+    mappend (RenderLog ca ta la ra) (RenderLog cb tb lb rb) = RenderLog (ca + cb) (ta + tb) (mappend la lb) (mappend ra rb)
+
+---------------------------------------------------------------------------------------------------
+
+logRenderM :: String -> Renderer ()
+logRenderM msg = scribe rlLog [msg]
+
+logCountObj :: Renderer ()
+logCountObj = scribe rlLogObjCount 1
+
+logCountTriangles :: (Integral i) => i -> Renderer ()
+logCountTriangles = scribe rlLogTriCount . fromIntegral
+
+logRenderMf :: String -> [String] -> Renderer ()
+logRenderMf msg args = logRenderM $ format msg args
+
+isEmptyRenderLog :: RenderLog -> Bool
+isEmptyRenderLog = (mempty ==)

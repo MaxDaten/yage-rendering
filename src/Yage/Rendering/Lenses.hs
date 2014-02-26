@@ -13,7 +13,7 @@ import           Yage.Rendering.Types
 makeLenses ''TextureDefinition
 makeLenses ''GLBufferSpec
 makeLenses ''ShaderResource
-makeLenses ''RenderDefinition
+makeLenses ''RenderEntity
 --makeLenses ''RenderScene
 makeLenses ''Mesh
 --makeLenses ''Mesh

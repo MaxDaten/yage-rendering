@@ -29,12 +29,15 @@ import qualified Graphics.Rendering.OpenGL            as GL
 
 
 import           Yage.Rendering.Backend.Framebuffer
+import           Yage.Rendering.Backend.RenderPass
+import           Yage.Rendering.Backend.Renderer
 import           Yage.Rendering.Resources.Types       as Types
 
 
 import           Foreign.Storable
 
 import           Yage.Rendering.Lenses
+import           Yage.Rendering.Uniforms
 import qualified Yage.Rendering.Texture               as Tex
 import           Yage.Rendering.Vertex
 import           Yage.Rendering.Types                 hiding (Index)
@@ -266,8 +269,8 @@ requestVertexbuffer mesh = do
 
 
 
-requestRenderSet :: (ViableVertex (Vertex vr)) => Mesh vr -> ShaderResource -> ResourceManager GLVertexArray
-requestRenderSet mesh shader = aux (mesh^.meshId,shader) 
+requestVAO :: (ViableVertex (Vertex vr)) => Mesh vr -> ShaderResource -> ResourceManager GLVertexArray
+requestVAO mesh shader = aux (mesh^.meshId,shader) 
     where
     --loadVertexArray :: (ViableVertex (Vertex vr)) => Mesh vr -> MeshId -> ShaderResource -> ResourceManager GLVertexArray
     loadVertexArray _ _ = do
@@ -282,13 +285,48 @@ requestRenderSet mesh shader = aux (mesh^.meshId,shader)
             --GL.bindBuffer GL.ElementArrayBuffer $= Just ebo
     aux = requestResource loadedVertexArrays (uncurry loadVertexArray) return
 
+
+
+requestRenderSet :: (ViableVertex (Vertex vr), UniformFields (Uniforms u))
+                => ShaderResource 
+                -> Uniforms u
+                -> RenderEntity vr
+                -> ResourceManager (RenderSet u)
+requestRenderSet withProgram entityUniforms ent = do
+    RenderSet  <$> ( requestVAO (ent^.renderData) withProgram )
+               <*> ( pure $ entityUniforms )
+               <*> ( forM (ent^.entityTextures) makeTexAssignment )
+               <*> ( pure $ ent^.renderMode )
+               <*> ( pure $ fromIntegral . dataCount $ ent^.renderData )
+
+
+
+requestFramebufferSetup :: UniformFields (Uniforms global) 
+                     => PassDescr ent global local -> ResourceManager (FramebufferSetup global)
+requestFramebufferSetup PassDescr{..} = 
+    FramebufferSetup 
+        <$> case passFBSpec of
+            CustomFramebuffer s -> _fbo <$> (requestFramebuffer s)
+            DefaultFramebuffer  -> pure GL.defaultFramebufferObject
+        <*> requestShader passShader
+        <*> pure passGlobalUniforms
+        <*> forM passGlobalTextures makeTexAssignment
+        <*> pure passPreRendering
+        <*> pure passPostRendering
+
+
+
+makeTexAssignment :: TextureDefinition -> ResourceManager TextureAssignment
+makeTexAssignment tex =
+    let ch = tex^.texChannel & _1 %~ fromIntegral
+    in (,ch) . snd <$> requestTexture (tex^.texResource)
+
+
 ---------------------------------------------------------------------------------------------------
 initialGLRenderResources :: GLResources
 initialGLRenderResources =
     GLResources mempty mempty mempty mempty mempty mempty
 
-defaultFramebuffer :: GLFramebuffer
-defaultFramebuffer = Framebuffer GL.defaultFramebufferObject mempty
 
 replaceIndices :: [Word32] -> IO ()
 replaceIndices = replaceBuffer GL.ElementArrayBuffer

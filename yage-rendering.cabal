@@ -43,7 +43,6 @@ library
                         Yage.Rendering.Texture
                         
                         Yage.Rendering.ResourceManager
-                        Yage.Rendering.RenderEntity
                         Yage.Rendering.Lighting
                         Yage.Rendering.Transformation
                         Yage.Rendering.Viewport
@@ -51,16 +50,11 @@ library
                         Yage.Rendering.Backend.Shader
                         Yage.Rendering.Backend.Renderer
                         Yage.Rendering.Backend.Framebuffer
-                        Yage.Rendering.Backend.Renderer.Logging
-                        Yage.Rendering.Backend.Renderer.DeferredLighting
-                        Yage.Rendering.Backend.RenderPipeline
+                        Yage.Rendering.Backend.RenderPass
   other-modules:
                         Paths_yage_rendering
                         Yage.Rendering.Utils
 
-                        Yage.Rendering.Backend.Renderer.Types
-                        Yage.Rendering.Backend.Renderer.Lenses
-                        
                         Yage.Rendering.Resources.Types
                         Yage.Rendering.Resources.ResTypes
 

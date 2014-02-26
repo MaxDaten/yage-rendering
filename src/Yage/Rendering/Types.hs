@@ -18,7 +18,7 @@
 {-# LANGUAGE FunctionalDependencies     #-}
 module Yage.Rendering.Types
     ( Renderable(..)
-    , RenderDefinition(..)
+    , RenderEntity(..)
     , Index, Position, Orientation, Scale
 
     , ShaderResource(..), ShaderProgram(..)
@@ -60,11 +60,11 @@ data TextureDefinition = TextureDefinition
     } deriving (Typeable, Show, Eq, Ord)
 
 
-data RenderDefinition vr = RenderDefinition
-    { _rdefData     :: Mesh vr
+data RenderEntity vr = RenderEntity
+    { _renderData     :: Mesh vr
     --, _rdefProgram  :: Program
-    , _rdefTextures :: [TextureDefinition] -- | (Resource, Shader TextureUnit)
-    , _rdefMode     :: GL.PrimitiveMode
+    , _renderMode     :: GL.PrimitiveMode
+    , _entityTextures :: [TextureDefinition] -- | (Resource, Shader TextureUnit)
     }
 
 ---------------------------------------------------------------------------------------------------
@@ -72,7 +72,7 @@ data RenderDefinition vr = RenderDefinition
 
 
 class (ViableVertex (Vertex vr)) => Renderable r vr | r -> vr where
-    renderDefinition      :: r -> RenderDefinition vr
+    renderDefinition      :: r -> RenderEntity vr
     --renderTransformation  :: r -> Transformation GLfloat
 
 

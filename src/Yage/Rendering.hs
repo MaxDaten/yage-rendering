@@ -16,8 +16,6 @@ module Yage.Rendering
     ( module Types
     , module Yage.Rendering
     , module Lenses
-    , module RendererExports
-    , module RenderEntity
     
     , module Mesh
     , module Vertex
@@ -26,6 +24,7 @@ module Yage.Rendering
     , module LinExport
     , module Framebuffer
     , module ResourceManager
+    , module Pass
     ) where
 
 import           Yage.Prelude
@@ -36,66 +35,21 @@ import           Control.Monad.RWS
 import           Linear                                 as LinExport
 
 import           Yage.Rendering.Backend.Renderer        as Renderer
-import           Yage.Rendering.Backend.Renderer.Lenses as RendererExports
-import           Yage.Rendering.Backend.Renderer.Types  as RendererExports (RenderConfig (..), RenderLog (..))
+import           Yage.Rendering.Backend.RenderPass      as Pass
 import           Yage.Rendering.Backend.Framebuffer     as Framebuffer
 import           Yage.Rendering.Lenses                  as Lenses
-import           Yage.Rendering.RenderEntity            as RenderEntity
 import           Yage.Rendering.ResourceManager
 import           Yage.Rendering.ResourceManager         as ResourceManager (GLResources, initialGLRenderResources)
-import           Yage.Rendering.ResourceManager         as Framebuffer (defaultFramebuffer)
 import           Yage.Rendering.Types                   as Types
 
 import           Yage.Rendering.Mesh                    as Mesh
 import           Yage.Rendering.Uniforms                as Uniforms
 import           Yage.Rendering.Vertex                  as Vertex
 
-import           Yage.Rendering.Backend.Renderer.DeferredLighting
-
 
 type RenderSystem = RWST () RenderLog GLResources IO
 
 
-
-data DeferredLightingDescr gGlo gLoc grec
-                           lGlo lLoc lrec
-                           sGlo sLoc srec = DeferredLightingDescr
-    { dfGeoPassDescr        :: PassDescr gGlo gLoc grec
-    , dfLightingPassDescr   :: PassDescr lGlo lLoc lrec
-    , dfFinalScreen         :: PassDescr sGlo sLoc srec
-    }
-
- 
-
-data TargetFramebuffer =
-      DefaultFramebuffer 
-    | CustomFramebuffer (String, FramebufferSpec TextureResource RenderbufferResource)
-
-data PassDescr g l v = PassDescr
-    { passFBSpec         :: TargetFramebuffer
-    , passShader         :: ShaderResource
-    , passGlobalUniforms :: Uniforms g
-    , passEntityUniforms :: RenderEntity v -> Uniforms l
-    , passGlobalTextures :: [TextureDefinition]
-    , passPreRendering   :: Renderer ()
-    , passPostRendering  :: Renderer ()
-    }
-
-
-class ViableVertex (Vertex grec) => HasGeoData a grec where
-    getGeoEntities  :: a -> [RenderEntity grec]
-    getGeoEntities _ = []
-    
-class ViableVertex (Vertex lrec) => HasLightData a lrec where
-    getLightEntities :: a -> [RenderEntity lrec]
-    getLightEntities _ = []
-    
-    
-class ViableVertex (Vertex srec) => HasScreen a srec where
-    getScreen :: a -> RenderEntity srec
-
-
-type HasDeferredData a geo lit scr = (HasGeoData a geo, HasLightData a lit, HasScreen a scr)
 
 runRenderSystem :: (MonadIO m) => RenderSystem () -> GLResources -> m (GLResources, RenderLog)
 runRenderSystem sys res = io $ execRWST sys () res
@@ -106,12 +60,37 @@ mkRenderSystem :: Renderer () -> RenderSystem ()
 mkRenderSystem toRender = do
     (_, rlog) <- io $ Renderer.runRenderer toRender
     tell rlog
+{--
+outerRim = flip runRenderSystem res $ do
+    runRenderPass geoDescr geos
+    runRenderPass lightPass lights
+    runRenderPass geoDescr screen
+--}
+
+runRenderPass :: (Renderable ent vr, UniformFields (Uniforms globals), UniformFields (Uniforms locals) ) 
+              => PassDescr ent globals locals -> [ent] -> RenderSystem ()
+runRenderPass passDescr@PassDescr{..} entities = do
+    (setup, rSets) <- managePassResoures
+    mkRenderSystem $ mkRenderPass setup rSets
+
+    where
+    managePassResoures = do
+        res <- get 
+        (results, res', reslog) <- runResourceManager res $ 
+            (,) <$> (requestFramebufferSetup passDescr)
+                <*> (forM entities $ \e -> requestRenderSet passShader (passEntityUniforms e) (renderDefinition e))
+        scribe resourceLog reslog
+        put res'
+        return results
 
 
-createDeferredRenderSystem :: forall gu gu' lu lu' su su' dd gv lv sv. 
-                            ( HasPassUniforms gu gu', HasPassUniforms lu lu', HasPassUniforms su su'
-                            , HasDeferredData dd gv lv sv ) 
-                           => DeferredLightingDescr gu gu' gv lu lu' lv su su' sv -> dd -> RenderSystem ()
+{--
+
+createDeferredRenderSystem :: forall geoPass geo geoGlobal geoLocal lightPass light lightGlobal lightLocal screenPass screen screenGlobal screenLocal dd.
+    ( geoPass    ~ PassDescr geo geoGlobal geoLocal
+    , lightPass  ~ PassDescr light lightGlobal lightLocal
+    , screenPass ~ PassDescr screen screenGlobal screenLocal ) =>
+    DeferredLightingDescr geoPass lightPass screenPass -> dd -> RenderSystem ()
 createDeferredRenderSystem DeferredLightingDescr{..} dd = do
     ((geoSetup, {-- lightSetup,--} screenSetup, pipelineData), res, resLog) <- loadPipelineResources =<< get
     put res
@@ -127,20 +106,6 @@ createDeferredRenderSystem DeferredLightingDescr{..} dd = do
                  -- <*> loadFramebufferSetup dfLightingPassDescr
                 <*> loadFramebufferSetup dfFinalScreen
                 <*> loadPipelineData
-
-
-    loadFramebufferSetup PassDescr{..} = 
-        FramebufferSetup 
-            <$> case passFBSpec of
-                CustomFramebuffer s -> requestFramebuffer s
-                DefaultFramebuffer  -> pure defaultFramebuffer
-            <*> requestShader passShader
-            <*> pure passGlobalUniforms
-            <*> forM passGlobalTextures makeTexAssignment
-            <*> pure passPreRendering
-            <*> pure passPostRendering
-
-        
 
 
     loadPipelineData :: (UniformFields (PlainRec gu'), UniformFields (PlainRec lu'), UniformFields (PlainRec su')) 
@@ -166,25 +131,7 @@ createDeferredRenderSystem DeferredLightingDescr{..} dd = do
             return $ DeferredLightingData geos lights scr
 
 
-loadRenderEntity :: (ViableVertex (Vertex vr), UniformFields (PlainRec u))
-                => ShaderResource 
-                -> (RenderEntity vr -> PlainRec u)
-                -> RenderEntity vr
-                -> ResourceManager (RenderSet u)
-loadRenderEntity withProgram entityUniforms ent = do
-    rdef@RenderDefinition{_rdefData} <- pure $ ent^.entityRenderDef 
-    RenderSet  <$> (requestRenderSet _rdefData withProgram)
-               <*> (pure (entityUniforms ent))
-               <*> (forM (_rdefTextures rdef) makeTexAssignment)
-               <*> (pure (_rdefMode rdef))
-               <*> (pure (fromIntegral $ dataCount _rdefData))
-
-
-makeTexAssignment :: TextureDefinition -> ResourceManager TextureAssignment
-makeTexAssignment tex =
-    let ch = tex^.texChannel & _1 %~ fromIntegral
-    in (,ch) . snd <$> requestTexture (tex^.texResource)
-
+--}        
 
 ---------------------------------------------------------------------------------------------------
 
