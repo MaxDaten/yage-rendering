@@ -9,8 +9,8 @@
 module Yage.Rendering.Backend.Renderer where
 ---------------------------------------------------------------------------------------------------
 import           Yage.Prelude                            hiding (log)
+import           Yage.Lens
 
-import           Control.Monad                           (forM_, mapM_, when)
 import           Control.Monad.RWS.Strict                (RWST, runRWST)
 
 import           Graphics.GLUtil                         (ShaderProgram(..))

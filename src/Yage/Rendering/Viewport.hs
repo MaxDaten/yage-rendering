@@ -2,6 +2,7 @@
 module Yage.Rendering.Viewport where
 
 import Yage.Prelude
+import Yage.Lens
 
 import Graphics.Rendering.OpenGL as GL (Position(..), Size(..))
 

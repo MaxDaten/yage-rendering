@@ -14,13 +14,12 @@ module Yage.Rendering.ResourceManager
     ) where
 
 import           Yage.Prelude
+import           Yage.Lens
 import           Yage.Geometry.Vertex
-
-import           Data.List
 
 import           Foreign.Ptr                          (nullPtr)
 
-import           Control.Monad.RWS
+import           Control.Monad.RWS                    hiding (forM, mapM_)
 
 
 import           Graphics.GLUtil                      hiding (loadShader, loadTexture)

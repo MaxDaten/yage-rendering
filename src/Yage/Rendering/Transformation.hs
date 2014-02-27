@@ -2,6 +2,7 @@
 module Yage.Rendering.Transformation where
 
 import Yage.Prelude
+import Yage.Lens
 import Yage.Math
 
 

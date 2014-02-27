@@ -5,7 +5,7 @@
 
 module Yage.Rendering.Lenses where
 
-import           Yage.Prelude
+import           Yage.Lens
 
 import           Yage.Rendering.Types
 

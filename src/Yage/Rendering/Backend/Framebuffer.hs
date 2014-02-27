@@ -4,6 +4,8 @@ module Yage.Rendering.Backend.Framebuffer
     ) where
 
 import Yage.Prelude
+import Yage.Lens
+
 
 import qualified   Graphics.Rendering.OpenGL       as GL
 -- https://developer.apple.com/library/mac/documentation/graphicsimaging/conceptual/opengl-macprogguide/opengl_offscreen/opengl_offscreen.html

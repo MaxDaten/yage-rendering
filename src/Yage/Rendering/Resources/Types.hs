@@ -2,6 +2,8 @@
 module Yage.Rendering.Resources.Types where
 
 import           Yage.Prelude
+import           Yage.Lens
+
 
 import           Control.Monad.RWS
 
