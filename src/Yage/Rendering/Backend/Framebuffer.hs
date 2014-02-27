@@ -82,6 +82,7 @@ instance Monoid (FramebufferSpec tex rbff) where
                           (s'  <|> s )
                           (ds' <|> ds)
 
+instance Semigroup (FramebufferSpec tex rbuff) where
 
 mkEmptyFramebuffer :: FramebufferSpec tex rbuff
 mkEmptyFramebuffer = mempty
