@@ -15,7 +15,7 @@ makeLenses ''GLBufferSpec
 makeLenses ''ShaderResource
 makeLenses ''RenderEntity
 --makeLenses ''RenderScene
-makeLenses ''Mesh
+-- makeLenses ''Mesh
 --makeLenses ''Mesh
 
 -- for Program

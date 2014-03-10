@@ -11,6 +11,7 @@ module Yage.Rendering.Backend.Renderer where
 import           Yage.Prelude                            hiding (log)
 import           Yage.Lens
 
+import           Foreign.Ptr                             (nullPtr)
 import           Control.Monad.RWS.Strict                (RWST, runRWST)
 
 import           Graphics.GLUtil                         (ShaderProgram(..))
@@ -117,30 +118,21 @@ afterRender = return ()
 renderRenderSet :: UniformFields (Uniforms urec) => RenderSet urec -> Renderer ()
 renderRenderSet rset = do
     mshader <- use currentShader
-    withVAO (rset^.vao) . withTexturesAt GL.Texture2D (rset^.textureChannels) $! do
 
-        -- runUniform (udefs >> mapTextureSamplers texObjs) shaderEnv -- why no texture samplers anymore?
-        when (isJust mshader) $ io $ setUniforms (mshader^?!_Just) (rset^.uniformDefs)
-
-
+    when (isJust mshader) $!
+        io $ setUniforms (mshader^?!_Just) (rset^.uniformDefs)
+    
+    withVAO (rset^.vao) . withTexturesAt GL.Texture2D (rset^.textureChannels) $!
         drawNow (rset^.drawMode) rset
     logCountObj
     logCountTriangles (rset^.vertexCount `div` 3)
     where
         -- checkErr msg = io $ GLU.throwErrorMsg msg
 
-        drawNow mode rset = io $ GL.drawArrays mode 0 (rset^.vertexCount)
+        drawNow mode rset = io $ GL.drawElements mode (rset^.vertexCount) GL.UnsignedInt nullPtr
+        --drawNow mode rset = io $ GL.drawArrays mode 0 (rset^.vertexCount)
 
 ---------------------------------------------------------------------------------------------------
-{-- TODO INVESTIGATE
-mapTextureSamplers :: [(GL.TextureObject, (GL.GLuint, String))] -> ShaderDefinition ()
-mapTextureSamplers texObjs =
-    let texUnitToUniform = texObjs^..traverse._2
-    in do
-        sp <- asks shaderEnv'Program
-        io $ mapM_ (\(i, n) -> i `asUniform` getUniform sp n) texUnitToUniform
---}
-
 
 -- | the current bound fbo is NOT restored (lack of support by the OpenGL lib),
 -- instead the default is restored 
@@ -183,18 +175,19 @@ withVAO v ma = do
 -- from GLUtil do pull it into my Renderer monad
 withTexturesAt :: GL.BindableTextureTarget t
                => t -> [TextureAssignment]-> Renderer a -> Renderer a
-withTexturesAt tt ts m = do 
-    mapM_ aux ts
+withTexturesAt target assigment m = do 
+    mapM_ set assigment
     r <- m
-    mapM_ (cleanup . (^._2._1)) ts
+    mapM_ (cleanup . (^._2._1)) assigment
     return r
     where 
-        aux (t,(i,_)) = io $ do 
-            GL.activeTexture $= GL.TextureUnit i
-            GL.textureBinding tt $= Just t
-        cleanup i = io $ do 
-            GL.activeTexture $= GL.TextureUnit i
-            GL.textureBinding tt $= Nothing
+        set (tex,(unitId,_name)) = io $ do
+            -- .0print $ format "set texture: {0} - {1}" [show unitId, show name]
+            GL.activeTexture $= GL.TextureUnit unitId
+            GL.textureBinding target $= Just tex
+        cleanup unitId = io $ do 
+            GL.activeTexture $= GL.TextureUnit unitId
+            GL.textureBinding target $= Nothing
 
 ---------------------------------------------------------------------------------------------------
 

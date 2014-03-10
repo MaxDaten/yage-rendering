@@ -20,6 +20,7 @@ import           Yage.Geometry.Vertex
 import           Foreign.Ptr                          (nullPtr)
 
 import           Control.Monad.RWS                    hiding (forM, mapM_)
+import qualified Data.Vector.Storable                 as VS
 
 
 import           Graphics.GLUtil                      hiding (loadShader, loadTexture)
@@ -243,7 +244,7 @@ requestShader = requestResource loadedShaders loadShader return
 
 
 
-requestVertexbuffer :: (Storable (Vertex vr)) => Mesh vr -> ResourceManager (BufferedVertices vr)
+requestVertexbuffer :: (Storable (Vertex vr)) => Mesh vr p -> ResourceManager (BufferedVertices vr)
 requestVertexbuffer mesh = do
     vMap <- use loadedVertexBuffer
 
@@ -258,30 +259,53 @@ requestVertexbuffer mesh = do
     where
 
     loadVertexBuffer = 
-        io $ bufferVertices (mesh^.meshData)
+        io $ bufferVertices (mesh^.meshVertices)
 
     updateVertexBuffer (oldHash, buff) = do
         let vBuff = BufferedVertices buff
-        when (mesh^.meshHash /= oldHash) $ io $ reloadVertices vBuff (mesh^.meshData)
+        when (mesh^.meshHash /= oldHash) $ io $ reloadVertices vBuff (mesh^.meshVertices)
         return vBuff
 
+requestElementBuffer :: (Storable (Vertex vr), Storable (f Int), Foldable f) 
+                     => Mesh vr (f Int) -> ResourceManager EBO
+requestElementBuffer mesh = do
+    eMap <- use loadedElementBuffer
+
+    ebo <- maybe
+            (loadElementBuffer)
+            (updateElementBuffer)
+            (eMap^.at (mesh^.meshId))
+
+    loadedElementBuffer.at (mesh^.meshId) ?= (mesh^.meshHash, ebo)
+    return ebo
+    where
+
+    loadElementBuffer =
+        io $ bufferIndices (VS.map fromIntegral $ getMeshElementIndices mesh)
+
+    updateElementBuffer (oldHash, buff) = io $ do
+        GL.bindBuffer GL.ElementArrayBuffer $= Just buff
+        let elems = VS.map fromIntegral $ getMeshElementIndices mesh :: VS.Vector Word32
+        when (mesh^.meshHash /= oldHash) $ replaceVector GL.ElementArrayBuffer elems
+        GL.bindBuffer GL.ElementArrayBuffer $= Nothing
+        return buff
 
 
-
-requestVAO :: (ViableVertex (Vertex vr)) => Mesh vr -> ShaderResource -> ResourceManager GLVertexArray
+requestVAO :: (ViableVertex (Vertex vr), Storable (f Int), Foldable f) => Mesh vr (f Int) -> ShaderResource -> ResourceManager GLVertexArray
 requestVAO mesh shader = aux (mesh^.meshId,shader) 
     where
     --loadVertexArray :: (ViableVertex (Vertex vr)) => Mesh vr -> MeshId -> ShaderResource -> ResourceManager GLVertexArray
     loadVertexArray _ _ = do
         vbuff           <- requestVertexbuffer mesh
+        ebo             <- requestElementBuffer mesh
         shaderProg      <- requestShader shader
         tell [ format "RenderSet: {0} - {1}" [show mesh, show shader] ] 
         io $ makeVAO $ do
             bindVertices vbuff
             enableVertices' shaderProg vbuff
-            -- is really part of vao:
+            -- it is really part of vao:
             -- http://stackoverflow.com/questions/8973690/vao-and-element-array-buffer-state
-            --GL.bindBuffer GL.ElementArrayBuffer $= Just ebo
+            GL.bindBuffer GL.ElementArrayBuffer $= Just ebo
     aux = requestResource loadedVertexArrays (uncurry loadVertexArray) return
 
 
@@ -296,7 +320,7 @@ requestRenderSet withProgram entityUniforms ent = do
                <*> ( pure $ entityUniforms )
                <*> ( forM (ent^.entityTextures) makeTexAssignment )
                <*> ( pure $ ent^.renderMode )
-               <*> ( pure $ fromIntegral . dataCount $ ent^.renderData )
+               <*> ( pure $ fromIntegral . indexCount $ ent^.renderData )
 
 
 
@@ -324,7 +348,7 @@ makeTexAssignment tex =
 ---------------------------------------------------------------------------------------------------
 initialGLRenderResources :: GLResources
 initialGLRenderResources =
-    GLResources mempty mempty mempty mempty mempty mempty
+    GLResources mempty mempty mempty mempty mempty mempty mempty
 
 
 replaceIndices :: [Word32] -> IO ()

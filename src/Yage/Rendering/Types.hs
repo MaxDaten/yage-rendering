@@ -61,15 +61,13 @@ data TextureDefinition = TextureDefinition
 
 
 data RenderEntity vr = RenderEntity
-    { _renderData     :: Mesh vr
+    { _renderData     :: TriMesh vr
     --, _rdefProgram  :: Program
     , _renderMode     :: GL.PrimitiveMode
     , _entityTextures :: [TextureDefinition] -- | (Resource, Shader TextureUnit)
     }
 
 ---------------------------------------------------------------------------------------------------
-
-
 
 class (ViableVertex (Vertex vr)) => Renderable r vr | r -> vr where
     renderDefinition      :: r -> RenderEntity vr
