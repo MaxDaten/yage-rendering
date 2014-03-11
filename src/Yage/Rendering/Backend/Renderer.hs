@@ -21,6 +21,8 @@ import           Graphics.Rendering.OpenGL.GL            (($=))
 import           Yage.Rendering.Backend.Framebuffer
 
 import           Yage.Rendering.Uniforms
+import           Yage.Rendering.Types hiding (vertexCount)
+import           Yage.Rendering.Lenses
 {-=================================================================================================-}
 
 -- import           Paths_yage_rendering
@@ -30,7 +32,6 @@ data RenderLog = RenderLog
     { _rlLogObjCount :: !Int
     , _rlLogTriCount :: !Int
     , _rlLog         :: ![String]
-    , _resourceLog   :: ![String]
     } deriving (Show, Eq)
 
 makeLenses ''RenderLog
@@ -52,8 +53,8 @@ data RenderSet urec = RenderSet -- TODO rename RenderResource
     { _vao             :: GL.VertexArrayObject
     , _uniformDefs     :: PlainRec urec
     , _textureChannels :: [TextureAssignment]
-    , _drawMode        :: !GL.PrimitiveMode
     , _vertexCount     :: !GL.GLsizei
+    , _setDrawSettings :: !GLDrawSettings
     }
 
 makeLenses ''RenderSet
@@ -123,13 +124,15 @@ renderRenderSet rset = do
         io $ setUniforms (mshader^?!_Just) (rset^.uniformDefs)
     
     withVAO (rset^.vao) . withTexturesAt GL.Texture2D (rset^.textureChannels) $!
-        drawNow (rset^.drawMode) rset
+        drawNow (rset^.setDrawSettings.renderMode) rset
     logCountObj
     logCountTriangles (rset^.vertexCount `div` 3)
     where
         -- checkErr msg = io $ GLU.throwErrorMsg msg
 
-        drawNow mode rset = io $ GL.drawElements mode (rset^.vertexCount) GL.UnsignedInt nullPtr
+        drawNow mode rset = io $ do
+            GL.cullFace $= rset^.setDrawSettings.cullFace
+            GL.drawElements mode (rset^.vertexCount) GL.UnsignedInt nullPtr
         --drawNow mode rset = io $ GL.drawArrays mode 0 (rset^.vertexCount)
 
 ---------------------------------------------------------------------------------------------------
@@ -203,8 +206,8 @@ instance Show (RenderSet urec) where
     show RenderSet{..} = "RenderSet: { vao: {0}, texs: {1}, mode: {2}, elem# {3} }"
 
 instance Monoid RenderLog where
-    mempty = RenderLog 0 0 [] []
-    mappend (RenderLog ca ta la ra) (RenderLog cb tb lb rb) = RenderLog (ca + cb) (ta + tb) (mappend la lb) (mappend ra rb)
+    mempty = RenderLog 0 0 []
+    mappend (RenderLog ca ta la) (RenderLog cb tb lb) = RenderLog (ca + cb) (ta + tb) (mappend la lb)
 
 ---------------------------------------------------------------------------------------------------
 

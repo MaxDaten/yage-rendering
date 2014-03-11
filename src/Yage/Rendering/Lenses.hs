@@ -14,6 +14,7 @@ makeLenses ''TextureDefinition
 makeLenses ''GLBufferSpec
 makeLenses ''ShaderResource
 makeLenses ''RenderEntity
+makeLenses ''GLDrawSettings
 --makeLenses ''RenderScene
 -- makeLenses ''Mesh
 --makeLenses ''Mesh

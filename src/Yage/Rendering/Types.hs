@@ -18,14 +18,14 @@
 {-# LANGUAGE FunctionalDependencies     #-}
 module Yage.Rendering.Types
     ( Renderable(..)
-    , RenderEntity(..)
+    , RenderEntity(..), GLDrawSettings(..)
     , Index, Position, Orientation, Scale
 
     , ShaderResource(..), ShaderProgram(..)
     , TextureDefinition(..), TextureResource(..), TextureChannel, GLBufferSpec(..)
     , RenderbufferResource(..)
 
-    , toIndex1, GL.PixelInternalFormat(..), GL.TextureTarget2D(..), GL.PrimitiveMode(..)
+    , toIndex1, GL.PixelInternalFormat(..), GL.TextureTarget2D(..), GL.PrimitiveMode(..), GL.Face(..)
     , module GLRawTypes
     , module Mesh
     , module ResTypes
@@ -63,9 +63,14 @@ data TextureDefinition = TextureDefinition
 data RenderEntity vr = RenderEntity
     { _renderData     :: TriMesh vr
     --, _rdefProgram  :: Program
-    , _renderMode     :: GL.PrimitiveMode
+    , _drawSettings   :: !GLDrawSettings
     , _entityTextures :: [TextureDefinition] -- | (Resource, Shader TextureUnit)
     }
+
+data GLDrawSettings = GLDrawSettings
+    { _renderMode :: !GL.PrimitiveMode
+    , _cullFace   :: !(Maybe GL.Face)
+    } 
 
 ---------------------------------------------------------------------------------------------------
 
@@ -101,3 +106,4 @@ instance Hashable TextureResource where
     hashWithSalt salt (TextureBuffer name _ _) =
         salt `hashWithSalt` name
 
+---------------------------------------------------------------------------------------------------

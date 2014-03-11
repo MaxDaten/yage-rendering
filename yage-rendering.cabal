@@ -43,7 +43,6 @@ library
                         Yage.Rendering.Texture
                         
                         Yage.Rendering.ResourceManager
-                        Yage.Rendering.Lighting
                         Yage.Rendering.Transformation
                         Yage.Rendering.Viewport
                         

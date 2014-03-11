@@ -319,8 +319,8 @@ requestRenderSet withProgram entityUniforms ent = do
     RenderSet  <$> ( requestVAO (ent^.renderData) withProgram )
                <*> ( pure $ entityUniforms )
                <*> ( forM (ent^.entityTextures) makeTexAssignment )
-               <*> ( pure $ ent^.renderMode )
                <*> ( pure $ fromIntegral . indexCount $ ent^.renderData )
+               <*> ( pure $ ent^.drawSettings )
 
 
 

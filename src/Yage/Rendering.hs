@@ -10,6 +10,7 @@
 {-# LANGUAGE ConstraintKinds            #-}
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TemplateHaskell            #-}
 
 
 module Yage.Rendering
@@ -48,25 +49,29 @@ import           Yage.Rendering.Uniforms                as Uniforms
 import           Yage.Rendering.Vertex                  as Vertex
 
 
-type RenderSystem = RWST () RenderLog GLResources IO
+type RenderSystem = RWST () RStatistics GLResources IO
+
+data RStatistics = RStatistics
+    { _resourcingTime :: !Double
+    , _renderingTime  :: !Double
+    , _resourceLog    :: ![String]
+    , _renderLog      :: !RenderLog
+    } deriving ( Show )
+
+makeLenses ''RStatistics
 
 
-
-runRenderSystem :: (MonadIO m) => RenderSystem () -> GLResources -> m (GLResources, RenderLog)
+runRenderSystem :: (MonadIO m) => RenderSystem () -> GLResources -> m (GLResources, RStatistics)
 runRenderSystem sys res = io $ execRWST sys () res
 
 
 -- TODO individual settings
 mkRenderSystem :: Renderer () -> RenderSystem ()
 mkRenderSystem toRender = do
-    (_, rlog) <- io $ Renderer.runRenderer toRender
-    tell rlog
-{--
-outerRim = flip runRenderSystem res $ do
-    runRenderPass geoDescr geos
-    runRenderPass lightPass lights
-    runRenderPass geoDescr screen
---}
+    ((_, rlog), time) <- io $ ioTime $ Renderer.runRenderer toRender
+    scribe renderingTime time
+    scribe renderLog rlog
+
 
 runRenderPass :: (Renderable ent vr, UniformFields (Uniforms globals), UniformFields (Uniforms locals) ) 
               => PassDescr ent globals locals -> [ent] -> RenderSystem ()
@@ -77,10 +82,15 @@ runRenderPass passDescr@PassDescr{..} entities = do
     where
     managePassResoures = do
         res <- get 
-        (results, res', reslog) <- runResourceManager res $ 
+        ((results, res', reslog), time) <- ioTime $ runResourceManager res $ 
             (,) <$> (requestFramebufferSetup passDescr)
                 <*> (forM entities $ \e -> requestRenderSet passShader (passEntityUniforms e) (renderDefinition e))
         scribe resourceLog reslog
+        scribe resourcingTime time
         put res'
         return results
 
+
+instance Monoid RStatistics where
+    mempty = RStatistics 0 0 mempty mempty
+    mappend (RStatistics a b c d) (RStatistics a' b' c' d') = RStatistics (a + a') (b + b') (mappend c c') (mappend d d')
