@@ -1,7 +1,11 @@
+{-# LANGUAGE OverloadedStrings                  #-}
 {-# LANGUAGE ConstraintKinds                    #-}
 module Yage.Rendering.Resources.ResTypes where
 
-import           Yage.Prelude
+import           Yage.Prelude hiding (Text, unpack)
+import           Yage.Text as TF
+
+import           Data.Hashable                       ()
 
 import qualified Graphics.Rendering.OpenGL as GL
 
@@ -22,30 +26,26 @@ data GLBufferSpec = GLBufferSpec
 data RenderbufferResource = RenderbufferResource String GLBufferSpec
 
 data TextureResource =
-      TextureFile FilePath
-    | TextureImage String DynamicImage
+      TextureImage String DynamicImage
+    | TextureImageCube String (CubeMap DynamicImage)
     | TextureBuffer String GL.TextureTarget2D GLBufferSpec -- only backed by opengl
     deriving (Typeable)
 
 
+getTextureID :: TextureResource -> Text
+getTextureID (TextureImage     name _  )  = TF.format "TextureImage: ident={}"     (Only name)
+getTextureID (TextureImageCube name _  )  = TF.format "TextureImageCube: ident={}" (Only name)
+getTextureID (TextureBuffer    name _ _)  = TF.format "TextureBuffer: ident={}"     (Only name)
+
 -- TODO
 instance Ord TextureResource where
-    compare (TextureFile pathA   ) (TextureFile pathB   )    = compare pathA pathB
-    compare (TextureImage nameA _) (TextureImage nameB _)    = compare nameA nameB
-    compare (TextureBuffer nameA _ _) (TextureBuffer nameB _ _)  = compare nameA nameB
-    compare (TextureFile _) _ = GT
-    compare _ _               = LT
+    compare a b = compare (getTextureID a) (getTextureID b)
 
 instance Show TextureResource where
-    show (TextureFile path)     = show path
-    show (TextureImage name _ ) = show name
-    show (TextureBuffer name _ _)  = show name
+    show = unpack . getTextureID
 
 instance Eq TextureResource where
-    (==) (TextureFile name1) (TextureFile name2)           = name1 == name2
-    (==) (TextureImage name1 _ ) (TextureImage name2 _ )   = name1 == name2
-    (==) (TextureBuffer name1 _ _) (TextureBuffer name2 _ _)   = name1 == name2
-    (==) _ _ = False
+    (==) a b = getTextureID a == getTextureID b
 
 instance Show RenderbufferResource where
     show (RenderbufferResource name _) = show name
@@ -55,6 +55,11 @@ instance Eq RenderbufferResource where
 
 instance Ord RenderbufferResource where
     compare (RenderbufferResource nameA _) (RenderbufferResource nameB _) = compare nameA nameB
+
+
+instance Hashable TextureResource where
+    hashWithSalt salt tex =
+        salt `hashWithSalt` (getTextureID tex)
 
 
 

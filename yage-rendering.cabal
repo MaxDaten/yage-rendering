@@ -17,7 +17,7 @@ cabal-version:       >=1.18
 
 Flag dev
     Description:   Turn on development settings, logging and timing.
-    Default:       False
+    Default:       True
 
 Flag library-only
     Description:   Build only the yage-lib
@@ -64,6 +64,7 @@ library
 
   if flag(dev)
     ghc-options:        -Wall -Werror
+    cpp-options:        -DGL_ERRCHECK
 
   -- ghc-prof-options:     -rtsopts -prof -auto-all
   default-language:     Haskell2010

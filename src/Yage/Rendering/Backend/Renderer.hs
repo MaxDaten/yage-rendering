@@ -1,4 +1,6 @@
-{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
+{-# OPTIONS_GHC -fno-warn-name-shadowing -fno-warn-orphans #-}
+{-# LANGUAGE CPP                 #-}
+{-# LANGUAGE GADTs               #-}
 {-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -14,8 +16,10 @@ import           Yage.Lens
 import           Foreign.Ptr                             (nullPtr)
 import           Control.Monad.RWS.Strict                (RWST, runRWST)
 
-import           Graphics.GLUtil                         (ShaderProgram(..))
 import qualified Graphics.Rendering.OpenGL               as GL
+#ifdef GL_ERRCHECK
+import qualified Graphics.GLUtil.GLError                 as GLE
+#endif
 import           Graphics.Rendering.OpenGL.GL            (($=))
 ---------------------------------------------------------------------------------------------------
 import           Yage.Rendering.Backend.Framebuffer
@@ -46,7 +50,11 @@ makeLenses ''RenderState
 type Renderer = RWST () RenderLog RenderState IO
 
 ---------------------------------------------------------------------------------------------------  
-type TextureAssignment = (GL.TextureObject, (GL.GLuint, String))
+data TextureAssignment = forall t. (GL.BindableTextureTarget t, Show t) => 
+    TextureAssignment !GL.TextureObject !t !GL.GLuint String
+
+instance Show TextureAssignment where
+    show (TextureAssignment tobj target unit name ) = format "TextureAssignment: {0} {1} {2} {3}" [show tobj, show target, show unit, name]
 ---------------------------------------------------------------------------------------------------
 
 data RenderSet urec = RenderSet -- TODO rename RenderResource
@@ -79,7 +87,7 @@ runRenderer renderer = do
     (a, _st, rlog) <- runRWST render () initRenderState
     return (a, rlog)
     where
-        render = do
+        render = checkErrorOf "runRenderer" $ do
             beforeRender
             a <- renderer
             afterRender
@@ -89,7 +97,7 @@ withFramebufferSetup :: UniformFields (Uniforms u) => FramebufferSetup u -> Rend
 withFramebufferSetup FramebufferSetup{..} ma = do
     withFramebuffer framebuffer DrawTarget $ do
      withShader fbShader                   $ \sh -> do
-      withTexturesAt GL.Texture2D globalTextures $ do
+      withTexturesAt globalTextures $ do
         preRendering
         io $ setUniforms sh fbGlobalUniforms
         r <- ma
@@ -104,26 +112,26 @@ renderFrame rdata = forM_ rdata renderRenderSet
 
 
 beforeRender :: Renderer ()
-beforeRender = return ()
+beforeRender = checkError "beforeRender: "
 
 
 ---------------------------------------------------------------------------------------------------
 
 
 afterRender :: Renderer ()
-afterRender = return ()
+afterRender = checkError "afterRender: "
 
 
 ---------------------------------------------------------------------------------------------------
 
 renderRenderSet :: UniformFields (Uniforms urec) => RenderSet urec -> Renderer ()
-renderRenderSet rset = do
+renderRenderSet rset = checkErrorOf ("renderRenderSet: " ++ show (rset^.vao)) $ do
     mshader <- use currentShader
 
     when (isJust mshader) $!
         io $ setUniforms (mshader^?!_Just) (rset^.uniformDefs)
     
-    withVAO (rset^.vao) . withTexturesAt GL.Texture2D (rset^.textureChannels) $!
+    withVAO (rset^.vao) . withTexturesAt (rset^.textureChannels) $!
         drawNow (rset^.setDrawSettings.renderMode) rset
     logCountObj
     logCountTriangles (rset^.vertexCount `div` 3)
@@ -140,7 +148,7 @@ renderRenderSet rset = do
 -- | the current bound fbo is NOT restored (lack of support by the OpenGL lib),
 -- instead the default is restored 
 withFramebuffer :: GL.FramebufferObject -> FBOTarget -> Renderer a -> Renderer a
-withFramebuffer fbo t action = 
+withFramebuffer fbo t action =
     let target = getGLTarget t in do
     -- old <- return GL.FramebufferObject 0 -- TODO get real git glGetIntegerv GL_FRAMEBUFFER_BINDING
     --currentFramebuffer ?= fb
@@ -154,7 +162,7 @@ withFramebuffer fbo t action =
 
 
 withShader :: ShaderProgram -> (ShaderProgram -> Renderer a) -> Renderer a
-withShader shader m = do
+withShader shader m = checkErrorOf ("withShader" ++ show shader) $ do
     currentShader ?= shader
     io $! GL.currentProgram $= Just (program shader)
     
@@ -168,7 +176,7 @@ withShader shader m = do
 -- https://github.com/acowley/GLUtil/blob/master/src/Graphics/GLUtil
 
 withVAO :: GL.VertexArrayObject -> Renderer r -> Renderer r
-withVAO v ma = do
+withVAO v ma = checkErrorOf "withVAO" $ do
     io $ GL.bindVertexArrayObject $= Just v
     r <- ma
     io $ GL.bindVertexArrayObject $= Nothing
@@ -176,19 +184,19 @@ withVAO v ma = do
 
 
 -- from GLUtil do pull it into my Renderer monad
-withTexturesAt :: GL.BindableTextureTarget t
-               => t -> [TextureAssignment]-> Renderer a -> Renderer a
-withTexturesAt target assigment m = do 
-    mapM_ set assigment
+withTexturesAt :: [TextureAssignment]-> Renderer a -> Renderer a
+withTexturesAt assigments m = do 
+    mapM_ set assigments
     r <- m
-    mapM_ (cleanup . (^._2._1)) assigment
+    mapM_ cleanup assigments
     return r
-    where 
-        set (tex,(unitId,_name)) = io $ do
-            -- .0print $ format "set texture: {0} - {1}" [show unitId, show name]
+    where
+    set a@(TextureAssignment tobj target unitId _name) = 
+        checkErrorOf ("activeTexture" ++ show a) $ io $ do
             GL.activeTexture $= GL.TextureUnit unitId
-            GL.textureBinding target $= Just tex
-        cleanup unitId = io $ do 
+            GL.textureBinding target $= Just tobj
+    cleanup a@(TextureAssignment _tobj target unitId _name)= 
+        checkErrorOf ("cleanupTexture" ++ show a) $ io $ do 
             GL.activeTexture $= GL.TextureUnit unitId
             GL.textureBinding target $= Nothing
 
@@ -225,3 +233,21 @@ logRenderMf msg args = logRenderM $ format msg args
 
 isEmptyRenderLog :: RenderLog -> Bool
 isEmptyRenderLog = (mempty ==)
+
+checkError :: (MonadIO m) => String -> m ()
+#ifdef GL_ERRCHECK
+checkError = io . GLE.printErrorMsg
+#else
+checkError _ = return ()
+#endif
+{-# INLINE checkError #-}
+
+checkErrorOf :: (MonadIO m) => String -> m a -> m a
+#ifdef GL_ERRCHECK
+checkErrorOf msg ma = do {x <- ma; (io $ GLE.printErrorMsg msg); return x}
+#else
+checkErrorOf _ = id
+#endif
+{-# INLINE checkErrorOf #-}
+
+deriving instance Show ShaderProgram

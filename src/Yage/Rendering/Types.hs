@@ -55,7 +55,7 @@ import           Yage.Rendering.Transformation
 type TextureChannel = (Int, String)
 
 data TextureDefinition = TextureDefinition
-    { _texChannel  :: TextureChannel
+    { _texChannel  :: TextureChannel        -- | to opengl texture unit
     , _texResource :: TextureResource
     } deriving (Typeable, Show, Eq, Ord)
 
@@ -97,13 +97,5 @@ instance Hashable ShaderResource where
     hashWithSalt salt ShaderResource{..} =
         salt       `hashWithSalt`
         _srVertSrc `hashWithSalt` _srFragSrc
-
-instance Hashable TextureResource where
-    hashWithSalt salt (TextureFile file) =
-        salt `hashWithSalt` file
-    hashWithSalt salt (TextureImage name _) =
-        salt `hashWithSalt` name
-    hashWithSalt salt (TextureBuffer name _ _) =
-        salt `hashWithSalt` name
 
 ---------------------------------------------------------------------------------------------------
