@@ -112,7 +112,7 @@ loadCubeTexture cubeTexs = do
 -- |Replace a 2D texture's pixel data with data from a 'TexInfo'.
 reloadTextureTarget :: forall a t. (IsPixelData a, TwoDimensionalTextureTarget t, Show t) => 
                     TexInfo a -> t -> IO ()
-reloadTextureTarget tex target = (print target) >> (loadTex $ texColor tex)
+reloadTextureTarget tex target = loadTex $ texColor tex
     where
         loadTex TexMono = case pixelType of
                             GL.UnsignedShort -> loadAux GL.Luminance16 GL.Luminance
