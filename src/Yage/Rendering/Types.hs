@@ -22,8 +22,8 @@ module Yage.Rendering.Types
     , Index, Position, Orientation, Scale
 
     , ShaderResource(..), ShaderProgram(..)
-    , TextureDefinition(..), TextureResource(..), TextureChannel, GLBufferSpec(..)
-    , RenderbufferResource(..)
+    , TextureDefinition(..), Texture(..), TextureChannel, GLBufferSpec(..)
+    , Renderbuffer(..)
 
     , toIndex1, GL.PixelInternalFormat(..), GL.TextureTarget2D(..), GL.PrimitiveMode(..), GL.Face(..)
     , module GLRawTypes
@@ -56,7 +56,7 @@ type TextureChannel = (Int, String)
 
 data TextureDefinition = TextureDefinition
     { _texChannel  :: TextureChannel        -- | to opengl texture unit
-    , _texResource :: TextureResource
+    , _texResource :: Texture
     } deriving (Typeable, Show, Eq, Ord)
 
 

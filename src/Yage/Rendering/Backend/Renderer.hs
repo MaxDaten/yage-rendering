@@ -149,7 +149,7 @@ renderRenderSet rset = checkErrorOf ("renderRenderSet: " ++ show (rset^.vao)) $ 
 -- instead the default is restored 
 withFramebuffer :: GL.FramebufferObject -> FBOTarget -> Renderer a -> Renderer a
 withFramebuffer fbo t action =
-    let target = getGLTarget t in do
+    let target = toGLTarget t in do
     -- old <- return GL.FramebufferObject 0 -- TODO get real git glGetIntegerv GL_FRAMEBUFFER_BINDING
     --currentFramebuffer ?= fb
     io $ GL.bindFramebuffer target $= fbo
@@ -159,6 +159,12 @@ withFramebuffer fbo t action =
     io $ GL.bindFramebuffer target $= GL.defaultFramebufferObject
     --currentFramebuffer .= Nothing
     return result
+    where
+    toGLTarget :: FBOTarget -> GL.FramebufferTarget
+    toGLTarget DrawTarget        = GL.DrawFramebuffer 
+    toGLTarget ReadTarget        = GL.ReadFramebuffer
+    toGLTarget FramebufferTarget = GL.Framebuffer
+
 
 
 withShader :: ShaderProgram -> (ShaderProgram -> Renderer a) -> Renderer a

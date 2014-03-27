@@ -21,6 +21,7 @@ module Yage.Rendering
     , module Mesh
     , module Vertex
     , module Uniforms
+    , module Viewport
     
     , module LinExport
     , module Framebuffer
@@ -47,9 +48,10 @@ import           Yage.Rendering.Types                   as Types
 import           Yage.Rendering.Mesh                    as Mesh
 import           Yage.Rendering.Uniforms                as Uniforms
 import           Yage.Rendering.Vertex                  as Vertex
-
+import           Yage.Rendering.Viewport                as Viewport
 
 type RenderSystem = RWST () RStatistics GLResources IO
+
 
 data RStatistics = RStatistics
     { _resourcingTime :: !Double
@@ -73,8 +75,8 @@ mkRenderSystem toRender = do
     scribe renderLog rlog
 
 
-runRenderPass :: (Renderable ent vr, UniformFields (Uniforms globals), UniformFields (Uniforms locals) ) 
-              => PassDescr ent globals locals -> [ent] -> RenderSystem ()
+runRenderPass :: (Show ident, MultipleRenderTargets mrt, Renderable ent vr, UniformFields (Uniforms globals), UniformFields (Uniforms locals) ) => 
+              PassDescr ident mrt ent globals locals -> [ent] -> RenderSystem ()
 runRenderPass passDescr@PassDescr{..} entities = do
     (setup, rSets) <- managePassResoures
     mkRenderSystem $ mkRenderPass setup rSets

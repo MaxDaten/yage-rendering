@@ -20,7 +20,7 @@ import           Yage.Geometry.Vertex
 
 import           Foreign.Ptr                          (nullPtr)
 
-import           Control.Monad.RWS                    hiding (forM, mapM_)
+import           Control.Monad.RWS                    hiding (forM, forM_, mapM_)
 import qualified Data.Vector.Storable                 as VS
 
 
@@ -73,77 +73,69 @@ requestResource accessor loader updater resource = do
     return $ item
 
 
-requestFramebuffer :: (String, FramebufferSpec TextureResource RenderbufferResource) -> ResourceManager GLFramebuffer
-requestFramebuffer (fboIdent, spec) =
-    let compiler = const $ compileFBO spec <&> flip (^?!) folded -- unsafe head
-    in requestResource compiledFBOs compiler (updateFramebuffer spec) fboIdent
+requestFramebuffer :: (Show ident, MultipleRenderTargets mrt) => 
+                   (ident, mrt) -> ResourceManager GLFramebuffer
+requestFramebuffer (fboIdent, mrt) 
+    | isDefault mrt = return GL.defaultFramebufferObject
+    | otherwise =
+    let compiler = const $ compileFBO <&> flip (^?!) folded -- unsafe head
+    in requestResource compiledFBOs compiler updateFramebuffer (show fboIdent)
 
     where
 
     -- | creates a new framebuffer according to the given specs
-    compileFBO :: FramebufferSpec TextureResource RenderbufferResource -> ResourceManager (Either GL.FramebufferStatus GLFramebuffer)
-    compileFBO spec = do
-        tell [format "create fbo {0}" [ fboIdent ]]
+    compileFBO = do
+        tell [format "create fbo {0}" [ show fboIdent ]]
         fbo <- io $ GL.genObjectName
         io $ GL.bindFramebuffer GL.Framebuffer $= fbo
 
-        doAttachments spec
-        if (null $ spec^.fboColors)
+        forM_ (allAttachments mrt) attachTargetToFBO
+        if (null $ fboColors mrt)
             then io $ GL.drawBuffer  $= GL.NoBuffers
-            else io $ GL.drawBuffers $= (mapColorAttachments $ spec^.fboColors)
+            else io $ GL.drawBuffers $= (map toBufferMode $ fboColors mrt)
 
         status <- io . GL.get $ GL.framebufferStatus GL.Framebuffer
         return $ case status of
-            GL.Complete -> Right $ Framebuffer fbo spec
+            GL.Complete -> Right fbo
             _           -> Left status
 
-    doAttachments spec = do
-        attaching $ spec^.fboColors
-        attaching $ spec^.fboStencil^..traverse
-        attaching $ spec^.fboDepth^..traverse
-        attaching $ spec^.fboDepthStencil^..traverse
-
-    --attachTargetToFBO :: Int -> FramebufferAttachment -> IO ()
-    attaching = imapM_ attachTargetToFBO
-
-    attachTargetToFBO index attchmnt =
-        case toGLAttachment attchmnt index of
-            (glAt, TextureTarget tt2d tex level) -> do
+    attachTargetToFBO attchmnt =
+        case toGLAttachment attchmnt of
+            (glSlot, TextureTarget tt2d tex level) -> do
                 (_, texObj) <- requestTexture tex
-                io $ GL.framebufferTexture2D GL.Framebuffer glAt tt2d texObj level
-            (glAt, RenderbufferTarget rbuff)     -> do
+                io $ GL.framebufferTexture2D GL.Framebuffer glSlot tt2d texObj level
+            (glSlot, RenderbufferTarget rbuff)     -> do
                 (_, robj) <- requestRenderbuffer rbuff
-                io $ GL.framebufferRenderbuffer GL.Framebuffer glAt GL.Renderbuffer robj
+                io $ GL.framebufferRenderbuffer GL.Framebuffer glSlot GL.Renderbuffer robj
+            (_, NullTarget) -> return ()
 
-    toGLAttachment :: FramebufferAttachment TextureResource RenderbufferResource -> Int -> (GL.FramebufferObjectAttachment, AttachmentTarget TextureResource RenderbufferResource)
-    toGLAttachment (FramebufferAttachment ColorAttachment target) index    = (GL.ColorAttachment (fromIntegral index), target)
-    toGLAttachment (FramebufferAttachment DepthAttachment target) _        = (GL.DepthAttachment, target)
-    toGLAttachment (FramebufferAttachment StencilAttachment target) _      = (GL.StencilAttachment, target)
-    toGLAttachment (FramebufferAttachment DepthStencilAttachment target) _ = (GL.DepthStencilAttachment, target)
+    -- toGLAttachment :: GLFBOAttachment -> (GL.FramebufferObjectAttachment, GLFBOAttachment)
+    toGLAttachment (Attachment (ColorAttachment index) target) = (GL.ColorAttachment (fromIntegral index), target)
+    toGLAttachment (Attachment DepthAttachment target)         = (GL.DepthAttachment, target)
+    toGLAttachment (Attachment StencilAttachment target)       = (GL.StencilAttachment, target)
+    toGLAttachment (Attachment DepthStencilAttachment target)  = (GL.DepthStencilAttachment, target)
 
-    mapColorAttachments = imap toBufferMode
-    toBufferMode index _ = GL.FBOColorAttachment $ fromIntegral index
-
-    updateFramebuffer :: FramebufferSpec TextureResource RenderbufferResource -> GLFramebuffer -> ResourceManager GLFramebuffer
-    updateFramebuffer newspec f@(Framebuffer _fbo _oldspec) = do
-        let attachments = (newspec^.fboColors) ++
-                          (newspec^.fboStencil^..traverse) ++
-                          (newspec^.fboDepth^..traverse) ++
-                          (newspec^.fboDepthStencil^..traverse)
-        mapM_ requestAttachment attachments
-        return $ f{_spec = newspec}
-
-    requestAttachment :: FramebufferAttachment TextureResource RenderbufferResource -> ResourceManager ()
-    requestAttachment (FramebufferAttachment _ (TextureTarget _ tex _))    = void $ requestTexture tex
-    requestAttachment (FramebufferAttachment _ (RenderbufferTarget rbuff)) = void $ requestRenderbuffer rbuff
+    toBufferMode (Attachment (ColorAttachment idx) _) = GL.FBOColorAttachment . fromIntegral $ idx
+    toBufferMode _ = error "Yage.Rendering.ResourceManager: invalid buffer-mode"
 
 
-requestTexture :: TextureResource -> ResourceManager GLTexture
+    --updateFramebuffer :: Framebuffer TextureResource RenderbufferResource -> ResourceManager (Framebuffer TextureResource RenderbufferResource)
+    updateFramebuffer f = do
+        forM_  (allAttachments mrt) requestAttachment
+        return f
+
+    requestAttachment :: RenderTargets -> ResourceManager ()
+    requestAttachment (Attachment _ (TextureTarget _ tex _))    = void $ requestTexture tex
+    requestAttachment (Attachment _ (RenderbufferTarget rbuff)) = void $ requestRenderbuffer rbuff
+    requestAttachment (Attachment _ NullTarget) = return ()
+
+
+requestTexture :: Texture -> ResourceManager GLTexture
 requestTexture res = requestResource loadedTextures loadTexture (resizeTexture res) res
     -- RESIZE HERE
     where
     -- | pushes texture to opengl
-    loadTexture :: TextureResource -> ResourceManager GLTexture
+    loadTexture :: Texture -> ResourceManager GLTexture
     loadTexture (TextureImage _ img) = io $ do
         checkErrorOf ("loadTexture TextureImage: " ++ show res) $
             (imgSpec img,) <$> (handleTexObj GL.Texture2D =<< Tex.readTextureImg img)
@@ -206,11 +198,11 @@ requestTexture res = requestResource loadedTextures loadTexture (resizeTexture r
 
 
 
-requestRenderbuffer :: RenderbufferResource -> ResourceManager GLRenderbuffer
+requestRenderbuffer :: Renderbuffer -> ResourceManager GLRenderbuffer
 requestRenderbuffer res = requestResource loadedRenderbuffers loadRenderbuffer (resizeBuffer res) res
     where
 
-    loadRenderbuffer (RenderbufferResource name spec@(GLBufferSpec fmt sz)) =
+    loadRenderbuffer (Renderbuffer name spec@(GLBufferSpec fmt sz)) =
         let size = GL.RenderbufferSize (fromIntegral $ sz^._x) (fromIntegral $ sz^._y)
         in do
             tell [ format "create buffer {0} to {1}" [name, show sz] ]
@@ -221,7 +213,7 @@ requestRenderbuffer res = requestResource loadedRenderbuffers loadRenderbuffer (
                 GL.bindRenderbuffer GL.Renderbuffer $= GL.noRenderbufferObject
                 return (spec, rObj)
 
-    resizeBuffer (RenderbufferResource name newSpec) (currentSpec, rObj) = do
+    resizeBuffer (Renderbuffer name newSpec) (currentSpec, rObj) = do
         let newSize  = fromIntegral <$> newSpec^.glBufferSize
             buffSize = GL.RenderbufferSize (newSize^._x) (newSize^._y)
             fmt      = newSpec^.glBufferFormat
@@ -324,13 +316,12 @@ requestRenderSet withProgram entityUniforms ent = do
 
 
 
-requestFramebufferSetup :: UniformFields (Uniforms global) 
-                     => PassDescr ent global local -> ResourceManager (FramebufferSetup global)
+requestFramebufferSetup :: (UniformFields (Uniforms global), Show ident, MultipleRenderTargets mrt) =>
+                        PassDescr ident mrt ent global local -> ResourceManager (FramebufferSetup global)
 requestFramebufferSetup PassDescr{..} = 
     FramebufferSetup 
-        <$> case passFBSpec of
-            CustomFramebuffer s -> _fbo <$> (requestFramebuffer s)
-            DefaultFramebuffer  -> pure GL.defaultFramebufferObject
+        <$> case passTarget of
+            RenderTarget ident mrt -> requestFramebuffer (ident, mrt)
         <*> requestShader passShader
         <*> pure passGlobalUniforms
         <*> forM passGlobalTextures makeTexAssignment

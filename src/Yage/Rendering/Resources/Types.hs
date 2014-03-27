@@ -1,4 +1,5 @@
 {-# LANGUAGE TemplateHaskell                    #-}
+{-# LANGUAGE ExistentialQuantification          #-}
 module Yage.Rendering.Resources.Types where
 
 import           Yage.Prelude
@@ -15,7 +16,6 @@ import           Graphics.GLUtil
 --import           Yage.Rendering.Types
 import           Yage.Rendering.Mesh
 import           Yage.Rendering.Resources.ResTypes
-import           Yage.Rendering.Backend.Framebuffer
 
 -- | container for all possible entities to render
 
@@ -37,7 +37,7 @@ type GLVertexArray         = VAO
 type GLShader              = ShaderProgram
 type GLTexture             = (GLBufferSpec, GL.TextureObject)
 type GLRenderbuffer        = (GLBufferSpec, GL.RenderbufferObject)
-type GLFramebuffer         = Framebuffer TextureResource RenderbufferResource
+type GLFramebuffer         = GL.FramebufferObject
 
 
 data GLResources = GLResources
@@ -45,8 +45,8 @@ data GLResources = GLResources
     , _loadedVertexBuffer  :: (Map MeshId                   GLVertexbuffer      )
     , _loadedVertexArrays  :: (Map (MeshId, ShaderResource) GLVertexArray       )
     , _loadedElementBuffer :: (Map MeshId                   GLElementbuffer     )
-    , _loadedTextures      :: (Map TextureResource          GLTexture           )
-    , _loadedRenderbuffers :: (Map RenderbufferResource     GLRenderbuffer      )
+    , _loadedTextures      :: (Map Texture                  GLTexture           )
+    , _loadedRenderbuffers :: (Map Renderbuffer             GLRenderbuffer      )
     , _compiledFBOs        :: (Map String                   GLFramebuffer       )
     }
 
