@@ -13,7 +13,6 @@ module Yage.Rendering.Backend.Renderer where
 import           Yage.Prelude                            hiding (log)
 import           Yage.Lens
 
-import           Foreign.Ptr                             (nullPtr)
 import           Control.Monad.RWS.Strict                (RWST, runRWST)
 
 import qualified Graphics.Rendering.OpenGL               as GL
@@ -25,7 +24,7 @@ import           Graphics.Rendering.OpenGL.GL            (($=))
 import           Yage.Rendering.Backend.Framebuffer
 
 import           Yage.Rendering.Uniforms
-import           Yage.Rendering.Types hiding (vertexCount)
+import           Yage.Rendering.Types
 import           Yage.Rendering.Lenses
 {-=================================================================================================-}
 
@@ -133,6 +132,7 @@ renderRenderSet rset = checkErrorOf ("renderRenderSet: " ++ show (rset^.vao)) $ 
     
     withVAO (rset^.vao) . withTexturesAt (rset^.textureChannels) $!
         drawNow (rset^.setDrawSettings.renderMode) rset
+    
     logCountObj
     logCountTriangles (rset^.vertexCount `div` 3)
     where
@@ -140,8 +140,7 @@ renderRenderSet rset = checkErrorOf ("renderRenderSet: " ++ show (rset^.vao)) $ 
 
         drawNow mode rset = io $ do
             GL.cullFace $= rset^.setDrawSettings.cullFace
-            GL.drawElements mode (rset^.vertexCount) GL.UnsignedInt nullPtr
-        --drawNow mode rset = io $ GL.drawArrays mode 0 (rset^.vertexCount)
+            GL.drawArrays mode 0 (rset^.vertexCount)
 
 ---------------------------------------------------------------------------------------------------
 

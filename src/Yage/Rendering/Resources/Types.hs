@@ -32,7 +32,7 @@ import           Yage.Rendering.Resources.ResTypes
 --    --requestRenderItem    :: (Ord geoId, Ord shId) => (geoId, shId) -> rm iid
 
 type GLVertexbuffer        = (MeshHash, GL.BufferObject)
-type GLElementbuffer       = (MeshHash, GL.BufferObject)
+--type GLIndexbuffer         = (MeshHash, GL.BufferObject)
 type GLVertexArray         = VAO
 type GLShader              = ShaderProgram
 type GLTexture             = (GLBufferSpec, GL.TextureObject)
@@ -44,7 +44,7 @@ data GLResources = GLResources
     { _loadedShaders       :: (Map ShaderResource           GLShader            )
     , _loadedVertexBuffer  :: (Map MeshId                   GLVertexbuffer      )
     , _loadedVertexArrays  :: (Map (MeshId, ShaderResource) GLVertexArray       )
-    , _loadedElementBuffer :: (Map MeshId                   GLElementbuffer     )
+    --, _loadedIndexBuffer   :: (Map MeshId                   GLElementbuffer     )
     , _loadedTextures      :: (Map Texture                  GLTexture           )
     , _loadedRenderbuffers :: (Map Renderbuffer             GLRenderbuffer      )
     , _compiledFBOs        :: (Map String                   GLFramebuffer       )

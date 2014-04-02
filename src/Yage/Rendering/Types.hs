@@ -27,7 +27,6 @@ module Yage.Rendering.Types
 
     , toIndex1, GL.PixelInternalFormat(..), GL.TextureTarget2D(..), GL.PrimitiveMode(..), GL.Face(..)
     , module GLRawTypes
-    , module Mesh
     , module ResTypes
     ) where
 
@@ -61,7 +60,7 @@ data TextureDefinition = TextureDefinition
 
 
 data RenderEntity vr = RenderEntity
-    { _renderData     :: TriMesh vr
+    { _renderData     :: Mesh vr
     --, _rdefProgram  :: Program
     , _drawSettings   :: !GLDrawSettings
     , _entityTextures :: [TextureDefinition] -- | (Resource, Shader TextureUnit)
