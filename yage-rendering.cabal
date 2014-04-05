@@ -40,7 +40,9 @@ library
                         Yage.Rendering.Uniforms
                         
                         Yage.Rendering.Mesh
-                        Yage.Rendering.Texture
+                        Yage.Rendering.Textures
+                        Yage.Rendering.Textures.TextureCube
+                        Yage.Rendering.Textures.TextureUtils
                         
                         Yage.Rendering.ResourceManager
                         Yage.Rendering.Transformation

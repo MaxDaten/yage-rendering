@@ -38,7 +38,7 @@ import           Foreign.Storable
 
 import           Yage.Rendering.Lenses
 import           Yage.Rendering.Uniforms
-import qualified Yage.Rendering.Texture               as Tex
+import qualified Yage.Rendering.Textures              as Tex
 import           Yage.Rendering.Vertex
 import           Yage.Rendering.Mesh                  as Mesh
 import           Yage.Rendering.Types                 hiding (Index)

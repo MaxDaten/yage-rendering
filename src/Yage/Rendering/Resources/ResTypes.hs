@@ -10,7 +10,7 @@ import           Data.Hashable                       ()
 import qualified Graphics.Rendering.OpenGL as GL
 
 import           Yage.Rendering.Backend.Framebuffer
-import           Yage.Rendering.Texture
+import           Yage.Rendering.Textures
 import           Linear
 
 type VBO = GL.BufferObject
@@ -29,7 +29,7 @@ data Renderbuffer = Renderbuffer String GLBufferSpec
 
 data Texture =
       TextureImage String DynamicImage
-    | TextureImageCube String (CubeMap DynamicImage)
+    | TextureImageCube String (TextureCube DynamicImage)
     | TextureBuffer String GL.TextureTarget2D GLBufferSpec
     deriving (Typeable)
 
