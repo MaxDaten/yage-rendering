@@ -34,8 +34,6 @@ import           Yage.Rendering.Backend.Renderer
 import           Yage.Rendering.Resources.Types       as Types
 
 
-import           Foreign.Storable
-
 import           Yage.Rendering.Lenses
 import           Yage.Rendering.Uniforms
 import qualified Yage.Rendering.Textures              as Tex

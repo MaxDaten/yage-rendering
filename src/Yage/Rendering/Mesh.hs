@@ -12,8 +12,6 @@ module Yage.Rendering.Mesh
 import           Yage.Prelude                        hiding (Index, toList)
 import           Yage.Lens
 
-import           GHC.Generics                        (Generic)
-import           Foreign                             (Storable)
 import qualified Data.Vector.Storable                as V
 import qualified Data.Vector                         as V' (convert, (!))
 import           Data.Foldable                       (toList)
