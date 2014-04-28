@@ -17,26 +17,13 @@ import           Graphics.GLUtil
 import           Yage.Rendering.Mesh
 import           Yage.Rendering.Resources.ResTypes
 
--- | container for all possible entities to render
-
-
---class (Monad rm, Ord def) => ResourceManaging rm def res | rm -> res where
---    requestResource :: def -> rm res
---    --requestFramebuffer   :: (Ord fbId)   => (fbId, a) -> rm fbhandler
---    --requestTexture       :: (Ord texId)  => texId  -> rm texhandler
---    --requestRenderbuffer  :: (Ord buffId) => buffId -> rm buffhandler
---    --requestShader        :: (Ord shId)   => shId   -> rm shhandler
---    --requestGeometry      :: (Ord geoId)  => geoId  -> rm geohandler
---    ---- | RenderItem is like the combound of a render-program and render-data
---    ----  e.g. shader and geometry 
---    --requestRenderItem    :: (Ord geoId, Ord shId) => (geoId, shId) -> rm iid
 
 type GLVertexbuffer        = (MeshHash, GL.BufferObject)
 --type GLIndexbuffer         = (MeshHash, GL.BufferObject)
 type GLVertexArray         = VAO
 type GLShader              = ShaderProgram
-type GLTexture             = (GLBufferSpec, GL.TextureObject)
-type GLRenderbuffer        = (GLBufferSpec, GL.RenderbufferObject)
+type GLTexture             = (BufferSpec, GL.TextureObject)
+type GLRenderbuffer        = (BufferSpec, GL.RenderbufferObject)
 type GLFramebuffer         = GL.FramebufferObject
 
 

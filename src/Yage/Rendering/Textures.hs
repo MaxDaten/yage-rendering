@@ -4,6 +4,6 @@ module Yage.Rendering.Textures (
     ) where
 
 import Yage.Rendering.Textures.TextureCube  as Tex
-import Yage.Rendering.Textures.TextureUtils as Tex
+import Yage.Rendering.Textures.TextureImage as Tex
 import Codec.Picture                        as Img
 import Codec.Picture.Types                  as Img

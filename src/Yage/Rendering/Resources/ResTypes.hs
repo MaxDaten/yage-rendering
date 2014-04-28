@@ -5,13 +5,14 @@ module Yage.Rendering.Resources.ResTypes where
 import           Yage.Prelude hiding (Text, unpack)
 import           Yage.Text as TF
 
+import           Data.Data
 import           Data.Hashable                       ()
 
-import qualified Graphics.Rendering.OpenGL as GL
+import qualified Graphics.Rendering.OpenGL           as GL
 
 import           Yage.Rendering.Backend.Framebuffer
-import           Yage.Rendering.Textures
-import           Linear
+import qualified Yage.Rendering.Textures             as Tex
+import           Yage.Rendering.Textures.Instances   ()
 
 type VBO = GL.BufferObject
 type EBO = GL.BufferObject
@@ -19,39 +20,51 @@ type FBO = GL.FramebufferObject
 
 ---------------------------------------------------------------------------------------------------
 
-data GLBufferSpec = GLBufferSpec 
-    { _glBufferFormat    :: !GL.PixelInternalFormat 
-    , _glBufferSize      :: V2 Int
-    }
-
-
-data Renderbuffer = Renderbuffer String GLBufferSpec
+type BufferSpec = Tex.TextureImageSpec
+data Renderbuffer = Renderbuffer String BufferSpec
 
 data Texture =
-      TextureImage String DynamicImage
-    | TextureImageCube String (TextureCube DynamicImage)
-    | TextureBuffer String GL.TextureTarget2D GLBufferSpec
-    deriving (Typeable)
+      Texture2D        String Tex.TextureImage
+    | TextureCube      String Tex.TextureCube
+    | TextureBuffer    String GL.TextureTarget2D BufferSpec
+    deriving ( Typeable, Data )
 
 type RenderTargets = AttachmentTypes Texture Renderbuffer
 
-getTextureID :: Texture -> Text
-getTextureID (TextureImage     name _  )  = TF.format "TextureImage: ident={}"     (Only name)
-getTextureID (TextureImageCube name _  )  = TF.format "TextureImageCube: ident={}" (Only name)
-getTextureID (TextureBuffer    name _ _)  = TF.format "TextureBuffer: ident={}"     (Only name)
+
+textureName :: Texture -> String
+textureName = aux
+    where
+    aux (Texture2D        name _  ) = name
+    aux (TextureCube      name _  ) = name
+    aux (TextureBuffer    name _ _) = name
+
+
+textureID :: Texture -> Text
+textureID tex = TF.format "{}.{}" ( Shown $ toConstr tex, Shown $ textureName tex )
+
+
+textureSpec :: Texture -> BufferSpec
+textureSpec = aux
+    where
+    aux ( Texture2D _ img )                             = Tex.textureSpec img
+    aux ( TextureCube _ Tex.Cube{cubeFaceRight = img} ) = Tex.textureSpec img
+    aux ( TextureBuffer _ _ spec )                      = spec
 
 
 instance Ord Texture where
-    compare a b = compare (getTextureID a) (getTextureID b)
+    compare a b = compare (textureID a) (textureID b)
 
 instance Show Texture where
-    show = unpack . getTextureID
+    show tex = 
+        unpack $ TF.format "{} spec={}" ( textureID tex, Shown $ textureSpec tex )
 
 instance Eq Texture where
-    (==) a b = getTextureID a == getTextureID b
+    (==) a b = textureID a == textureID b
 
 instance Show Renderbuffer where
-    show (Renderbuffer name _) = show name
+    show ( Renderbuffer name spec ) =
+        unpack $ TF.format "Renderbuffer.{} spec={}" ( name, Shown spec )
 
 instance Eq Renderbuffer where
     (==) (Renderbuffer nameA _) (Renderbuffer nameB _) = nameA == nameB
@@ -62,8 +75,7 @@ instance Ord Renderbuffer where
 
 instance Hashable Texture where
     hashWithSalt salt tex =
-        salt `hashWithSalt` (getTextureID tex)
-
+        salt `hashWithSalt` (textureID tex)
 
 
 data ShaderResource = ShaderResource

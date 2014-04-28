@@ -22,10 +22,10 @@ module Yage.Rendering.Types
     , Index, Position, Orientation, Scale
 
     , ShaderResource(..), ShaderProgram(..)
-    , TextureDefinition(..), Texture(..), TextureChannel, GLBufferSpec(..)
+    , TextureDefinition(..), Texture(..), TextureChannel
     , Renderbuffer(..)
 
-    , toIndex1, GL.PixelInternalFormat(..), GL.TextureTarget2D(..), GL.PrimitiveMode(..), GL.Face(..)
+    , toIndex1, GL.PixelInternalFormat(..), GL.PrimitiveMode(..), GL.Face(..)
     , module GLRawTypes
     , module ResTypes
     ) where

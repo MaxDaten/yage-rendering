@@ -11,7 +11,6 @@ import           Yage.Rendering.Types
 
 
 makeLenses ''TextureDefinition
-makeLenses ''GLBufferSpec
 makeLenses ''ShaderResource
 makeLenses ''RenderEntity
 makeLenses ''GLDrawSettings

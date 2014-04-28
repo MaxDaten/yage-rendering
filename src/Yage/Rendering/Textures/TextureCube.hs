@@ -1,59 +1,65 @@
-{-# OPTIONS_GHC -Wall -fno-warn-orphans -fno-warn-deprecations #-}
+{-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
 {-# LANGUAGE RecordWildCards            #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE ExistentialQuantification  #-}
 {-# LANGUAGE FlexibleContexts           #-}
-module Yage.Rendering.Textures.TextureCube (
-      TextureCube(..)
-
-    , readCubeTextures, loadCubeTexture
-    ) where
+module Yage.Rendering.Textures.TextureCube where
 
 import Yage.Prelude                                                 hiding ( Vector, sequence, any )
 
+import Data.Data
 import Data.Foldable
-import Data.Traversable
-
-import Graphics.GLUtil.GLError
-import Graphics.Rendering.OpenGL                                    ( genObjectNames, ($=) )
 import qualified Graphics.Rendering.OpenGL                          as GL
 
-import Yage.Rendering.Textures.TextureUtils
-import Codec.Picture
+import Yage.Rendering.Textures.TextureImage
 
 -- | In OpenGL Order
-data TextureCube a = TextureCube
+data Cube a = Cube
     { cubeFaceRight :: !a -- | TextureCubeMapPositiveX   
     , cubeFaceLeft  :: !a -- | TextureCubeMapNegativeX  
     , cubeFaceTop   :: !a -- | TextureCubeMapPositiveY  
     , cubeFaceBottom:: !a -- | TextureCubeMapNegativeY  
     , cubeFaceFront :: !a -- | TextureCubeMapPositiveZ  
     , cubeFaceBack  :: !a -- | TextureCubeMapNegativeZ
-    } deriving ( Show, Functor, Foldable, Traversable )
+    } deriving ( Show, Functor, Foldable, Traversable, Data, Typeable )
 
 
 
-instance Applicative TextureCube where
-  pure a = TextureCube a a a a a a
+instance Applicative Cube where
+  pure a = Cube a a a a a a
   {-# INLINE pure #-}
-  TextureCube a b c d e f <*> TextureCube g h i j k l = TextureCube (a g) (b h) (c i) (d j) (e k) (f l)
+  Cube a b c d e f <*> Cube g h i j k l = Cube (a g) (b h) (c i) (d j) (e k) (f l)
   {-# INLINE (<*>) #-}
 
 
+type TextureCube = Cube TextureImage
+type GLCubeFaces = Cube GL.TextureTargetCubeMapFace
 
-glCubeMapFaces :: TextureCube TextureTargetCubeMapFace
-glCubeMapFaces =
-    TextureCube TextureCubeMapPositiveX
-                TextureCubeMapNegativeX
-                TextureCubeMapPositiveY
-                TextureCubeMapNegativeY
-                TextureCubeMapPositiveZ
-                TextureCubeMapNegativeZ
+glCubeFaces :: GLCubeFaces
+glCubeFaces =
+    Cube
+        GL.TextureCubeMapPositiveX
+        GL.TextureCubeMapNegativeX
+        GL.TextureCubeMapPositiveY
+        GL.TextureCubeMapNegativeY
+        GL.TextureCubeMapPositiveZ
+        GL.TextureCubeMapNegativeZ
 
 
-readCubeTextures :: TextureCube DynamicImage -> IO (Either String TextureObject)
-readCubeTextures cube = 
+loadCubeTextureImage :: TextureCube -> IO ()
+loadCubeTextureImage cubeTexs = 
+    sequenceA_ $ loadTex <$> glCubeFaces <*> cubeTexs
+
+    where
+
+    loadTex :: GL.TextureTargetCubeMapFace -> TextureImage -> IO ()
+    loadTex = loadTextureImage'
+
+{--
+
+readTexturesCubeImage :: TextureCube  -> IO (Either String TextureObject)
+readTexturesCubeImage cube = 
     let eCubeTextures = sequence $ getTexInfo <$> cube :: Either String (TextureCube Tex)
     in case eCubeTextures of
         Left err  -> return $ Left err
@@ -61,8 +67,6 @@ readCubeTextures cube =
 
 -- | to GLUtil
 -- |Create a new 2D texture with data from a 'TexInfo'.
-loadCubeTexture :: TextureCube Tex -> IO TextureObject
-loadCubeTexture cubeTexs = do 
     printErrorMsg $ "loadCubeTexture"
     
     [obj] <- genObjectNames 1
@@ -76,3 +80,4 @@ loadCubeTexture cubeTexs = do
     
     printErrorMsg $ "loadCubeTexture-post"
     return obj
+--}

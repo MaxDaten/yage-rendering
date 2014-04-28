@@ -42,7 +42,7 @@ library
                         Yage.Rendering.Mesh
                         Yage.Rendering.Textures
                         Yage.Rendering.Textures.TextureCube
-                        Yage.Rendering.Textures.TextureUtils
+                        Yage.Rendering.Textures.TextureImage
                         
                         Yage.Rendering.ResourceManager
                         Yage.Rendering.Transformation
@@ -58,6 +58,8 @@ library
 
                         Yage.Rendering.Resources.Types
                         Yage.Rendering.Resources.ResTypes
+                        Yage.Rendering.Textures.Instances
+
 
   If flag(perf)
     ghc-options:        -threaded -O2

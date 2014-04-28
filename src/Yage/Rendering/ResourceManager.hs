@@ -128,70 +128,72 @@ requestFramebuffer (fboIdent, mrt)
     requestAttachment (Attachment _ NullTarget) = return ()
 
 
+
 requestTexture :: Texture -> ResourceManager GLTexture
-requestTexture res = requestResource loadedTextures loadTexture (resizeTexture res) res
-    -- RESIZE HERE
+requestTexture res = requestResource loadedTextures newTexture (resizeTexture res) res
     where
+
+    newTexture :: Texture -> ResourceManager GLTexture
+    newTexture tex = do
+        let msg = format "newTexture: {0}" [ show tex ]
+        tell [ msg ]
+        obj <- checkErrorOf msg $ load tex
+        return (textureSpec tex, obj)
+
     -- | pushes texture to opengl
-    loadTexture :: Texture -> ResourceManager GLTexture
-    loadTexture (TextureImage _ img) = io $ do
-        checkErrorOf ("loadTexture TextureImage: " ++ show res) $
-            (imgSpec img,) <$> (handleTexObj GL.Texture2D =<< Tex.readTextureImg img)
-
-    loadTexture (TextureImageCube _ cubemap) = io $
-        (imgSpec . Tex.cubeFaceRight $ cubemap,) <$> (handleTexObj GL.TextureCubeMap =<< Tex.readCubeTextures cubemap)
-    
-    loadTexture (TextureBuffer name target spec) =
-        let size    = fromIntegral <$> spec^.glBufferSize
-            texSize = GL.TextureSize2D (size^._x) (size^._y)
-            fmt     = spec^.glBufferFormat
-        in do
-            tell [ format "create tex {0} to {1}" [name, show size] ]
-            checkErrorOf ("loadTexture TextureBuffer: " ++ show res) $ io $ do
-                texObj <- GL.genObjectName
-                GL.textureBinding target $= Just texObj
-
-                GL.textureLevelRange target $= (0,0)
-                GL.textureFilter target     $= ((GL.Nearest, Nothing), GL.Nearest) -- TODO Def
-                GL.texImage2D target GL.NoProxy 0 fmt texSize 0 (GL.PixelData (texFormat fmt) GL.UnsignedByte nullPtr)
-
-                GL.textureBinding target $= Nothing
-                return (spec, texObj)
-            
-
-    imgSpec :: Tex.DynamicImage -> GLBufferSpec
-    imgSpec img = GLBufferSpec GL.RGB8 $ V2 (Tex.dynamicMap Tex.imageWidth img) (Tex.dynamicMap Tex.imageHeight img)
-
-    texFormat :: GL.PixelInternalFormat -> GL.PixelFormat
-    texFormat GL.DepthComponent24  = GL.DepthComponent
-    texFormat GL.DepthComponent32  = GL.DepthComponent
-    texFormat GL.DepthComponent32f = GL.DepthComponent
-    texFormat GL.DepthComponent16  = GL.DepthComponent
-    texFormat GL.RGB8              = GL.RGB
-    texFormat GL.RGBA8             = GL.RGBA
-    texFormat GL.RGBA'             = GL.RGBA
-    texFormat _ = error "Yage.Rendering.ResourceManager.texFormat: not supported internal format"
-
-    handleTexObj target res  =
-        case res of
-        Left msg  -> error msg
-        Right obj -> checkErrorOf ("Texture settings: " ++ show res) $ do
-            GL.textureBinding target $= Just obj
-            GL.textureFilter  target $= ((GL.Linear', Nothing), GL.Linear') -- TODO Def
-            GL.textureBinding target $= Nothing
+    load :: Texture -> ResourceManager GL.TextureObject
+    load (Texture2D _ img) =
+        io $ withNewGLTextureAt GL.Texture2D $ \obj -> do
+            Tex.loadTextureImage' GL.Texture2D img
+                -- | TODO : texture specs like wrapping settings and so on
             return obj
 
-    resizeTexture (TextureBuffer name target newSpec) (currentSpec, texObj) = do
-        let newSize = fromIntegral <$> newSpec^.glBufferSize
-            texSize = GL.TextureSize2D (newSize^._x) (newSize^._y)
-            fmt     = newSpec^.glBufferFormat
-        when (newSpec^.glBufferSize /= currentSpec^.glBufferSize) $ do
-            tell [ format "resize tex {0} to {1}" [name, show newSize] ]
-            checkErrorOf ("Texture resize: " ++ show res) $ io $ do
-                GL.textureBinding target $= Just texObj
-                GL.texImage2D target GL.NoProxy 0 fmt texSize 0 (GL.PixelData (texFormat fmt) GL.UnsignedByte nullPtr)
-                GL.textureBinding target $= Nothing
-        return (newSpec, texObj)
+    load (TextureCube _ cubemap) = 
+        io $ withNewGLTextureAt GL.TextureCubeMap $ \obj -> do
+            Tex.loadCubeTextureImage cubemap
+            
+            GL.textureWrapMode GL.TextureCubeMap GL.R $= (GL.Mirrored, GL.ClampToEdge)
+            GL.textureWrapMode GL.TextureCubeMap GL.S $= (GL.Mirrored, GL.ClampToEdge)
+            GL.textureWrapMode GL.TextureCubeMap GL.T $= (GL.Mirrored, GL.ClampToEdge)
+            GL.textureFilter   GL.TextureCubeMap      $= ((GL.Linear', Just GL.Linear'), GL.Linear')
+            return obj
+
+    load (TextureBuffer _ target spec) =
+        let V2 w h      = Tex.texSpecDimension spec
+            texSize     = GL.TextureSize2D (fromIntegral w) (fromIntegral h)
+            Tex.PixelSpec dataType pxfmt internalFormat = Tex.texSpecPixelSpec spec
+            glPixelData = (GL.PixelData pxfmt dataType nullPtr)
+        in 
+        io $ withNewGLTextureAt target $ \obj -> do
+            GL.textureLevelRange target $= (0,0)
+            --GL.textureFilter target     $= ((GL.Nearest, Nothing), GL.Nearest) -- TODO Def
+            GL.textureFilter  target $= ((GL.Linear', Nothing), GL.Linear') -- TODO Def
+
+            GL.texImage2D target GL.NoProxy 0 internalFormat texSize 0 glPixelData
+            return obj
+
+    -- | creates a gl texture object and binds it to the target
+    withNewGLTextureAt target ma = do
+        texObj <- GL.genObjectName
+        GL.textureBinding target $= Just texObj
+        a <- ma texObj
+        GL.textureBinding target $= Nothing
+        return a
+
+    resizeTexture tex@(TextureBuffer _ target newSpec) current@(currentSpec, texObj) 
+        | newSpec == currentSpec = return current
+        | otherwise =
+            let V2 newW newH    = Tex.texSpecDimension newSpec
+                texSize         = GL.TextureSize2D (fromIntegral newW) (fromIntegral newH)
+                Tex.PixelSpec dataType pxfmt internalFormat = Tex.texSpecPixelSpec newSpec
+                glPixelData     = GL.PixelData pxfmt dataType nullPtr
+            in do
+                tell [ format "resizeTexture: {0} from {1}" [ show tex, show currentSpec ] ]
+                checkErrorOf ( format "resizeTexture: {0}" [ show tex ] ) $ io $ do
+                    GL.textureBinding target $= Just texObj
+                    GL.texImage2D target GL.NoProxy 0 internalFormat texSize 0 glPixelData
+                    GL.textureBinding target $= Nothing
+                return (newSpec, texObj)
     resizeTexture _ (old, texObj) = return (old, texObj)
 
 
@@ -200,28 +202,30 @@ requestRenderbuffer :: Renderbuffer -> ResourceManager GLRenderbuffer
 requestRenderbuffer res = requestResource loadedRenderbuffers loadRenderbuffer (resizeBuffer res) res
     where
 
-    loadRenderbuffer (Renderbuffer name spec@(GLBufferSpec fmt sz)) =
-        let size = GL.RenderbufferSize (fromIntegral $ sz^._x) (fromIntegral $ sz^._y)
+    loadRenderbuffer buff@(Renderbuffer _ spec@(Tex.TextureImageSpec sz pxSpec)) =
+        let size           = GL.RenderbufferSize (fromIntegral $ sz^._x) (fromIntegral $ sz^._y)
+            internalFormat = Tex.pxSpecGLFormat pxSpec
         in do
-            tell [ format "create buffer {0} to {1}" [name, show sz] ]
+            tell [ format "loadRenderbuffer: {0}" [ show buff ] ]
             checkErrorOf ("loadRenderbuffer: ") $ io $ do
                 rObj <- GL.genObjectName
                 GL.bindRenderbuffer GL.Renderbuffer $= rObj
-                GL.renderbufferStorage GL.Renderbuffer fmt size
+                GL.renderbufferStorage GL.Renderbuffer internalFormat size
                 GL.bindRenderbuffer GL.Renderbuffer $= GL.noRenderbufferObject
                 return (spec, rObj)
 
-    resizeBuffer (Renderbuffer name newSpec) (currentSpec, rObj) = do
-        let newSize  = fromIntegral <$> newSpec^.glBufferSize
-            buffSize = GL.RenderbufferSize (newSize^._x) (newSize^._y)
-            fmt      = newSpec^.glBufferFormat
-        when (newSpec^.glBufferSize /= currentSpec^.glBufferSize) $ do
-            tell [ format "resize buffer {0} to {1}" [name, show newSize] ]
-            checkErrorOf ("resizeBuffer: ") $ io $ do
-                GL.bindRenderbuffer GL.Renderbuffer $= rObj
-                GL.renderbufferStorage GL.Renderbuffer fmt buffSize
-                GL.bindRenderbuffer GL.Renderbuffer $= GL.noRenderbufferObject
-        return (newSpec, rObj)
+    resizeBuffer buff@(Renderbuffer _ newSpec@(Tex.TextureImageSpec sz pxSpec)) current@(currentSpec, rObj) 
+        | newSpec == currentSpec = return current
+        | otherwise =
+            let size            = GL.RenderbufferSize (fromIntegral $ sz^._x) (fromIntegral $ sz^._y)
+                internalFormat  = Tex.pxSpecGLFormat pxSpec
+            in do 
+                tell [ format "resizeBuffer {0}" [ show buff ] ]
+                checkErrorOf ("resizeBuffer: ") $ io $ do
+                    GL.bindRenderbuffer GL.Renderbuffer $= rObj
+                    GL.renderbufferStorage GL.Renderbuffer internalFormat size
+                    GL.bindRenderbuffer GL.Renderbuffer $= GL.noRenderbufferObject
+                return (newSpec, rObj)
 
 
 
@@ -341,9 +345,9 @@ makeTexAssignment tex =
                               <*> pure ch
                               <*> pure name
     where
-    glTarget (TextureImage _ _)     = TT GL.Texture2D
-    glTarget (TextureImageCube _ _) = TT GL.TextureCubeMap
-    glTarget (TextureBuffer _ t _)  = TT t
+    glTarget (Texture2D     _ _  ) = TT GL.Texture2D
+    glTarget (TextureCube   _ _  ) = TT GL.TextureCubeMap
+    glTarget (TextureBuffer _ t _) = TT t
 
 
 ---------------------------------------------------------------------------------------------------
