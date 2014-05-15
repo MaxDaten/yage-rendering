@@ -16,16 +16,15 @@
 module Yage.Rendering
     ( module Types
     , module Yage.Rendering
-    , module Lenses
     
     , module Mesh
     , module Vertex
-    , module Uniforms
+    , module Shader
     , module Viewport
     
     , module LinExport
     , module Framebuffer
-    , module ResourceManager
+    , module Resources
     , module Pass
     ) where
 
@@ -40,15 +39,13 @@ import           Linear                                 as LinExport
 import           Yage.Rendering.Backend.Renderer        as Renderer
 import           Yage.Rendering.Backend.RenderPass      as Pass
 import           Yage.Rendering.Backend.Framebuffer     as Framebuffer
-import           Yage.Rendering.Lenses                  as Lenses
-import           Yage.Rendering.ResourceManager
-import           Yage.Rendering.ResourceManager         as ResourceManager (GLResources, initialGLRenderResources)
 import           Yage.Rendering.Types                   as Types
 
 import           Yage.Rendering.Mesh                    as Mesh
-import           Yage.Rendering.Uniforms                as Uniforms
+import           Yage.Rendering.Shader                  as Shader
 import           Yage.Rendering.Vertex                  as Vertex
 import           Yage.Rendering.Viewport                as Viewport
+import           Yage.Rendering.Resources               as Resources
 
 type RenderSystem = RWST () RStatistics GLResources IO
 
@@ -75,20 +72,29 @@ mkRenderSystem toRender = do
     scribe renderLog rlog
 
 
-runRenderPass :: (Show ident, MultipleRenderTargets mrt, Renderable ent vr, UniformFields (Uniforms globals), UniformFields (Uniforms locals) ) => 
-              PassDescr ident mrt ent globals locals -> [ent] -> RenderSystem ()
+runRenderPass :: ( Show ident, MultipleRenderTargets mrt, ViableVertex (Vertex vr)
+                 , HasShaderData entU entT, HasShaderData frameU frameT ) => 
+              PassDescr ident mrt vr frameU frameT entU entT -> [RenderEntity vr entU entT] -> RenderSystem ()
 runRenderPass passDescr@PassDescr{..} entities = do
-    (setup, rSets) <- managePassResoures
-    mkRenderSystem $ mkRenderPass setup rSets
+    -- transform all Renderables into RenderSets
+    (setup, renderSets) <- managePassResoures
+    mkRenderSystem $ mkRenderPass setup renderSets
 
     where
     managePassResoures = do
-        res <- get 
+        -- get current loaded resource state
+        res <- get
+
+        -- load resources from framebuffer setup and all entities
         ((results, res', reslog), time) <- ioTime $ runResourceManager res $ 
             (,) <$> (requestFramebufferSetup passDescr)
-                <*> (forM entities $ \e -> requestRenderSet passShader (passEntityUniforms e) (renderDefinition e))
+                <*> (forM entities $ requestRenderSet passShader)
+        
+        -- write resource loading log
         scribe resourceLog reslog
         scribe resourcingTime time
+
+        -- update resource state with newly loaded resources
         put res'
         return results
 
@@ -96,3 +102,4 @@ runRenderPass passDescr@PassDescr{..} entities = do
 instance Monoid RStatistics where
     mempty = RStatistics 0 0 mempty mempty
     mappend (RStatistics a b c d) (RStatistics a' b' c' d') = RStatistics (a + a') (b + b') (mappend c c') (mappend d d')
+

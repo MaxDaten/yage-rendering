@@ -13,7 +13,6 @@ import           Graphics.GLUtil
 
 
 
---import           Yage.Rendering.Types
 import           Yage.Rendering.Mesh
 import           Yage.Rendering.Resources.ResTypes
 
@@ -38,12 +37,6 @@ data GLResources = GLResources
     }
 
 makeLenses ''GLResources
-
-
---instance Monoid GLRenderResources where
---    mappend (GLRenderResources sA vA aA tA fA rA) (GLRenderResources sB vB aB tB fB rB)
---           = GLRenderResources (sA `union` sB) (vA `union` vB) (aA `union` aB) (tA `union` tB) (fA `union` fB) (rA `union` rB)
---    mempty = GLRenderResources mempty mempty mempty mempty mempty mempty
 
 
 type ResourceManager = RWST () [String] GLResources IO

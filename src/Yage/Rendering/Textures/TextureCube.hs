@@ -56,28 +56,3 @@ loadCubeTextureImage cubeTexs =
     loadTex :: GL.TextureTargetCubeMapFace -> TextureImage -> IO ()
     loadTex = loadTextureImage'
 
-{--
-
-readTexturesCubeImage :: TextureCube  -> IO (Either String TextureObject)
-readTexturesCubeImage cube = 
-    let eCubeTextures = sequence $ getTexInfo <$> cube :: Either String (TextureCube Tex)
-    in case eCubeTextures of
-        Left err  -> return $ Left err
-        Right c   -> Right <$> loadCubeTexture c
-
--- | to GLUtil
--- |Create a new 2D texture with data from a 'TexInfo'.
-    printErrorMsg $ "loadCubeTexture"
-    
-    [obj] <- genObjectNames 1
-    withTextureBoundAt TextureCubeMap obj $ do
-        sequenceA_ $ (\(Tex i) -> reloadTextureTarget i) <$> cubeTexs <*> glCubeMapFaces
-    
-        textureWrapMode TextureCubeMap GL.R $= (Mirrored, ClampToEdge)
-        textureWrapMode TextureCubeMap GL.S $= (Mirrored, ClampToEdge)
-        textureWrapMode TextureCubeMap GL.T $= (Mirrored, ClampToEdge)
-        textureFilter TextureCubeMap        $= ((GL.Linear', Just GL.Linear'), GL.Linear')
-    
-    printErrorMsg $ "loadCubeTexture-post"
-    return obj
---}

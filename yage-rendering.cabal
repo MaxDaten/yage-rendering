@@ -34,21 +34,20 @@ library
   exposed-modules:      Yage.Core.OpenGL
                         Yage.Rendering
                         Yage.Rendering.Types
-                        Yage.Rendering.Lenses
+                        
+                        Yage.Rendering.Resources
                         
                         Yage.Rendering.Vertex
-                        Yage.Rendering.Uniforms
+                        Yage.Rendering.Shader
                         
                         Yage.Rendering.Mesh
                         Yage.Rendering.Textures
                         Yage.Rendering.Textures.TextureCube
                         Yage.Rendering.Textures.TextureImage
                         
-                        Yage.Rendering.ResourceManager
                         Yage.Rendering.Transformation
                         Yage.Rendering.Viewport
                         
-                        Yage.Rendering.Backend.Shader
                         Yage.Rendering.Backend.Renderer
                         Yage.Rendering.Backend.Framebuffer
                         Yage.Rendering.Backend.RenderPass
@@ -58,6 +57,7 @@ library
 
                         Yage.Rendering.Resources.Types
                         Yage.Rendering.Resources.ResTypes
+                        Yage.Rendering.Resources.Manager
                         Yage.Rendering.Textures.Instances
 
 
