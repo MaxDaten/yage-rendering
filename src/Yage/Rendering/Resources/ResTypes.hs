@@ -52,8 +52,8 @@ textureData (Texture _ texData) = texData
 textureSpec :: Texture -> BufferSpec
 textureSpec (Texture _ texData) = aux texData
     where
-    aux ( Texture2D img )                                = TexImg.textureSpec img
-    aux ( TextureCube TexImg.Cube{cubeFaceRight = img} ) = TexImg.textureSpec img
+    aux ( Texture2D img )                                = TexImg.textureImageSpec img
+    aux ( TextureCube TexImg.Cube{cubeFaceRight = img} ) = TexImg.textureImageSpec img
     aux ( TextureBuffer _ spec )                         = spec
 
 

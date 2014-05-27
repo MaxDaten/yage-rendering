@@ -53,7 +53,7 @@ data TextureImageSpec = TextureImageSpec
     , texSpecPixelSpec :: !PixelSpec
     } deriving ( Show, Eq, Data, Typeable )
 
---type PixelType = (GL.DataType, GL.PixelFormat)
+
 data PixelSpec = PixelSpec
     { pxSpecType        :: !GL.DataType
     , pxSpecComponents  :: !GL.PixelFormat
@@ -137,7 +137,7 @@ pixelDataType _ = glType ( error "pixelDataType: invalid access" :: PixelBaseCom
 
 
 textureDimension :: TextureImage -> V2 Int
-textureDimension = texSpecDimension . textureSpec
+textureDimension = texSpecDimension . textureImageSpec
 
 
 textureImageMap :: (forall pixel. Pixel pixel => Image pixel -> a) -> TextureImage -> a
@@ -151,8 +151,8 @@ textureImageMap f = aux
     aux (TexSRGB8  (GLTexture img)) = f img
 
 
-textureSpec :: TextureImage -> TextureImageSpec
-textureSpec tex =
+textureImageSpec :: TextureImage -> TextureImageSpec
+textureImageSpec tex =
     let dimension = V2 (textureImageMap imageWidth tex) (textureImageMap imageHeight tex)
         pxSpec    = pixelSpec tex
     in TextureImageSpec dimension pxSpec
@@ -184,7 +184,7 @@ compsToInternal pf = error $ format "unsupported format: {0}" [ show pf]
 
 
 debugString :: TextureImage -> String
-debugString img = format "{0}: {{1}}" [show $ toConstr img, show $ textureSpec img]
+debugString img = format "{0}: {{1}}" [show $ toConstr img, show $ textureImageSpec img]
 
 instance Show TextureImage where
     show = debugString

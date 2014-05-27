@@ -33,7 +33,7 @@ library
   hs-source-dirs:       src
   exposed-modules:      Yage.Core.OpenGL
                         Yage.Rendering
-                        Yage.Rendering.Types
+                        Yage.Rendering.RenderEntity
                         
                         Yage.Rendering.Resources
                         

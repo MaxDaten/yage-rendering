@@ -1,6 +1,6 @@
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
 {-# LANGUAGE TemplateHaskell            #-}
-module Yage.Rendering.Types where
+module Yage.Rendering.RenderEntity where
 
 import           Yage.Prelude                        hiding (log, Index)
 import           Yage.Lens                           ( makeLenses )
@@ -14,8 +14,6 @@ import           Control.Monad.Writer                ()
 import qualified Graphics.Rendering.OpenGL           as GL
 ---------------------------------------------------------------------------------------------------
 import           Yage.Rendering.Mesh                 as Mesh
-import           Yage.Rendering.Shader               ( ShaderData )
--- =================================================================================================
 
 ---------------------------------------------------------------------------------------------------
 
@@ -28,9 +26,9 @@ data GLDrawSettings = GLDrawSettings
 
 -- | RenderEntity provides all data for an item to render.
 -- this are not opengl-native resources
-data RenderEntity vr u t = RenderEntity
+data RenderEntity vr dat  = RenderEntity        -- | TODO: just payload data
     { _entMesh      :: !(Mesh vr)
-    , _entData      :: !(ShaderData u t)
+    , _entData      :: !dat -- (ShaderData u t)
     , _entSettings  :: !GLDrawSettings
     -- , _entityTextures :: [Texture]          -- | Textures 
     }
@@ -39,17 +37,3 @@ data RenderEntity vr u t = RenderEntity
 makeLenses ''RenderEntity
 makeLenses ''GLDrawSettings
 
-
----------------------------------------------------------------------------------------------------
-
-{--
-class (ViableVertex (Vertex vr)) => Renderable r vr | r -> vr where
-    renderDefinition      :: r -> RenderEntity vr
---}
-
----------------------------------------------------------------------------------------------------
-type Index        = Int
-toIndex1 :: a -> GL.Index1 a
-toIndex1 = GL.Index1
-
----------------------------------------------------------------------------------------------------

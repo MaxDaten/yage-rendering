@@ -11,7 +11,7 @@
 
 module Yage.Rendering.Backend.Renderer where
 ---------------------------------------------------------------------------------------------------
-import           Yage.Prelude                            hiding (log)
+import           Yage.Prelude                            hiding (log, traceM)
 import           Yage.Lens
 
 import qualified Data.Map.Strict                         as M
@@ -29,7 +29,7 @@ import           Graphics.GLUtil.ShaderProgram
 import           Yage.Rendering.Backend.Framebuffer
 
 import           Yage.Rendering.Shader
-import           Yage.Rendering.Types
+import           Yage.Rendering.RenderEntity
 {-=================================================================================================-}
 
 -- import           Paths_yage_rendering
@@ -38,7 +38,8 @@ import           Yage.Rendering.Types
 data RenderLog = RenderLog 
     { _rlLogObjCount :: !Int
     , _rlLogTriCount :: !Int
-    , _rlLog         :: ![String]
+    , _rlTrace       :: ![String]
+    , _rlGLDebug     :: ![String]
     } deriving (Show, Eq)
 
 makeLenses ''RenderLog
@@ -122,7 +123,7 @@ data FramebufferSetup u = FramebufferSetup
 -- TODO :: combine this with the scene setup
 runRenderer :: Renderer a -> IO (a, RenderLog)
 runRenderer renderer = do
-    GL.TextureUnit maxTextureUnits <- GL.get GL.maxTextureUnit
+    GL.TextureUnit maxTextureUnits <- return $ GL.TextureUnit 16 -- GL.get GL.maxTextureUnit
     (a, _st, rlog) <- runRWST render () $ initRenderState ( fromIntegral maxTextureUnits )
     return (a, rlog)
     where
@@ -164,7 +165,8 @@ afterRender = checkError "afterRender: "
 ---------------------------------------------------------------------------------------------------
 
 renderRenderSet :: UniformFields (Uniforms u) => RenderSet u -> Renderer ()
-renderRenderSet RenderSet{..} = checkErrorOf (format "renderRenderSet: {0}" [ show _rsVao ] ) $!
+renderRenderSet set@RenderSet{..} = checkErrorOf (format "renderRenderSet: {0}" [ show _rsVao ] ) $! do
+    traceMf "render: {0}" [show set]
     withVAO _rsVao . withTextures _rsTextures $ do
             -- set element-wise uniform fields
             mShader <- use rStCurrentShader
@@ -179,12 +181,17 @@ renderRenderSet RenderSet{..} = checkErrorOf (format "renderRenderSet: {0}" [ sh
     where
     setShaderFields :: ShaderProgram -> Renderer ()
     setShaderFields shader = do
-        texMapping <- use $ rStTextures.slottedUnits
+        -- set all uniform fields (excluding texture units)
         io $ setUniforms shader _rsUniforms
-        _ <- io $ M.traverseWithKey (setTextureSampler shader) texMapping
+
+        -- set all asigned textures to it's sampler
+        texMapping <- use $ rStTextures.slottedUnits
+        _ <- M.traverseWithKey (setTextureSampler shader) texMapping
         return ()
 
-    setTextureSampler shader name unit = setUniform shader name (unit^.unitGL)
+    setTextureSampler shader name unit = do
+        traceMf "setTextureSampler: {0} {1}" [show name, show unit]
+        io $ setUniform shader name (unit^.unitGL)
 
 ---------------------------------------------------------------------------------------------------
 
@@ -246,6 +253,7 @@ withTextures texs ma =
 
 withActiveUnits :: [(TextureUnit, GLTextureItem)] -> Renderer a -> Renderer a
 withActiveUnits units ma = do
+    traceMf "withActiveUnits: {0}" [show units] 
     forM_ units $ activateUnit
     a <- ma
     forM_ units deactivateUnit
@@ -256,13 +264,13 @@ withActiveUnits units ma = do
     activateUnit ( (TextureUnit _ Nothing), _)   = error "withActiveUnits:activateUnit: invalid empty TextureUnit"
     activateUnit ( unit@(TextureUnit _ (Just item)), tex ) = 
         case tex of
-        GLTextureItem target _ -> do
+        GLTextureItem target _ -> checkErrorOf (format "activateUnit: {0}" [show unit]) $ do
             io $ GL.activeTexture         GL.$= unit^.unitGL 
-            io $ GL.textureBinding target GL.$= item^.itemTexObj.to Just
+            io $ GL.textureBinding target GL.$= ( Just $ item^.itemTexObj )
 
     deactivateUnit (unit, tex) =
         case tex of
-        GLTextureItem target _ -> do
+        GLTextureItem target _ -> checkErrorOf (format "deactivateUnit: {0}" [show unit]) $ do
             io $ GL.activeTexture         GL.$= unit^.unitGL
             io $ GL.textureBinding target GL.$= Nothing
 
@@ -278,7 +286,7 @@ withAssignedItems items ma = do
 
 
 assignTextureUnit :: TextureItem -> Renderer TextureUnit
-assignTextureUnit slot@TextureItem{..} = 
+assignTextureUnit slot@TextureItem{..} =
     lookupUnit _itemKey <|> slotNextFreeUnit slot
 
 
@@ -298,8 +306,9 @@ lookupUnit key = zoom rStTextures $
 
 slotNextFreeUnit :: TextureItem -> Renderer TextureUnit
 slotNextFreeUnit slot = do
-    unit <- takeFreeUnit
-    return $ unit & unitSlot ?~ slot
+    unit <- takeFreeUnit <&> unitSlot ?~ slot
+    rStTextures.slottedUnits.at ( slot^.itemKey ) ?= unit
+    return unit
 
 
 takeFreeUnit :: Renderer TextureUnit
@@ -310,7 +319,7 @@ takeFreeUnit = zoom rStTextures $ do
 
 
 putFreeUnit :: TextureUnit -> Renderer ()
-putFreeUnit (TextureUnit _ Nothing) = error "putFreeUnit: not a free unit"
+putFreeUnit (TextureUnit _ (Just _)) = error "putFreeUnit: not a free unit"
 putFreeUnit unit = rStTextures.freeUnits %= (:) unit
 
 
@@ -350,13 +359,13 @@ instance Show ( RenderSet urec ) where
                [ show _rsVao, show _rsTextures, show _rsDrawSettings, show _rsVertexCount ]
 
 instance Monoid RenderLog where
-    mempty = RenderLog 0 0 []
-    mappend (RenderLog ca ta la) (RenderLog cb tb lb) = RenderLog (ca + cb) (ta + tb) (mappend la lb)
+    mempty = RenderLog 0 0 [] []
+    mappend (RenderLog ca ta trc dbg) (RenderLog cb tb trc' dbg') = RenderLog (ca + cb) (ta + tb) (mappend trc trc') (mappend dbg dbg')
 
 ---------------------------------------------------------------------------------------------------
 
-logRenderM :: String -> Renderer ()
-logRenderM msg = scribe rlLog [msg]
+traceM :: String -> Renderer ()
+traceM msg = scribe rlTrace [msg]
 
 logCountObj :: Renderer ()
 logCountObj = scribe rlLogObjCount 1
@@ -364,12 +373,8 @@ logCountObj = scribe rlLogObjCount 1
 logCountTriangles :: (Integral i) => i -> Renderer ()
 logCountTriangles = scribe rlLogTriCount . fromIntegral
 
-logRenderMf :: String -> [String] -> Renderer ()
-logRenderMf msg args = logRenderM $ format msg args
-
-isEmptyRenderLog :: RenderLog -> Bool
-isEmptyRenderLog = (mempty ==)
-
+traceMf :: String -> [String] -> Renderer ()
+traceMf msg = traceM . format msg
 
 
 checkError :: (MonadIO m) => String -> m ()

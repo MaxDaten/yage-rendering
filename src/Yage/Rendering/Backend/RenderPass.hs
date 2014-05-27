@@ -2,31 +2,38 @@
 {-# LANGUAGE ConstraintKinds          #-}
 {-# LANGUAGE FlexibleContexts         #-}
 {-# LANGUAGE NamedFieldPuns           #-}
+{-# LANGUAGE KindSignatures           #-}
+{-# LANGUAGE DataKinds                #-}
 module Yage.Rendering.Backend.RenderPass where
 
 import Yage.Prelude
 
+import Yage.Rendering.Shader
+
 import Yage.Rendering.Backend.Framebuffer
 import Yage.Rendering.Backend.Renderer
-import Yage.Rendering.Shader
+
+
+
+
 import Yage.Rendering.Resources.ResTypes
-import Yage.Rendering.Types
+
 
 
 type MultipleRenderTargets mrt = FramebufferSpec mrt RenderTargets
 
 type DefaultRenderTarget = DefaultFramebuffer RenderTargets
 
-data RenderTarget ident mrt = RenderTarget ident mrt
+data RenderTarget mrt = RenderTarget String mrt
 
-data PassDescr ident mrt vr frameU frameT entU entT = PassDescr
-    { passTarget         :: RenderTarget ident mrt
-    , passShader         :: ShaderResource
-    , passPerFrameData   :: ShaderData frameU frameT
-    , passPerEntityData  :: RenderEntity vr entU entT -> ShaderData entU entT
-    , passPreRendering   :: Renderer ()
-    , passPostRendering  :: Renderer ()
-    }
+data PassDescr target perFrame perEntity (vertex :: [*]) where
+    PassDescr :: { passTarget         :: RenderTarget target
+                 , passShader         :: ShaderResource
+                 , passPerFrameData   :: perFrame
+                 -- , passPerEntityData  :: RenderEntity vr entU entT -> ShaderData entU entT
+                 , passPreRendering   :: Renderer ()
+                 , passPostRendering  :: Renderer ()
+                 } -> PassDescr target perFrame perEntity vertex
 
 
 mkRenderPass :: ( UniformFields (Uniforms fbU), UniformFields (Uniforms entU) ) =>
@@ -34,9 +41,9 @@ mkRenderPass :: ( UniformFields (Uniforms fbU), UniformFields (Uniforms entU) ) 
 mkRenderPass fboSetup rSets = withFramebufferSetup fboSetup (renderFrame rSets)
 
 
-renderTargets :: PassDescr ident mrt vr frameU frameT entU entT -> mrt
+renderTargets :: PassDescr mrt f e v -> mrt
 renderTargets PassDescr{passTarget} = let RenderTarget _ mrt = passTarget in mrt 
 
 
-defaultRenderTarget :: RenderTarget String (DefaultFramebuffer a)
+defaultRenderTarget :: RenderTarget (DefaultFramebuffer a)
 defaultRenderTarget = RenderTarget "default" DefaultFramebuffer

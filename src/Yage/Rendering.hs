@@ -14,18 +14,20 @@
 
 
 module Yage.Rendering
-    ( module Types
+    ( module Entity
     , module Yage.Rendering
     
     , module Mesh
     , module Vertex
     , module Shader
     , module Viewport
+    , module Transformation
     
     , module LinExport
     , module Framebuffer
     , module Resources
     , module Pass
+    , Renderer.RenderLog, rlTrace, rlGLDebug, rlLogTriCount, rlLogObjCount
     ) where
 
 import           Yage.Prelude
@@ -39,12 +41,13 @@ import           Linear                                 as LinExport
 import           Yage.Rendering.Backend.Renderer        as Renderer
 import           Yage.Rendering.Backend.RenderPass      as Pass
 import           Yage.Rendering.Backend.Framebuffer     as Framebuffer
-import           Yage.Rendering.Types                   as Types
 
+import           Yage.Rendering.RenderEntity            as Entity
 import           Yage.Rendering.Mesh                    as Mesh
 import           Yage.Rendering.Shader                  as Shader
 import           Yage.Rendering.Vertex                  as Vertex
 import           Yage.Rendering.Viewport                as Viewport
+import           Yage.Rendering.Transformation          as Transformation
 import           Yage.Rendering.Resources               as Resources
 
 type RenderSystem = RWST () RStatistics GLResources IO
@@ -60,8 +63,10 @@ data RStatistics = RStatistics
 makeLenses ''RStatistics
 
 
+
 runRenderSystem :: (MonadIO m) => RenderSystem () -> GLResources -> m (GLResources, RStatistics)
 runRenderSystem sys res = io $ execRWST sys () res
+
 
 
 -- TODO individual settings
@@ -72,9 +77,10 @@ mkRenderSystem toRender = do
     scribe renderLog rlog
 
 
-runRenderPass :: ( Show ident, MultipleRenderTargets mrt, ViableVertex (Vertex vr)
-                 , HasShaderData entU entT, HasShaderData frameU frameT ) => 
-              PassDescr ident mrt vr frameU frameT entU entT -> [RenderEntity vr entU entT] -> RenderSystem ()
+
+runRenderPass :: ( MultipleRenderTargets mrt, ViableVertex (Vertex vr)
+                 , IsShaderData entU entT, IsShaderData frameU frameT ) => 
+              PassDescr mrt (ShaderData frameU frameT) (ShaderData entU entT) vr -> [RenderEntity vr (ShaderData entU entT)] -> RenderSystem ()
 runRenderPass passDescr@PassDescr{..} entities = do
     -- transform all Renderables into RenderSets
     (setup, renderSets) <- managePassResoures

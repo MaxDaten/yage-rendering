@@ -17,23 +17,23 @@ import           Yage.Rendering.Mesh
 import           Yage.Rendering.Resources.ResTypes
 
 
-type GLVertexbuffer        = (MeshHash, GL.BufferObject)
+type VertexBufferRHI       = (MeshHash, GL.BufferObject)
 --type GLIndexbuffer         = (MeshHash, GL.BufferObject)
-type GLVertexArray         = VAO
-type GLShader              = ShaderProgram
-type GLTexture             = (BufferSpec, GL.TextureObject)
-type GLRenderbuffer        = (BufferSpec, GL.RenderbufferObject)
-type GLFramebuffer         = GL.FramebufferObject
+type VertexArrayRHI        = VAO
+type ShaderRHI             = ShaderProgram
+type TextureRHI            = (BufferSpec, GL.TextureObject)
+type RenderbufferRHI       = (BufferSpec, GL.RenderbufferObject)
+type FramebufferRHI        = GL.FramebufferObject
 
 
 data GLResources = GLResources
-    { _loadedShaders       :: (Map ShaderResource           GLShader            )
-    , _loadedVertexBuffer  :: (Map MeshId                   GLVertexbuffer      )
-    , _loadedVertexArrays  :: (Map (MeshId, ShaderResource) GLVertexArray       )
+    { _loadedShaders       :: (Map ShaderResource           ShaderRHI            )
+    , _loadedVertexBuffer  :: (Map MeshId                   VertexBufferRHI      )
+    , _loadedVertexArrays  :: (Map (MeshId, ShaderResource) VertexArrayRHI       )
     --, _loadedIndexBuffer   :: (Map MeshId                   GLElementbuffer     )
-    , _loadedTextures      :: (Map Texture                  GLTexture           )
-    , _loadedRenderbuffers :: (Map Renderbuffer             GLRenderbuffer      )
-    , _compiledFBOs        :: (Map String                   GLFramebuffer       )
+    , _loadedTextures      :: (Map Texture                  TextureRHI           )
+    , _loadedRenderbuffers :: (Map Renderbuffer             RenderbufferRHI      )
+    , _compiledFBOs        :: (Map String                   FramebufferRHI       )
     }
 
 makeLenses ''GLResources
