@@ -157,7 +157,7 @@ requestTexture res = requestResource loadedTextures newTexture (resizeTexture re
         io $ withNewGLTextureAt GL.TextureCubeMap $ \obj -> do
             Tex.loadCubeTextureImage cubemap
             
-            GL.textureFilter   GL.Texture2D      $= ((GL.Linear', Nothing), GL.Linear')
+            GL.textureFilter   GL.TextureCubeMap      $= ((GL.Linear', Nothing), GL.Linear')
             GL.textureWrapMode GL.TextureCubeMap GL.R $= (GL.Mirrored, GL.ClampToEdge)
             GL.textureWrapMode GL.TextureCubeMap GL.S $= (GL.Mirrored, GL.ClampToEdge)
             GL.textureWrapMode GL.TextureCubeMap GL.T $= (GL.Mirrored, GL.ClampToEdge)

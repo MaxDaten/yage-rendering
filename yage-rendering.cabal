@@ -51,6 +51,7 @@ library
                         Yage.Rendering.Backend.Renderer
                         Yage.Rendering.Backend.Framebuffer
                         Yage.Rendering.Backend.RenderPass
+                        Yage.Rendering.Backend.RenderSystem
   other-modules:
                         Paths_yage_rendering
                         Yage.Rendering.Utils
