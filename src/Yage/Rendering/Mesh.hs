@@ -83,9 +83,9 @@ meshFromVertexList ident = makeMesh ident . V.fromList
 
 -- | builds a mesh from geometry, unrolling the elements (duplicating vertices)
 -- for a index free drawing
-meshFromTriangleGeometry :: (Storable (Vertex v)) =>
-                         MeshId -> Geometry (Vertex v) (Triangle Int) -> Mesh v
-meshFromTriangleGeometry ident Geometry{..} = 
+meshFromTriGeo :: (Storable (Vertex v)) =>
+                         MeshId -> TriGeo (Vertex v) -> Mesh v
+meshFromTriGeo ident Geometry{..} = 
   makeMesh ident $
     V.concatMap (V.fromList . map (geoVertices V'.!) . toList) $ V'.convert geoElements
 
