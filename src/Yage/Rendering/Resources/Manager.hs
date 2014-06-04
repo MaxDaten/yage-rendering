@@ -21,9 +21,8 @@ import           Foreign.Ptr                          (nullPtr)
 import           Control.Monad.RWS                    hiding (forM, forM_, mapM_)
 
 
-import           Graphics.GLUtil                      hiding (loadShader, loadTexture)
-import           Graphics.Rendering.OpenGL            (($=))
-import qualified Graphics.Rendering.OpenGL            as GL
+import qualified Yage.Core.OpenGL                     as GL
+import           Yage.Core.OpenGL                     (($=))
 
 
 import           Yage.Rendering.Backend.Framebuffer
@@ -138,7 +137,6 @@ requestTexture res = requestResource loadedTextures newTexture (updateTexture re
         let chkErr = checkErrorOf ( format "newTexture: {0}" [show tex ] )
         
         obj <- chkErr $ loadData $ textureData tex
-        setTextureConfig tex
         
         tell [ format "newTexture: RHI = {0}: {1}" [ show tex, show obj ] ]
         return (textureSpec tex, textureConfig tex, obj)
@@ -148,11 +146,13 @@ requestTexture res = requestResource loadedTextures newTexture (updateTexture re
     loadData (Texture2D img) =
         io $ withNewGLTextureAt GL.Texture2D $ \obj -> do            
             Tex.loadTextureImage' GL.Texture2D img
+            setTextureConfig res
             return obj
 
     loadData (TextureCube cubemap) = 
         io $ withNewGLTextureAt GL.TextureCubeMap $ \obj -> do
-            Tex.loadCubeTextureImage cubemap            
+            Tex.loadCubeTextureImage cubemap
+            setTextureConfig res
             return obj
 
     loadData (TextureBuffer target spec) =
@@ -163,19 +163,23 @@ requestTexture res = requestResource loadedTextures newTexture (updateTexture re
         in 
         io $ withNewGLTextureAt target $ \obj -> do
             GL.textureLevelRange target $= (0,0)
-
+            setTextureConfig res
             GL.texImage2D target GL.NoProxy 0 internalFormat texSize 0 glPixelData
             return obj
 
     -- | creates a gl texture object and binds it to the target
     withNewGLTextureAt target ma = do
         texObj <- GL.genObjectName
+        withTextureObj target texObj ma
+
+    withTextureObj target texObj ma = do
         GL.textureBinding target $= Just texObj
         a <- ma texObj
         GL.textureBinding target $= Nothing
         return a
 
-    updateTexture tex current = updateConfig tex =<< resizeTexture tex current
+    updateTexture tex current = 
+        updateConfig tex =<< resizeTexture tex current
 
     updateConfig tex@( Texture _ newConf _ ) current@(_, currentConf, _)
         | newConf == currentConf = return current
@@ -204,24 +208,23 @@ requestTexture res = requestResource loadedTextures newTexture (updateTexture re
         let TextureFiltering minification mipmap magnification = config^.texConfFiltering
             TextureWrapping repetition clamping = config^.texConfWrapping
             
-        when (isJust mipmap) $ GL.generateMipmap' GL.TextureCubeMap
         -- NOTE: filtering is neccessary for texture completeness
         case texData of
             Texture2D _   -> do
+                when (isJust mipmap) $ GL.generateMipmap' GL.Texture2D
                 GL.textureFilter   GL.Texture2D      $= ((minification, mipmap), magnification)
-                GL.textureWrapMode GL.Texture2D GL.S $= (repetition, clamping)
-                GL.textureWrapMode GL.Texture2D GL.T $= (repetition, clamping)
+                GL.texture2DWrap   $= (repetition, clamping)
             
             TextureCube _ -> do 
+                when (isJust mipmap) $ GL.generateMipmap' GL.TextureCubeMap
                 GL.textureFilter   GL.TextureCubeMap      $= ((minification, mipmap), magnification)
-                GL.textureWrapMode GL.TextureCubeMap GL.R $= (repetition, clamping)
-                GL.textureWrapMode GL.TextureCubeMap GL.S $= (repetition, clamping)
-                GL.textureWrapMode GL.TextureCubeMap GL.T $= (repetition, clamping)
+                GL.texture3DWrap   GL.TextureCubeMap      $= (repetition, clamping)
             
             TextureBuffer target _ -> do
+                when (isJust mipmap) $ GL.generateMipmap' target
                 GL.textureFilter   target      $= ((minification, mipmap), magnification)
-                GL.textureWrapMode target GL.S $= (repetition, clamping)
-                GL.textureWrapMode target GL.T $= (repetition, clamping)
+                GL.texture2DWrap   $= (repetition, clamping)
+
 
 requestRenderbuffer :: Renderbuffer -> ResourceManager RenderbufferRHI
 requestRenderbuffer res = requestResource loadedRenderbuffers loadRenderbuffer (resizeBuffer res) res
@@ -257,9 +260,9 @@ requestRenderbuffer res = requestResource loadedRenderbuffers loadRenderbuffer (
 requestShader :: ShaderResource -> ResourceManager ShaderRHI
 requestShader = requestResource loadedShaders loadShader return
     where
-    loadShader :: ShaderResource -> ResourceManager ShaderProgram
+    loadShader :: ShaderResource -> ResourceManager ShaderRHI
     loadShader res = io $!
-        simpleShaderProgram (encodeString $ res^.srVertSrc) (encodeString $ res^.srFragSrc)
+        GL.simpleShaderProgram (encodeString $ res^.srVertSrc) (encodeString $ res^.srFragSrc)
 
 
 
@@ -294,7 +297,7 @@ requestVAO mesh shader = aux (mesh^.meshId,shader)
         shaderProg      <- requestShader shader
 
         tell [ format "RenderSet: {0} - {1}" [show mesh, show shader] ] 
-        io $ makeVAO $ do
+        io $ GL.makeVAO $ do
             bindVertices vbuff
             enableVertices' shaderProg vbuff
             -- it is really part of vao:
@@ -346,6 +349,6 @@ initialGLRenderResources =
 
 
 replaceIndices :: [Word32] -> IO ()
-replaceIndices = replaceBuffer GL.ElementArrayBuffer
+replaceIndices = GL.replaceBuffer GL.ElementArrayBuffer
 
 
