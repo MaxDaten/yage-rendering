@@ -21,9 +21,8 @@ import           Foreign.Ptr                          (nullPtr)
 import           Control.Monad.RWS                    hiding (forM, forM_, mapM_)
 
 
-import           Graphics.GLUtil                      hiding (loadShader, loadTexture)
-import           Graphics.Rendering.OpenGL            (($=))
-import qualified Graphics.Rendering.OpenGL            as GL
+import qualified Yage.Core.OpenGL                     as GL
+import           Yage.Core.OpenGL                     (($=))
 
 
 import           Yage.Rendering.Backend.Framebuffer
@@ -55,17 +54,21 @@ runResourceManager res rm = io $ runRWST rm () res
 
 
 requestResource :: (Ord key)
-                => Lens' GLResources (Map key res)          -- ^ state-field accessor
-                -> (key -> ResourceManager res)             -- ^ loading function
-                -> (res -> ResourceManager res)             -- ^ updating function
-                -> key                                      -- ^ resource to load
+                => Lens' GLResources (Map key res)
+                -- ^ state-field accessor
+                -> (ResourceManager res)
+                -- ^ loading function
+                -> (res -> ResourceManager res)
+                -- ^ updating function old res to new res
+                -> key
+                -- ^ resource to load
                 -> ResourceManager res
 requestResource accessor loader updater resource = do
     resmap <- use accessor
     item <- maybe
-        (loader resource)
-        (updater)
-        (resmap^.at resource)
+        ( loader  )
+        ( updater )
+        ( resmap^.at resource )
 
     accessor.at resource ?= item
     return $ item
@@ -76,14 +79,14 @@ requestFramebuffer :: (Show ident, MultipleRenderTargets mrt) =>
 requestFramebuffer (fboIdent, mrt) 
     | isDefault mrt = return GL.defaultFramebufferObject
     | otherwise =
-    let compiler = const $ compileFBO <&> flip (^?!) folded -- unsafe head
+    let compiler = compileFBO <&> flip (^?!) folded -- unsafe head
     in requestResource compiledFBOs compiler updateFramebuffer (show fboIdent)
 
     where
 
     -- | creates a new framebuffer according to the given specs
     compileFBO = do
-        tell [format "create fbo {0}" [ show fboIdent ]]
+        tell [ format "create fbo {0}" [ show fboIdent ] ]
         fbo <- io $ GL.genObjectName
         io $ GL.bindFramebuffer GL.Framebuffer $= fbo
 
@@ -100,7 +103,7 @@ requestFramebuffer (fboIdent, mrt)
     attachTargetToFBO attchmnt =
         case toGLAttachment attchmnt of
             (glSlot, TextureTarget tt2d tex level) -> do
-                (_, texObj) <- requestTexture tex
+                (_,_, texObj) <- requestTexture tex
                 io $ GL.framebufferTexture2D GL.Framebuffer glSlot tt2d texObj level
             (glSlot, RenderbufferTarget rbuff)     -> do
                 (_, robj) <- requestRenderbuffer rbuff
@@ -130,84 +133,107 @@ requestFramebuffer (fboIdent, mrt)
 
 
 requestTexture :: Texture -> ResourceManager TextureRHI
-requestTexture res = requestResource loadedTextures newTexture (resizeTexture res) res
+requestTexture texture@(Texture name newConfig texData) = do
+    res <- requestResource loadedTextures newTexture updateTexture texture
+    io $ withTextureBind texture $= Nothing
+    return res
     where
 
-    newTexture :: Texture -> ResourceManager TextureRHI
-    newTexture tex = do
-        let chkErr = checkErrorOf ( format "newTexture: {0}" [show tex ] )
-        obj <- chkErr $ loadData . textureData $ tex
-        tell [ format "newTexture: RHI = {0}: {1}" [ show tex, show obj ] ]
-        return (textureSpec tex, obj)
+    newTexture :: ResourceManager TextureRHI
+    newTexture = do
+        let chkErr = checkErrorOf ( format "newTexture: {0}" [show texture ] )
+        obj <- io $ GL.genObjectName
+        io $ withTextureBind texture $= Just obj
+
+        chkErr $ loadData $ textureData texture
+        setTextureConfig
+        
+        tell [ format "newTexture: RHI = {0}: {1}" [ show texture, show obj ] ]
+        return (textureSpec texture, textureConfig texture, obj)
 
     -- | pushes texture to opengl
-    loadData :: TextureData -> ResourceManager GL.TextureObject
-    loadData (Texture2D img) =
-        io $ withNewGLTextureAt GL.Texture2D $ \obj -> do
-            Tex.loadTextureImage' GL.Texture2D img
-            -- NOTE: filtering is neccessary for texture completeness
-            GL.textureFilter   GL.Texture2D      $= ((GL.Linear', Nothing), GL.Linear')
-            GL.textureWrapMode GL.Texture2D GL.S $= (GL.Repeated, GL.Repeat)
-            GL.textureWrapMode GL.Texture2D GL.T $= (GL.Repeated, GL.Repeat)
+    loadData :: TextureData -> ResourceManager ()
+    loadData (Texture2D img) = io $ do
+        Tex.loadTextureImage' GL.Texture2D img
 
-                -- | TODO : texture specs like wrapping settings and so on
-            return obj
+    loadData (TextureCube cubemap) = io $ do
+        Tex.loadCubeTextureImage cubemap
 
-    loadData (TextureCube cubemap) = 
-        io $ withNewGLTextureAt GL.TextureCubeMap $ \obj -> do
-            Tex.loadCubeTextureImage cubemap
-            
-            GL.textureFilter   GL.TextureCubeMap      $= ((GL.Linear', Nothing), GL.Linear')
-            GL.textureWrapMode GL.TextureCubeMap GL.R $= (GL.Mirrored, GL.ClampToEdge)
-            GL.textureWrapMode GL.TextureCubeMap GL.S $= (GL.Mirrored, GL.ClampToEdge)
-            GL.textureWrapMode GL.TextureCubeMap GL.T $= (GL.Mirrored, GL.ClampToEdge)
-            return obj
-
-    loadData (TextureBuffer target spec) =
+    loadData (TextureBuffer target spec) = io $ do
         let V2 w h      = Tex.texSpecDimension spec
             texSize     = GL.TextureSize2D (fromIntegral w) (fromIntegral h)
             Tex.PixelSpec dataType pxfmt internalFormat = Tex.texSpecPixelSpec spec
-            glPixelData = GL.PixelData pxfmt dataType nullPtr
-        in 
-        io $ withNewGLTextureAt target $ \obj -> do
-            GL.textureLevelRange target $= (0,0)
-            --GL.textureFilter target     $= ((GL.Nearest, Nothing), GL.Nearest) -- TODO Def
-            GL.textureFilter  target $= ((GL.Linear', Nothing), GL.Linear') -- TODO Def
+            glPixelData = GL.PixelData pxfmt dataType nullPtr    
+        GL.textureLevelRange target $= (0,0)
+        GL.texImage2D target GL.NoProxy 0 internalFormat texSize 0 glPixelData
 
-            GL.texImage2D target GL.NoProxy 0 internalFormat texSize 0 glPixelData
-            return obj
+    withTextureBind :: Texture -> GL.StateVar (Maybe GL.TextureObject)
+    withTextureBind tex =
+        case textureData tex of
+            Texture2D _ -> GL.textureBinding GL.Texture2D
+            TextureCube _ -> GL.textureBinding GL.TextureCubeMap
+            TextureBuffer t _ -> GL.textureBinding t
 
-    -- | creates a gl texture object and binds it to the target
-    withNewGLTextureAt target ma = do
-        texObj <- GL.genObjectName
-        GL.textureBinding target $= Just texObj
-        a <- ma texObj
-        GL.textureBinding target $= Nothing
-        return a
+    withTextureParameter :: Texture -> (forall t. GL.ParameterizedTextureTarget t => t -> a) -> a
+    withTextureParameter tex varFun =
+        case textureData tex of
+            Texture2D _ -> varFun GL.Texture2D
+            TextureCube _ -> varFun GL.TextureCubeMap
+            TextureBuffer t _ -> varFun t
 
-    resizeTexture tex@(Texture name (TextureBuffer target newSpec)) current@(currentSpec, texObj) 
-        | newSpec == currentSpec = return current
+
+    updateTexture current = do
+        io $ withTextureBind texture $= Just (current^._3)
+        updateConfig =<< resizeTexture current
+
+    updateConfig :: TextureRHI -> ResourceManager TextureRHI
+    updateConfig current@(_, currentConfig, _)
+        | newConfig == currentConfig = return current
+        | otherwise = do
+            setTextureConfig
+            return $ current & _2 .~ newConfig
+    
+    resizeTexture current@(currentSpec, _,_) 
+        | textureSpec texture == currentSpec = return current
         | otherwise =
-            let V2 newW newH    = Tex.texSpecDimension newSpec
+            let newSpec         = textureSpec texture
+                V2 newW newH    = Tex.texSpecDimension newSpec
                 texSize         = GL.TextureSize2D (fromIntegral newW) (fromIntegral newH)
                 Tex.PixelSpec dataType pxfmt internalFormat = Tex.texSpecPixelSpec newSpec
                 glPixelData     = GL.PixelData pxfmt dataType nullPtr
             in do
                 tell [ format "resizeTexture: {0}\nfrom:\t{1}\nto:\t{2}" [ show name, show currentSpec, show newSpec ] ]
-                checkErrorOf ( format "resizeTexture: {0}" [ show tex ] ) $ io $ do
-                    GL.textureBinding target $= Just texObj
-                    GL.texImage2D target GL.NoProxy 0 internalFormat texSize 0 glPixelData
-                    GL.textureBinding target $= Nothing
-                return (newSpec, texObj)
-    resizeTexture _ (old, texObj) = return (old, texObj)
+                checkErrorOf ( format "resizeTexture: {0}" [ show texture ] ) $ io $
+                    case texData of
+                        Texture2D _ -> GL.texImage2D GL.Texture2D GL.NoProxy 0 internalFormat texSize 0 glPixelData
+                        _           -> return ()
+                return $ current & _1 .~ newSpec
 
+    setTextureConfig :: ResourceManager ()
+    setTextureConfig = checkErrorOf (format "setTextureConfig {0} {1}" [ show name, show newConfig ]) $ io $ do
+        let TextureFiltering minification mipmap magnification = newConfig^.texConfFiltering
+            TextureWrapping repetition clamping = newConfig^.texConfWrapping
+            
+        -- NOTE: filtering is neccessary for texture completeness
+        when (isJust mipmap) $ GL.generateMipmap' texData
+        withTextureParameter texture GL.textureFilter $= ((minification, mipmap), magnification)
+        case texData of
+            Texture2D _ -> do
+                GL.texture2DWrap $= (repetition, clamping)
+            
+            TextureCube _ -> do 
+                GL.texture3DWrap GL.TextureCubeMap $= (repetition, clamping)
+            
+            TextureBuffer _ _ -> do                
+                GL.texture2DWrap $= (repetition, clamping)
 
 
 requestRenderbuffer :: Renderbuffer -> ResourceManager RenderbufferRHI
-requestRenderbuffer res = requestResource loadedRenderbuffers loadRenderbuffer (resizeBuffer res) res
+requestRenderbuffer buff@(Renderbuffer _ newSpec@(Tex.TextureImageSpec sz pxSpec)) = 
+    requestResource loadedRenderbuffers loadRenderbuffer resizeBuffer buff
     where
 
-    loadRenderbuffer buff@(Renderbuffer _ spec@(Tex.TextureImageSpec sz pxSpec)) =
+    loadRenderbuffer =
         let size           = GL.RenderbufferSize (fromIntegral $ sz^._x) (fromIntegral $ sz^._y)
             internalFormat = Tex.pxSpecGLFormat pxSpec
         in do
@@ -217,9 +243,9 @@ requestRenderbuffer res = requestResource loadedRenderbuffers loadRenderbuffer (
                 GL.bindRenderbuffer GL.Renderbuffer $= rObj
                 GL.renderbufferStorage GL.Renderbuffer internalFormat size
                 GL.bindRenderbuffer GL.Renderbuffer $= GL.noRenderbufferObject
-                return (spec, rObj)
+                return (newSpec, rObj)
 
-    resizeBuffer buff@(Renderbuffer _ newSpec@(Tex.TextureImageSpec sz pxSpec)) current@(currentSpec, rObj) 
+    resizeBuffer current@(currentSpec, rObj) 
         | newSpec == currentSpec = return current
         | otherwise =
             let size            = GL.RenderbufferSize (fromIntegral $ sz^._x) (fromIntegral $ sz^._y)
@@ -235,11 +261,11 @@ requestRenderbuffer res = requestResource loadedRenderbuffers loadRenderbuffer (
 
 
 requestShader :: ShaderResource -> ResourceManager ShaderRHI
-requestShader = requestResource loadedShaders loadShader return
+requestShader shader = requestResource loadedShaders loadShader return shader
     where
-    loadShader :: ShaderResource -> ResourceManager ShaderProgram
-    loadShader res = io $!
-        simpleShaderProgram (encodeString $ res^.srVertSrc) (encodeString $ res^.srFragSrc)
+    loadShader :: ResourceManager ShaderRHI
+    loadShader = io $!
+        GL.simpleShaderProgram (encodeString $ shader^.srVertSrc) (encodeString $ shader^.srFragSrc)
 
 
 
@@ -267,20 +293,19 @@ requestVertexbuffer mesh = do
 
 
 requestVAO :: (ViableVertex (Vertex vr)) => Mesh vr -> ShaderResource -> ResourceManager VertexArrayRHI
-requestVAO mesh shader = aux (mesh^.meshId,shader) 
+requestVAO mesh shader = requestResource loadedVertexArrays loadVertexArray return (mesh^.meshId,shader) 
     where
-    loadVertexArray _ _ = do
+    loadVertexArray = do
         vbuff           <- requestVertexbuffer mesh
         shaderProg      <- requestShader shader
 
         tell [ format "RenderSet: {0} - {1}" [show mesh, show shader] ] 
-        io $ makeVAO $ do
+        io $ GL.makeVAO $ do
             bindVertices vbuff
             enableVertices' shaderProg vbuff
             -- it is really part of vao:
             -- http://stackoverflow.com/questions/8973690/vao-and-element-array-buffer-state
             --GL.bindBuffer GL.ElementArrayBuffer $= Just ebo
-    aux = requestResource loadedVertexArrays (uncurry loadVertexArray) return
 
 
 
@@ -297,7 +322,7 @@ requestRenderSet withProgram ent =
 
 requestTextureItem :: (String, Texture) -> ResourceManager GLTextureItem
 requestTextureItem (fieldName, texture) = do
-    (_, texObj) <- requestTexture texture
+    (_,_, texObj) <- requestTexture texture
     return $ case textureData texture of
         Texture2D _       -> mkTextureItem texObj GL.Texture2D
         TextureCube _     -> mkTextureItem texObj GL.TextureCubeMap
@@ -319,26 +344,6 @@ requestFramebufferSetup PassDescr{..} =
         <*> pure passPreRendering
         <*> pure passPostRendering
 
-{--
-
-data TT = forall t. (GL.BindableTextureTarget t, Show t) => TT t
-makeTexAssignment :: TextureDefinition -> ResourceManager TextureAssignment
-makeTexAssignment tex =
-    let ch        = fromIntegral $ tex^.texChannel._1
-        name      = tex^.texChannel._2
-    in case glTarget $ tex^.texResource.to textureData of
-       (TT target) ->
-            TextureAssignment <$> (snd <$> requestTexture (tex^.texResource))
-                              <*> pure target
-                              <*> pure ch
-                              <*> pure name
-    where
-    glTarget (Texture2D     _  ) = TT GL.Texture2D
-    glTarget (TextureCube   _  ) = TT GL.TextureCubeMap
-    glTarget (TextureBuffer t _) = TT t
---}
-
-
 ---------------------------------------------------------------------------------------------------
 initialGLRenderResources :: GLResources
 initialGLRenderResources =
@@ -346,6 +351,6 @@ initialGLRenderResources =
 
 
 replaceIndices :: [Word32] -> IO ()
-replaceIndices = replaceBuffer GL.ElementArrayBuffer
+replaceIndices = GL.replaceBuffer GL.ElementArrayBuffer
 
 

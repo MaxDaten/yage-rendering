@@ -21,7 +21,7 @@ type VertexBufferRHI       = (MeshHash, GL.BufferObject)
 --type GLIndexbuffer         = (MeshHash, GL.BufferObject)
 type VertexArrayRHI        = VAO
 type ShaderRHI             = ShaderProgram
-type TextureRHI            = (BufferSpec, GL.TextureObject)
+type TextureRHI            = (BufferSpec, TextureConfig, GL.TextureObject)
 type RenderbufferRHI       = (BufferSpec, GL.RenderbufferObject)
 type FramebufferRHI        = GL.FramebufferObject
 
