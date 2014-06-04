@@ -54,17 +54,21 @@ runResourceManager res rm = io $ runRWST rm () res
 
 
 requestResource :: (Ord key)
-                => Lens' GLResources (Map key res)          -- ^ state-field accessor
-                -> (key -> ResourceManager res)             -- ^ loading function
-                -> (res -> ResourceManager res)             -- ^ updating function
-                -> key                                      -- ^ resource to load
+                => Lens' GLResources (Map key res)
+                -- ^ state-field accessor
+                -> (ResourceManager res)
+                -- ^ loading function
+                -> (res -> ResourceManager res)
+                -- ^ updating function old res to new res
+                -> key
+                -- ^ resource to load
                 -> ResourceManager res
 requestResource accessor loader updater resource = do
     resmap <- use accessor
     item <- maybe
-        (loader resource)
-        (updater)
-        (resmap^.at resource)
+        ( loader  )
+        ( updater )
+        ( resmap^.at resource )
 
     accessor.at resource ?= item
     return $ item
@@ -75,14 +79,14 @@ requestFramebuffer :: (Show ident, MultipleRenderTargets mrt) =>
 requestFramebuffer (fboIdent, mrt) 
     | isDefault mrt = return GL.defaultFramebufferObject
     | otherwise =
-    let compiler = const $ compileFBO <&> flip (^?!) folded -- unsafe head
+    let compiler = compileFBO <&> flip (^?!) folded -- unsafe head
     in requestResource compiledFBOs compiler updateFramebuffer (show fboIdent)
 
     where
 
     -- | creates a new framebuffer according to the given specs
     compileFBO = do
-        tell [format "create fbo {0}" [ show fboIdent ]]
+        tell [ format "create fbo {0}" [ show fboIdent ] ]
         fbo <- io $ GL.genObjectName
         io $ GL.bindFramebuffer GL.Framebuffer $= fbo
 
@@ -129,108 +133,107 @@ requestFramebuffer (fboIdent, mrt)
 
 
 requestTexture :: Texture -> ResourceManager TextureRHI
-requestTexture res = requestResource loadedTextures newTexture (updateTexture res) res
+requestTexture texture@(Texture name newConfig texData) = do
+    res <- requestResource loadedTextures newTexture updateTexture texture
+    io $ withTextureBind texture $= Nothing
+    return res
     where
 
-    newTexture :: Texture -> ResourceManager TextureRHI
-    newTexture tex = do
-        let chkErr = checkErrorOf ( format "newTexture: {0}" [show tex ] )
+    newTexture :: ResourceManager TextureRHI
+    newTexture = do
+        let chkErr = checkErrorOf ( format "newTexture: {0}" [show texture ] )
+        obj <- io $ GL.genObjectName
+        io $ withTextureBind texture $= Just obj
+
+        chkErr $ loadData $ textureData texture
+        setTextureConfig
         
-        obj <- chkErr $ loadData $ textureData tex
-        
-        tell [ format "newTexture: RHI = {0}: {1}" [ show tex, show obj ] ]
-        return (textureSpec tex, textureConfig tex, obj)
+        tell [ format "newTexture: RHI = {0}: {1}" [ show texture, show obj ] ]
+        return (textureSpec texture, textureConfig texture, obj)
 
     -- | pushes texture to opengl
-    loadData :: TextureData -> ResourceManager GL.TextureObject
-    loadData (Texture2D img) =
-        io $ withNewGLTextureAt GL.Texture2D $ \obj -> do            
-            Tex.loadTextureImage' GL.Texture2D img
-            setTextureConfig res
-            return obj
+    loadData :: TextureData -> ResourceManager ()
+    loadData (Texture2D img) = io $ do
+        Tex.loadTextureImage' GL.Texture2D img
 
-    loadData (TextureCube cubemap) = 
-        io $ withNewGLTextureAt GL.TextureCubeMap $ \obj -> do
-            Tex.loadCubeTextureImage cubemap
-            setTextureConfig res
-            return obj
+    loadData (TextureCube cubemap) = io $ do
+        Tex.loadCubeTextureImage cubemap
 
-    loadData (TextureBuffer target spec) =
+    loadData (TextureBuffer target spec) = io $ do
         let V2 w h      = Tex.texSpecDimension spec
             texSize     = GL.TextureSize2D (fromIntegral w) (fromIntegral h)
             Tex.PixelSpec dataType pxfmt internalFormat = Tex.texSpecPixelSpec spec
-            glPixelData = GL.PixelData pxfmt dataType nullPtr
-        in 
-        io $ withNewGLTextureAt target $ \obj -> do
-            GL.textureLevelRange target $= (0,0)
-            setTextureConfig res
-            GL.texImage2D target GL.NoProxy 0 internalFormat texSize 0 glPixelData
-            return obj
+            glPixelData = GL.PixelData pxfmt dataType nullPtr    
+        GL.textureLevelRange target $= (0,0)
+        GL.texImage2D target GL.NoProxy 0 internalFormat texSize 0 glPixelData
 
-    -- | creates a gl texture object and binds it to the target
-    withNewGLTextureAt target ma = do
-        texObj <- GL.genObjectName
-        withTextureObj target texObj ma
+    withTextureBind :: Texture -> GL.StateVar (Maybe GL.TextureObject)
+    withTextureBind tex =
+        case textureData tex of
+            Texture2D _ -> GL.textureBinding GL.Texture2D
+            TextureCube _ -> GL.textureBinding GL.TextureCubeMap
+            TextureBuffer t _ -> GL.textureBinding t
 
-    withTextureObj target texObj ma = do
-        GL.textureBinding target $= Just texObj
-        a <- ma texObj
-        GL.textureBinding target $= Nothing
-        return a
+    withTextureParameter :: Texture -> (forall t. GL.ParameterizedTextureTarget t => t -> a) -> a
+    withTextureParameter tex varFun =
+        case textureData tex of
+            Texture2D _ -> varFun GL.Texture2D
+            TextureCube _ -> varFun GL.TextureCubeMap
+            TextureBuffer t _ -> varFun t
 
-    updateTexture tex current = 
-        updateConfig tex =<< resizeTexture tex current
 
-    updateConfig tex@( Texture _ newConf _ ) current@(_, currentConf, _)
-        | newConf == currentConf = return current
+    updateTexture current = do
+        io $ withTextureBind texture $= Just (current^._3)
+        updateConfig =<< resizeTexture current
+
+    updateConfig :: TextureRHI -> ResourceManager TextureRHI
+    updateConfig current@(_, currentConfig, _)
+        | newConfig == currentConfig = return current
         | otherwise = do
-            setTextureConfig tex
-            return $ current & _2 .~ newConf
+            setTextureConfig
+            return $ current & _2 .~ newConfig
     
-    resizeTexture tex@( Texture name _ (TextureBuffer target newSpec) ) current@(currentSpec, _, texObj) 
-        | newSpec == currentSpec = return current
+    resizeTexture current@(currentSpec, _,_) 
+        | textureSpec texture == currentSpec = return current
         | otherwise =
-            let V2 newW newH    = Tex.texSpecDimension newSpec
+            let newSpec         = textureSpec texture
+                V2 newW newH    = Tex.texSpecDimension newSpec
                 texSize         = GL.TextureSize2D (fromIntegral newW) (fromIntegral newH)
                 Tex.PixelSpec dataType pxfmt internalFormat = Tex.texSpecPixelSpec newSpec
                 glPixelData     = GL.PixelData pxfmt dataType nullPtr
             in do
                 tell [ format "resizeTexture: {0}\nfrom:\t{1}\nto:\t{2}" [ show name, show currentSpec, show newSpec ] ]
-                checkErrorOf ( format "resizeTexture: {0}" [ show tex ] ) $ io $ do
-                    GL.textureBinding target $= Just texObj
-                    GL.texImage2D target GL.NoProxy 0 internalFormat texSize 0 glPixelData
-                    GL.textureBinding target $= Nothing
+                checkErrorOf ( format "resizeTexture: {0}" [ show texture ] ) $ io $
+                    case texData of
+                        Texture2D _ -> GL.texImage2D GL.Texture2D GL.NoProxy 0 internalFormat texSize 0 glPixelData
+                        _           -> return ()
                 return $ current & _1 .~ newSpec
-    resizeTexture _ current = return current
 
-    setTextureConfig (Texture name config texData) = 
-        checkErrorOf (format "setTextureConfig {0} {1}" [ show name, show config ]) $ io $ do
-        let TextureFiltering minification mipmap magnification = config^.texConfFiltering
-            TextureWrapping repetition clamping = config^.texConfWrapping
+    setTextureConfig :: ResourceManager ()
+    setTextureConfig = checkErrorOf (format "setTextureConfig {0} {1}" [ show name, show newConfig ]) $ io $ do
+        let TextureFiltering minification mipmap magnification = newConfig^.texConfFiltering
+            TextureWrapping repetition clamping = newConfig^.texConfWrapping
             
         -- NOTE: filtering is neccessary for texture completeness
+        when (isJust mipmap) $ GL.generateMipmap' texData
+        withTextureParameter texture GL.textureFilter $= ((minification, mipmap), magnification)
         case texData of
-            Texture2D _   -> do
-                when (isJust mipmap) $ GL.generateMipmap' GL.Texture2D
-                GL.textureFilter   GL.Texture2D      $= ((minification, mipmap), magnification)
-                GL.texture2DWrap   $= (repetition, clamping)
+            Texture2D _ -> do
+                GL.texture2DWrap $= (repetition, clamping)
             
             TextureCube _ -> do 
-                when (isJust mipmap) $ GL.generateMipmap' GL.TextureCubeMap
-                GL.textureFilter   GL.TextureCubeMap      $= ((minification, mipmap), magnification)
-                GL.texture3DWrap   GL.TextureCubeMap      $= (repetition, clamping)
+                GL.texture3DWrap GL.TextureCubeMap $= (repetition, clamping)
             
-            TextureBuffer target _ -> do
-                when (isJust mipmap) $ GL.generateMipmap' target
-                GL.textureFilter   target      $= ((minification, mipmap), magnification)
-                GL.texture2DWrap   $= (repetition, clamping)
+            TextureBuffer _ _ -> do                
+                GL.texture2DWrap $= (repetition, clamping)
 
 
 requestRenderbuffer :: Renderbuffer -> ResourceManager RenderbufferRHI
-requestRenderbuffer res = requestResource loadedRenderbuffers loadRenderbuffer (resizeBuffer res) res
+requestRenderbuffer buff@(Renderbuffer _ newSpec@(Tex.TextureImageSpec sz pxSpec)) = 
+    requestResource loadedRenderbuffers loadRenderbuffer resizeBuffer buff
     where
 
-    loadRenderbuffer buff@(Renderbuffer _ spec@(Tex.TextureImageSpec sz pxSpec)) =
+    loadRenderbuffer =
         let size           = GL.RenderbufferSize (fromIntegral $ sz^._x) (fromIntegral $ sz^._y)
             internalFormat = Tex.pxSpecGLFormat pxSpec
         in do
@@ -240,9 +243,9 @@ requestRenderbuffer res = requestResource loadedRenderbuffers loadRenderbuffer (
                 GL.bindRenderbuffer GL.Renderbuffer $= rObj
                 GL.renderbufferStorage GL.Renderbuffer internalFormat size
                 GL.bindRenderbuffer GL.Renderbuffer $= GL.noRenderbufferObject
-                return (spec, rObj)
+                return (newSpec, rObj)
 
-    resizeBuffer buff@(Renderbuffer _ newSpec@(Tex.TextureImageSpec sz pxSpec)) current@(currentSpec, rObj) 
+    resizeBuffer current@(currentSpec, rObj) 
         | newSpec == currentSpec = return current
         | otherwise =
             let size            = GL.RenderbufferSize (fromIntegral $ sz^._x) (fromIntegral $ sz^._y)
@@ -258,11 +261,11 @@ requestRenderbuffer res = requestResource loadedRenderbuffers loadRenderbuffer (
 
 
 requestShader :: ShaderResource -> ResourceManager ShaderRHI
-requestShader = requestResource loadedShaders loadShader return
+requestShader shader = requestResource loadedShaders loadShader return shader
     where
-    loadShader :: ShaderResource -> ResourceManager ShaderRHI
-    loadShader res = io $!
-        GL.simpleShaderProgram (encodeString $ res^.srVertSrc) (encodeString $ res^.srFragSrc)
+    loadShader :: ResourceManager ShaderRHI
+    loadShader = io $!
+        GL.simpleShaderProgram (encodeString $ shader^.srVertSrc) (encodeString $ shader^.srFragSrc)
 
 
 
@@ -290,9 +293,9 @@ requestVertexbuffer mesh = do
 
 
 requestVAO :: (ViableVertex (Vertex vr)) => Mesh vr -> ShaderResource -> ResourceManager VertexArrayRHI
-requestVAO mesh shader = aux (mesh^.meshId,shader) 
+requestVAO mesh shader = requestResource loadedVertexArrays loadVertexArray return (mesh^.meshId,shader) 
     where
-    loadVertexArray _ _ = do
+    loadVertexArray = do
         vbuff           <- requestVertexbuffer mesh
         shaderProg      <- requestShader shader
 
@@ -303,7 +306,6 @@ requestVAO mesh shader = aux (mesh^.meshId,shader)
             -- it is really part of vao:
             -- http://stackoverflow.com/questions/8973690/vao-and-element-array-buffer-state
             --GL.bindBuffer GL.ElementArrayBuffer $= Just ebo
-    aux = requestResource loadedVertexArrays (uncurry loadVertexArray) return
 
 
 

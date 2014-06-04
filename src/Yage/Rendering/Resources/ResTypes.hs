@@ -2,6 +2,7 @@
 {-# LANGUAGE TemplateHaskell                    #-}
 {-# LANGUAGE OverloadedStrings                  #-}
 {-# LANGUAGE ConstraintKinds                    #-}
+{-# LANGUAGE LambdaCase                         #-}
 module Yage.Rendering.Resources.ResTypes where
 
 import           Yage.Prelude                        hiding ( Text, unpack )
@@ -137,3 +138,9 @@ instance Default TextureWrapping where
 
 instance Default TextureFiltering where
     def = TextureFiltering GL.Linear' (Just GL.Linear') GL.Linear'
+
+instance GL.MipMappable TextureData where
+    generateMipmap' = \case
+         Texture2D _       -> GL.generateMipmap' GL.Texture2D
+         TextureCube _     -> GL.generateMipmap' GL.TextureCubeMap
+         TextureBuffer t _ -> GL.generateMipmap' t
