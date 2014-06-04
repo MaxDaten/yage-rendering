@@ -1,7 +1,6 @@
 {-# OPTIONS_GHC -fno-warn-orphans               #-}
 module Yage.Core.OpenGL (
 	  module GL
-    , module Yage.Core.OpenGL
 	) where
 
 import Graphics.Rendering.OpenGL as GL

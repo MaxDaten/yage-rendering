@@ -11,7 +11,7 @@ import           Yage.Text                           as TF
 import           Data.Data
 import           Data.Hashable                       ()
 
-import qualified Graphics.Rendering.OpenGL           as GL
+import qualified Yage.Core.OpenGL                    as GL
 import           Filesystem.Path.CurrentOS           ( encode )
 
 import           Yage.Rendering.Backend.Framebuffer
@@ -29,7 +29,7 @@ data Renderbuffer = Renderbuffer String BufferSpec
 
 type TextureId = Text
 
-data Texture = Texture TextureId TextureData
+data Texture = Texture TextureId TextureConfig TextureData
     deriving ( Typeable, Data )
 
 data TextureData =
@@ -38,23 +38,45 @@ data TextureData =
     | TextureBuffer    GL.TextureTarget2D BufferSpec
     deriving ( Typeable, Data )
 
+data TextureConfig = TextureConfig
+    { _texConfFiltering :: !TextureFiltering
+    , _texConfWrapping  :: !TextureWrapping
+    } deriving ( Show, Eq, Typeable, Data )
+
+data TextureFiltering = TextureFiltering
+    { _texMinFilter    :: !GL.TextureFilter
+    , _texMipmapFilter :: !(Maybe GL.TextureFilter)
+    , _texMagFilter    :: !GL.TextureFilter
+    } deriving ( Show, Eq, Ord, Typeable, Data )
+
+data TextureWrapping = TextureWrapping
+    { _texWrapRepetition :: GL.Repetition 
+    , _texWrapClamping   :: GL.Clamping
+    } deriving ( Show, Eq, Ord, Typeable, Data )
+
+makeLenses ''TextureConfig
+makeLenses ''TextureFiltering
+makeLenses ''TextureWrapping
+
 type RenderTargets = AttachmentTypes Texture Renderbuffer
 
-
 textureId :: Texture -> Text
-textureId (Texture tid texData) = TF.format "{}.{}" ( Shown $ toConstr texData, Shown tid )
+textureId (Texture tid _ texData) = TF.format "{}.{}" ( Shown $ toConstr texData, Shown tid )
 
 
 textureData :: Texture -> TextureData
-textureData (Texture _ texData) = texData
+textureData (Texture _ _ texData) = texData
+
+textureConfig :: Texture -> TextureConfig
+textureConfig (Texture _ conf _) = conf
 
 
 textureSpec :: Texture -> BufferSpec
-textureSpec (Texture _ texData) = aux texData
-    where
-    aux ( Texture2D img )                                = TexImg.textureImageSpec img
-    aux ( TextureCube TexImg.Cube{cubeFaceRight = img} ) = TexImg.textureImageSpec img
-    aux ( TextureBuffer _ spec )                         = spec
+textureSpec tex = 
+    case textureData tex of
+    Texture2D img        -> TexImg.textureImageSpec img
+    TextureBuffer _ spec -> spec
+    TextureCube TexImg.Cube{cubeFaceRight = img} -> TexImg.textureImageSpec img
 
 
 instance Ord Texture where
@@ -63,7 +85,7 @@ instance Ord Texture where
 
 instance Show Texture where
     show tex = 
-        unpack $ TF.format "{} spec={}" ( textureId tex, Shown $ textureSpec tex )
+        unpack $ TF.format "{} spec={}, conf={}" ( textureId tex, Shown $ textureSpec tex, Shown $ textureConfig tex )
 
 
 instance Eq Texture where
@@ -105,5 +127,11 @@ instance Hashable ShaderResource where
 instance Hashable FilePath where
     hashWithSalt salt = hashWithSalt salt . encode
 
+instance Default TextureConfig where
+    def = TextureConfig def def
 
+instance Default TextureWrapping where
+    def = TextureWrapping GL.Repeated GL.Repeat
 
+instance Default TextureFiltering where
+    def = TextureFiltering GL.Linear' (Just GL.Linear') GL.Linear'
