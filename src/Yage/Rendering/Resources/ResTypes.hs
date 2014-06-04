@@ -78,6 +78,8 @@ textureSpec tex =
     TextureBuffer _ spec -> spec
     TextureCube TexImg.Cube{cubeFaceRight = img} -> TexImg.textureImageSpec img
 
+mkTexture :: TextureId -> TextureData -> Texture
+mkTexture texid texdata = Texture texid def texdata 
 
 instance Ord Texture where
     compare a b = compare (textureId a) (textureId b)
