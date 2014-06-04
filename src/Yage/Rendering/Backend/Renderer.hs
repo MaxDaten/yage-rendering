@@ -17,7 +17,6 @@ import           Yage.Lens
 import qualified Data.Map.Strict                         as M
 import           Data.Foldable                           ( traverse_ )
 import           Control.Monad.RWS.Strict                ( RWST, runRWST )
-import           Control.Monad                           ( MonadPlus(..) )
 
 import qualified Graphics.Rendering.OpenGL               as GL
 #ifdef GL_ERRCHECK
