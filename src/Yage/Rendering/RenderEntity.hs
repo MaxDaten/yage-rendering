@@ -26,11 +26,10 @@ data GLDrawSettings = GLDrawSettings
 
 -- | RenderEntity provides all data for an item to render.
 -- this are not opengl-native resources
-data RenderEntity vr dat  = RenderEntity        -- | TODO: just payload data
+data RenderEntity vr dat  = RenderEntity
     { _entMesh      :: !(Mesh vr)
-    , _entData      :: !dat -- (ShaderData u t)
+    , _entData      :: !dat 
     , _entSettings  :: !GLDrawSettings
-    -- , _entityTextures :: [Texture]          -- | Textures 
     }
 
 

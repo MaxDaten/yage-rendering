@@ -16,12 +16,18 @@ import Yage.Rendering.Textures.TextureImage
 
 -- | In OpenGL Order
 data Cube a = Cube
-    { cubeFaceRight :: !a -- | TextureCubeMapPositiveX   
-    , cubeFaceLeft  :: !a -- | TextureCubeMapNegativeX  
-    , cubeFaceTop   :: !a -- | TextureCubeMapPositiveY  
-    , cubeFaceBottom:: !a -- | TextureCubeMapNegativeY  
-    , cubeFaceFront :: !a -- | TextureCubeMapPositiveZ  
-    , cubeFaceBack  :: !a -- | TextureCubeMapNegativeZ
+    { cubeFaceRight :: !a 
+    -- ^ TextureCubeMapPositiveX   
+    , cubeFaceLeft  :: !a 
+    -- ^ TextureCubeMapNegativeX  
+    , cubeFaceTop   :: !a 
+    -- ^ TextureCubeMapPositiveY  
+    , cubeFaceBottom:: !a 
+    -- ^ TextureCubeMapNegativeY  
+    , cubeFaceFront :: !a 
+    -- ^ TextureCubeMapPositiveZ  
+    , cubeFaceBack  :: !a 
+    -- ^ TextureCubeMapNegativeZ
     } deriving ( Show, Functor, Foldable, Traversable, Data, Typeable )
 
 

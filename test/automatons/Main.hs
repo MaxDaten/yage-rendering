@@ -3,15 +3,10 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Main where
-import Test.Hspec (hspec, describe)
-import StorableVertexTest
-import VertexAttribTest
+import Test.Hspec (hspec)
+import TransformationTest
 
 main :: IO ()
 main = do
     hspec $ do
-        describe "storable vertex" $ do
-            storableVertexSpecs
-
-        describe "vertex attribute specs" $ do
-            vertexAttribSpec
+        transformationProps
