@@ -174,6 +174,7 @@ requestTexture texture@(Texture name newConfig texData) = do
             TextureCube _ -> GL.textureBinding GL.TextureCubeMap
             TextureBuffer t _ -> GL.textureBinding t
 
+
     withTextureParameter :: Texture -> (forall t. GL.ParameterizedTextureTarget t => t -> a) -> a
     withTextureParameter tex varFun =
         case textureData tex of
@@ -186,6 +187,7 @@ requestTexture texture@(Texture name newConfig texData) = do
         io $ withTextureBind texture $= Just (current^._3)
         updateConfig =<< resizeTexture current
 
+
     updateConfig :: TextureRHI -> ResourceManager TextureRHI
     updateConfig current@(_, currentConfig, _)
         | newConfig == currentConfig = return current
@@ -193,21 +195,24 @@ requestTexture texture@(Texture name newConfig texData) = do
             setTextureConfig
             return $ current & _2 .~ newConfig
     
+
     resizeTexture current@(currentSpec, _,_) 
         | textureSpec texture == currentSpec = return current
         | otherwise =
-            let newSpec         = textureSpec texture
-                V2 newW newH    = Tex.texSpecDimension newSpec
-                texSize         = GL.TextureSize2D (fromIntegral newW) (fromIntegral newH)
+            let newSpec                                     = textureSpec texture
+                V2 newWidth newHeight                       = fromIntegral <$> Tex.texSpecDimension newSpec
+                texSize                                     = GL.TextureSize2D newWidth newHeight
+                glPixelData                                 = GL.PixelData pxfmt dataType nullPtr
                 Tex.PixelSpec dataType pxfmt internalFormat = Tex.texSpecPixelSpec newSpec
-                glPixelData     = GL.PixelData pxfmt dataType nullPtr
             in do
                 tell [ format "resizeTexture: {0}\nfrom:\t{1}\nto:\t{2}" [ show name, show currentSpec, show newSpec ] ]
+                
                 checkErrorOf ( format "resizeTexture: {0}" [ show texture ] ) $ io $
                     case texData of
-                        Texture2D _ -> GL.texImage2D GL.Texture2D GL.NoProxy 0 internalFormat texSize 0 glPixelData
-                        _           -> return ()
+                        TextureBuffer target _ -> GL.texImage2D target GL.NoProxy 0 internalFormat texSize 0 glPixelData
+                        _                      -> error "Manager.resizeTexture: invalid texture resize. Only TextureBuffer resizing currently supported!"
                 return $ current & _1 .~ newSpec
+
 
     setTextureConfig :: ResourceManager ()
     setTextureConfig = checkErrorOf (format "setTextureConfig {0} {1}" [ show name, show newConfig ]) $ io $ do
