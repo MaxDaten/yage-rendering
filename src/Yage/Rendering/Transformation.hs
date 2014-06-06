@@ -6,21 +6,17 @@ import Yage.Lens
 import Yage.Math
 import Control.Applicative
 
-type Orientation a = Quaternion a
-type Scale a       = V3 a
-type Position a    = V3 a
-
 data Transformation a = Transformation
-    { _transPosition    :: !(Position a)
-    , _transOrientation :: !(Orientation a)
-    , _transScale       :: !(Scale a)
+    { _transPosition    :: !(V3 a)
+    , _transOrientation :: !(Quaternion a)
+    , _transScale       :: !(V3 a)
     } deriving ( Show, Eq, Ord, Typeable, Functor )
 
 
 makeLenses ''Transformation
 
-idTransformation :: (RealFloat a, Epsilon a) => Transformation a
-idTransformation = Transformation zero 1 1
+idTransformation :: RealFloat a => Transformation a
+idTransformation = Transformation 0 1 1
 
 
 transformationMatrix :: Num a => Getter (Transformation a) (M44 a)
@@ -52,3 +48,6 @@ instance RealFloat a => Num (Transformation a) where
 
 instance (RealFloat a, Epsilon a) => Epsilon (Transformation a) where
     nearZero (Transformation p o s) = nearZero p && nearZero o && nearZero s  
+
+instance RealFloat a => Default (Transformation a) where
+    def = idTransformation
