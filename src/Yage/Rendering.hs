@@ -9,7 +9,7 @@ module Yage.Rendering
     , module GLTypes
     ) where
 
-import           Linear                                 as LinExport
+import           Linear                                 as LinExport hiding (lerp, slerp)
 
 import           Yage.Rendering.Backend.RenderSystem    as RenderSystem
 

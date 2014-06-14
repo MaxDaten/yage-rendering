@@ -3,7 +3,8 @@ module Yage.Rendering.Transformation where
 
 import Yage.Prelude
 import Yage.Lens
-import Yage.Math
+import Yage.Math hiding (lerp)
+import qualified Linear (lerp, slerp) 
 import Control.Applicative
 
 data Transformation a = Transformation
@@ -51,3 +52,14 @@ instance (RealFloat a, Epsilon a) => Epsilon (Transformation a) where
 
 instance RealFloat a => Default (Transformation a) where
     def = idTransformation
+
+
+class LinearInterpolatable a where
+    lerp :: Double -> a -> a -> a
+
+
+instance RealFloat a => LinearInterpolatable (Transformation a) where
+    lerp alpha u v = u & transPosition    .~ Linear.lerp (realToFrac alpha) (u^.transPosition) (v^.transPosition)
+                       & transScale       .~ Linear.lerp (realToFrac alpha) (u^.transScale) (v^.transScale)
+                       & transOrientation .~ Linear.slerp (u^.transOrientation) (v^.transOrientation) (realToFrac alpha)
+
