@@ -85,7 +85,7 @@ library
 
   build-depends:          base                    <  5
                         , yage-contrib            == 0.0.0.3
-                        , yage-geometry           == 0.0.0.1
+                        , yage-geometry           == 0.0.0.2
 
                         , system-filepath         >= 0.4
                         , OpenGLRaw               >= 1.4

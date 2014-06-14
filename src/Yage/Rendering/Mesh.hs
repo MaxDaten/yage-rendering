@@ -12,8 +12,8 @@ module Yage.Rendering.Mesh
 import           Yage.Prelude                        hiding (Index, toList)
 import           Yage.Lens
 
-import qualified Data.Vector.Storable                as V
-import qualified Data.Vector                         as V' (convert, (!))
+import qualified Data.Vector.Storable                as VS
+import qualified Data.Vector                         as V
 import           Data.Foldable                       (toList)
 --import qualified Data.Vector                         as V
 import qualified Data.Digest.XXHash                  as XH
@@ -31,7 +31,7 @@ type MeshId   = String
 
 data Mesh vertex = Mesh
     { _meshId         :: !MeshId
-    , _meshVertices   :: !(V.Vector (Vertex vertex))
+    , _meshVertices   :: !(VS.Vector (Vertex vertex))
     , _meshElemCount  :: !Int
     , _meshHash       :: !MeshHash
     }
@@ -59,7 +59,7 @@ instance Ord (Mesh v) where
 
 
 vertexCount :: (Storable (Vertex v)) => Mesh v -> Int
-vertexCount Mesh{_meshVertices} = V.length _meshVertices
+vertexCount Mesh{_meshVertices} = VS.length _meshVertices
 
 
 
@@ -70,37 +70,37 @@ elementCount = _meshElemCount
 
 
 -- | constructs a mehs with given identifier and inital vertices, hash is calculated on vertices
-makeMesh :: (Storable (Vertex v)) => MeshId -> V.Vector (Vertex v) -> Mesh v
+makeMesh :: (Storable (Vertex v)) => MeshId -> VS.Vector (Vertex v) -> Mesh v
 makeMesh ident verts = 
-    let cnt         = V.length verts `div` 3
+    let cnt         = VS.length verts `div` 3
         hash        = XH.xxHash' $ (BS.vectorToByteString verts)
     in Mesh ident verts cnt hash
 
 
 meshFromVertexList :: (Storable (Vertex v)) => MeshId -> [Vertex v] -> Mesh v
-meshFromVertexList ident = makeMesh ident . V.fromList
+meshFromVertexList ident = makeMesh ident . VS.fromList
 
 
--- | builds a mesh from geometry, unrolling the elements (duplicating vertices)
+-- | builds a mesh from geometry, unrolling the elements (potentially duplicating vertices)
 -- for a index free drawing
 meshFromTriGeo :: (Storable (Vertex v)) =>
                          MeshId -> TriGeo (Vertex v) -> Mesh v
 meshFromTriGeo ident Geometry{..} = 
   makeMesh ident $
-    V.concatMap (V.fromList . map (geoVertices V'.!) . toList) $ V'.convert geoElements
+    VS.concatMap (VS.fromList . map (_geoVertices V.!) . toList) $ VS.convert . V.concat . V.toList $ _geoSurfaces
 
 
 -- | unified empty mesh with "" identifier
 emptyMesh :: (Storable (Vertex v)) => Mesh v
-emptyMesh = Mesh "" V.empty 0 0
+emptyMesh = Mesh "" VS.empty 0 0
 
 
 -- | replaces vertices in Mesh, keeps ident, recalucates hash
-updateMesh :: (Storable (Vertex v)) => Mesh v -> V.Vector (Vertex v) -> Mesh v
+updateMesh :: (Storable (Vertex v)) => Mesh v -> VS.Vector (Vertex v) -> Mesh v
 updateMesh Mesh{_meshId} = makeMesh _meshId
 
 
 -- | appends vertices to mesh, keeps ident, hash is recalculated
-pushToBack :: (Storable (Vertex v)) => Mesh v -> V.Vector (Vertex v) -> Mesh v
+pushToBack :: (Storable (Vertex v)) => Mesh v -> VS.Vector (Vertex v) -> Mesh v
 pushToBack Mesh{ _meshId, _meshVertices } verts =
-  makeMesh _meshId (_meshVertices V.++ verts)
+  makeMesh _meshId (_meshVertices VS.++ verts)
