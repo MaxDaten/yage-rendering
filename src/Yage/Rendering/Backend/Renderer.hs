@@ -7,13 +7,16 @@
 {-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE LambdaCase          #-}
 
 module Yage.Rendering.Backend.Renderer where
 ---------------------------------------------------------------------------------------------------
 import           Yage.Prelude                            hiding (log, traceM)
 import           Yage.Lens
+import qualified Yage.Text                               as TF
 
+import           Foreign.Ptr                             ( nullPtr )
 import qualified Data.Map.Strict                         as M
 import           Data.Foldable                           ( traverse_ )
 import           Control.Monad.RWS.Strict                ( RWST, runRWST )
@@ -101,6 +104,7 @@ data RenderSet u = RenderSet
     , _rsUniforms        :: !(Uniforms u)
     , _rsTextures        :: ![GLTextureItem]
     , _rsVertexCount     :: !GL.GLsizei
+    , _rsIndexRanges     :: ![(Int, Int)]
     , _rsDrawSettings    :: !GLDrawSettings
     }
 
@@ -172,8 +176,19 @@ renderRenderSet set@RenderSet{..} = checkErrorOf (format "renderRenderSet: {0}" 
             traverse_ setShaderFields mShader
 
             io $ GL.cullFace $= _rsDrawSettings^.cullFace
-            io $ GL.drawArrays (_rsDrawSettings^.renderMode) 0 _rsVertexCount
-        
+            -- todo sub elements with own texture settings
+            forM_ (_rsIndexRanges) $ \(startIdx, endIdx) -> do
+                let msg = TF.unpack $ TF.format "drawRangeElements ({},{})" (TF.Shown startIdx, TF.Shown endIdx)
+                traceM msg
+                checkErrorOf msg $
+                    io $ GL.drawRangeElements ( _rsDrawSettings^.renderMode ) 
+                                              ( fromIntegral startIdx, fromIntegral endIdx )
+                                              -- maybe a hidden extended value of this? 
+                                              --    - http://stackoverflow.com/a/7550093/605745
+                                              ( fromIntegral $ endIdx - startIdx + 1 ) 
+                                              ( GL.UnsignedInt )
+                                              ( nullPtr )
+            
             logCountObj
             logCountTriangles (_rsVertexCount `div` 3)
 

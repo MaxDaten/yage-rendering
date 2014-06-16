@@ -17,6 +17,7 @@ import           Yage.Lens
 import           Yage.Geometry.Vertex
 
 import           Foreign.Ptr                          (nullPtr)
+import qualified Data.Vector.Storable                 as VS (Vector, map)
 
 import           Control.Monad.RWS                    hiding (forM, forM_, mapM_)
 
@@ -274,7 +275,7 @@ requestShader shader = requestResource loadedShaders loadShader return shader
 
 
 
-requestVertexbuffer :: (Storable (Vertex vr)) => Mesh vr -> ResourceManager (BufferedVertices vr)
+requestVertexbuffer :: (Storable (Vertex vr)) => Mesh (Vertex vr) -> ResourceManager (BufferedVertices vr)
 requestVertexbuffer mesh = do
     vMap <- use loadedVertexBuffer
 
@@ -289,38 +290,68 @@ requestVertexbuffer mesh = do
     where
 
     loadVertexBuffer = 
-        io $ bufferVertices (mesh^.meshVertices)
+        io $ bufferVertices (mesh^.meshVertexBuffer)
 
     updateVertexBuffer (oldHash, buff) = do
         let vBuff = BufferedVertices buff
-        when (mesh^.meshHash /= oldHash) $ io $ reloadVertices vBuff (mesh^.meshVertices)
+        when (mesh^.meshHash /= oldHash) $ io $ reloadVertices vBuff (mesh^.meshVertexBuffer)
         return vBuff
 
 
-requestVAO :: (ViableVertex (Vertex vr)) => Mesh vr -> ShaderResource -> ResourceManager VertexArrayRHI
+-- | request a ElementBuffer for all `MeshComponent`s in a Mesh
+requestElementBuffer :: Mesh v -> ResourceManager EBO
+requestElementBuffer mesh = do
+    eMap <- use loadedIndexBuffers
+
+    ebo <- maybe
+            (loadIndexBuffer)
+            (updateIndexBuffer)
+            (eMap^.at (mesh^.meshId))
+
+    loadedIndexBuffers.at (mesh^.meshId) ?= (mesh^.meshComponentsHash, ebo)
+    return ebo
+    where
+
+    -- flatten all indices
+    loadIndexBuffer = io $ GL.bufferIndices (VS.map fromIntegral $ mesh^.concatMeshIndices)
+
+    updateIndexBuffer (oldHash, ebo) 
+        | mesh^.meshComponentsHash == oldHash = return ebo
+        | otherwise = io $ do
+            GL.bindBuffer GL.ElementArrayBuffer $= Just ebo
+            GL.replaceVector GL.ElementArrayBuffer $ (VS.map fromIntegral $ mesh^.concatMeshIndices :: VS.Vector Word32)
+            GL.bindBuffer GL.ElementArrayBuffer $= Nothing
+            return ebo
+
+
+requestVAO :: (ViableVertex (Vertex vr)) => Mesh (Vertex vr) -> ShaderResource -> ResourceManager VertexArrayRHI
 requestVAO mesh shader = requestResource loadedVertexArrays loadVertexArray return (mesh^.meshId,shader) 
     where
     loadVertexArray = do
         vbuff           <- requestVertexbuffer mesh
         shaderProg      <- requestShader shader
+        ebo             <- requestElementBuffer mesh
 
         tell [ format "RenderSet: {0} - {1}" [show mesh, show shader] ] 
         io $ GL.makeVAO $ do
             bindVertices vbuff
             enableVertices' shaderProg vbuff
             -- it is really part of vao:
-            -- http://stackoverflow.com/questions/8973690/vao-and-element-array-buffer-state
-            --GL.bindBuffer GL.ElementArrayBuffer $= Just ebo
+            --   - http://stackoverflow.com/questions/8973690/vao-and-element-array-buffer-state
+            -- The index buffer binding is stored within the VAO. If no VAO is bound, then you cannot bind a buffer object to GL_ELEMENT_ARRAY_BUFFER​.
+            --   - http://www.opengl.org/wiki/Vertex_Specification#Vertex_Array_Object
+            GL.bindBuffer GL.ElementArrayBuffer $= Just ebo
 
 
 
 requestRenderSet :: ( ViableVertex (Vertex vr), IsShaderData u t ) => 
-                 ShaderResource -> RenderEntity vr (ShaderData u t) -> ResourceManager (RenderSet u)
+                 ShaderResource -> RenderEntity (Vertex vr) (ShaderData u t) -> ResourceManager (RenderSet u)
 requestRenderSet withProgram ent = 
     RenderSet  <$> ( requestVAO ( ent^.entMesh ) withProgram )
                <*> ( pure $ ent^.entData.shaderUniforms )
-               <*> ( forM ( ent^.entData.shaderTextures.to fieldAssocs ) requestTextureItem)
-               <*> ( pure $ fromIntegral . Mesh.vertexCount $ ent^.entMesh )
+               <*> ( forM ( ent^.entData.shaderTextures.to fieldAssocs ) requestTextureItem )
+               <*> ( pure $ fromIntegral $ ent^.entMesh.vertexCount )
+               <*> ( pure $ ent^.entMesh.meshIndexRanges )
                <*> ( pure $ ent^.entSettings )
 
 
@@ -352,7 +383,7 @@ requestFramebufferSetup PassDescr{..} =
 ---------------------------------------------------------------------------------------------------
 initialGLRenderResources :: GLResources
 initialGLRenderResources =
-    GLResources mempty mempty mempty mempty mempty mempty
+    GLResources mempty mempty mempty mempty mempty mempty mempty
 
 
 replaceIndices :: [Word32] -> IO ()

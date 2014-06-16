@@ -26,7 +26,7 @@ type DefaultRenderTarget = DefaultFramebuffer RenderTargets
 
 data RenderTarget mrt = RenderTarget String mrt
 
-data PassDescr target perFrame perEntity (vertex :: [*]) where
+data PassDescr target perFrame perEntity vertex where
     PassDescr :: { passTarget         :: RenderTarget target
                  , passShader         :: ShaderResource
                  , passPerFrameData   :: perFrame

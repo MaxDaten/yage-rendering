@@ -17,8 +17,9 @@ import           Yage.Rendering.Mesh
 import           Yage.Rendering.Resources.ResTypes
 
 
+-- | RHI RenderHardwareInterface
 type VertexBufferRHI       = (MeshHash, GL.BufferObject)
---type GLIndexbuffer         = (MeshHash, GL.BufferObject)
+type IndexBufferRHI        = (MeshHash, GL.BufferObject)
 type VertexArrayRHI        = VAO
 type ShaderRHI             = ShaderProgram
 type TextureRHI            = (BufferSpec, TextureConfig, GL.TextureObject)
@@ -30,7 +31,7 @@ data GLResources = GLResources
     { _loadedShaders       :: (Map ShaderResource           ShaderRHI            )
     , _loadedVertexBuffer  :: (Map MeshId                   VertexBufferRHI      )
     , _loadedVertexArrays  :: (Map (MeshId, ShaderResource) VertexArrayRHI       )
-    --, _loadedIndexBuffer   :: (Map MeshId                   GLElementbuffer     )
+    , _loadedIndexBuffers  :: (Map MeshId                   IndexBufferRHI       )
     , _loadedTextures      :: (Map Texture                  TextureRHI           )
     , _loadedRenderbuffers :: (Map Renderbuffer             RenderbufferRHI      )
     , _compiledFBOs        :: (Map String                   FramebufferRHI       )
