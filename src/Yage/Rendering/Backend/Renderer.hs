@@ -12,11 +12,11 @@
 
 module Yage.Rendering.Backend.Renderer where
 ---------------------------------------------------------------------------------------------------
-import           Yage.Prelude                            hiding (log, traceM)
+import           Yage.Prelude                            hiding (log, traceM, last)
 import           Yage.Lens
 import qualified Yage.Text                               as TF
-
-import           Foreign.Ptr                             ( nullPtr )
+import           Foreign.Ptr                             ( nullPtr, plusPtr )
+import qualified Data.Vector.Storable                    as VS
 import qualified Data.Map.Strict                         as M
 import           Data.Foldable                           ( traverse_ )
 import           Control.Monad.RWS.Strict                ( RWST, runRWST )
@@ -177,22 +177,23 @@ renderRenderSet set@RenderSet{..} = checkErrorOf (format "renderRenderSet: {0}" 
 
             io $ GL.cullFace $= _rsDrawSettings^.cullFace
             -- todo sub elements with own texture settings
-            forM_ (_rsIndexRanges) $ \(startIdx, endIdx) -> do
-                let msg = TF.unpack $ TF.format "drawRangeElements ({},{})" (TF.Shown startIdx, TF.Shown endIdx)
-                traceM msg
-                checkErrorOf msg $
-                    io $ GL.drawRangeElements ( _rsDrawSettings^.renderMode ) 
-                                              ( fromIntegral startIdx, fromIntegral endIdx )
-                                              -- maybe a hidden extended value of this? 
-                                              --    - http://stackoverflow.com/a/7550093/605745
-                                              ( fromIntegral $ endIdx - startIdx + 1 ) 
-                                              ( GL.UnsignedInt )
-                                              ( nullPtr )
-            
+            let msg = TF.unpack $ TF.format "multiDrawElements {}" (TF.Only $ TF.Shown _rsIndexRanges)
+            checkErrorOf msg $ io . withMultiDrawIndices _rsIndexRanges $ \indexCountPtr byteOffsetPtr drawCount ->
+                GL.multiDrawElements ( _rsDrawSettings^.renderMode ) indexCountPtr GL.UnsignedInt byteOffsetPtr drawCount
+
             logCountObj
             logCountTriangles (_rsVertexCount `div` 3)
 
     where
+
+    withMultiDrawIndices ranges ma = 
+        let countV      = VS.fromList $ map (\(start, end) -> fromIntegral $ end - start + 1) ranges
+            byteOffsetV = VS.fromList $ map (\(start, _) -> nullPtr `plusPtr` (start*4)) ranges
+            blockCnt    = fromIntegral $ length ranges
+        in VS.unsafeWith countV $ \cntPtr ->
+            VS.unsafeWith byteOffsetV $ \offPtr ->
+                ma cntPtr offPtr blockCnt
+
     setShaderFields :: ShaderProgram -> Renderer ()
     setShaderFields shader = do
         -- set all uniform fields (excluding texture units)

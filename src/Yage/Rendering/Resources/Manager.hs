@@ -44,7 +44,6 @@ import           Yage.Rendering.RenderEntity
 
 import           Linear                               (V2 (..), _x, _y)
 
-
 ---------------------------------------------------------------------------------------------------
 
 
@@ -283,13 +282,12 @@ requestVertexbuffer mesh = do
                 (loadVertexBuffer)
                 (updateVertexBuffer)
                 (vMap^.at (mesh^.meshId))
-
     loadedVertexBuffer.at (mesh^.meshId) ?= (mesh^.meshHash, getVertexBuffer vbuff)
     return vbuff
 
     where
 
-    loadVertexBuffer = 
+    loadVertexBuffer =
         io $ bufferVertices (mesh^.meshVertexBuffer)
 
     updateVertexBuffer (oldHash, buff) = do
@@ -313,13 +311,13 @@ requestElementBuffer mesh = do
     where
 
     -- flatten all indices
-    loadIndexBuffer = io $ GL.bufferIndices (VS.map fromIntegral $ mesh^.concatMeshIndices)
+    loadIndexBuffer = io $ GL.bufferIndices (VS.map fromIntegral $ mesh^.concatedMeshIndices)
 
     updateIndexBuffer (oldHash, ebo) 
         | mesh^.meshComponentsHash == oldHash = return ebo
         | otherwise = io $ do
             GL.bindBuffer GL.ElementArrayBuffer $= Just ebo
-            GL.replaceVector GL.ElementArrayBuffer $ (VS.map fromIntegral $ mesh^.concatMeshIndices :: VS.Vector Word32)
+            GL.replaceVector GL.ElementArrayBuffer $ (VS.map fromIntegral $ mesh^.concatedMeshIndices :: VS.Vector Word32)
             GL.bindBuffer GL.ElementArrayBuffer $= Nothing
             return ebo
 
@@ -332,7 +330,7 @@ requestVAO mesh shader = requestResource loadedVertexArrays loadVertexArray retu
         shaderProg      <- requestShader shader
         ebo             <- requestElementBuffer mesh
 
-        tell [ format "RenderSet: {0} - {1}" [show mesh, show shader] ] 
+        tell [ format "RenderSet: {0} - {1}" [show "mesh", show shader] ] 
         io $ GL.makeVAO $ do
             bindVertices vbuff
             enableVertices' shaderProg vbuff
