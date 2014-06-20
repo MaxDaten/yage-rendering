@@ -41,7 +41,7 @@ data RenderLog = RenderLog
     , _rlLogTriCount :: !Int
     , _rlTrace       :: ![String]
     , _rlGLDebug     :: ![String]
-    } deriving (Show, Eq)
+    } deriving (Show, Eq, Generic)
 
 makeLenses ''RenderLog
 
@@ -100,26 +100,24 @@ deriving instance Show GLTextureItem
 -- with all loaded opengl objects
 data RenderSet u = RenderSet
     { _rsVao             :: !GL.VertexArrayObject
-    , _rsUniforms        :: !(Uniforms u)
+    , _rsUniforms        :: !u
     , _rsTextures        :: ![GLTextureItem]
     , _rsVertexCount     :: !GL.GLsizei
     , _rsIndexRanges     :: ![(Int, Int)]
     , _rsDrawSettings    :: !GLDrawSettings
-    }
+    } deriving (Generic)
 
 makeLenses ''RenderSet
-
 
 
 data FramebufferSetup u = FramebufferSetup
     { framebuffer       :: !GL.FramebufferObject
     , fbShader          :: !(ShaderProgram)
-    , fbUniforms        :: !(Uniforms u)
+    , fbUniforms        :: !u
     , fbTextures        :: ![GLTextureItem]
     , fbPreFrame        :: Renderer ()
     , fbPostFrame       :: Renderer ()
-    }
-
+    } deriving (Generic)
 
 
 -- TODO :: combine this with the scene setup
@@ -136,7 +134,7 @@ runRenderer renderer = do
             return a
 
 
-withFramebufferSetup :: UniformFields (Uniforms u) => FramebufferSetup u -> Renderer a -> Renderer a
+withFramebufferSetup :: UniformFields (Uniforms u) => FramebufferSetup (Uniforms u) -> Renderer a -> Renderer a
 withFramebufferSetup FramebufferSetup{..} ma = do
     withFramebuffer framebuffer DrawTarget $ do
      withShader fbShader                   $ \sh -> do
@@ -149,7 +147,7 @@ withFramebufferSetup FramebufferSetup{..} ma = do
 
 
 
-renderFrame :: UniformFields (Uniforms urec) => [RenderSet urec] -> Renderer ()
+renderFrame :: UniformFields (Uniforms urec) => [RenderSet (Uniforms urec)] -> Renderer ()
 renderFrame = mapM_ renderRenderSet
 
 
@@ -166,7 +164,7 @@ afterRender = checkError "afterRender: "
 
 ---------------------------------------------------------------------------------------------------
 
-renderRenderSet :: UniformFields (Uniforms u) => RenderSet u -> Renderer ()
+renderRenderSet :: UniformFields (Uniforms u) => RenderSet (Uniforms u) -> Renderer ()
 renderRenderSet set@RenderSet{..} = checkErrorOf (unpack $ format "renderRenderSet: {}" ( Only $ Shown _rsVao ) ) $! do
     traceM $ unpack $ format "render: {}" (Only $ Shown set)
     withVAO _rsVao . withTextures _rsTextures $ do
@@ -375,6 +373,8 @@ instance Show ( RenderSet urec ) where
 instance Monoid RenderLog where
     mempty = RenderLog 0 0 [] []
     mappend (RenderLog ca ta trc dbg) (RenderLog cb tb trc' dbg') = RenderLog (ca + cb) (ta + tb) (mappend trc trc') (mappend dbg dbg')
+
+instance NFData RenderLog where rnf = genericRnf
 
 ---------------------------------------------------------------------------------------------------
 

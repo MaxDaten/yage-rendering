@@ -37,7 +37,7 @@ data PassDescr target perFrame perEntity vertex where
 
 
 mkRenderPass :: ( UniformFields (Uniforms fbU), UniformFields (Uniforms entU) ) =>
-             FramebufferSetup fbU -> [RenderSet entU] -> Renderer ()
+             FramebufferSetup (Uniforms fbU) -> [RenderSet (Uniforms entU)] -> Renderer ()
 mkRenderPass fboSetup rSets = withFramebufferSetup fboSetup (renderFrame rSets)
 
 

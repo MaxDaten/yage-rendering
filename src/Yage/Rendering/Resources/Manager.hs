@@ -344,7 +344,7 @@ requestVAO mesh shader = requestResource loadedVertexArrays loadVertexArray retu
 
 
 requestRenderSet :: ( ViableVertex (Vertex vr), IsShaderData u t ) => 
-                 ShaderResource -> RenderEntity (Vertex vr) (ShaderData u t) -> ResourceManager (RenderSet u)
+                 ShaderResource -> RenderEntity (Vertex vr) (ShaderData u t) -> ResourceManager (RenderSet (Uniforms u))
 requestRenderSet withProgram ent = 
     RenderSet  <$> ( requestVAO ( ent^.entMesh ) withProgram )
                <*> ( pure $ ent^.entData.shaderUniforms )
@@ -368,7 +368,7 @@ requestTextureItem (fieldName, texture) = do
         
 
 requestFramebufferSetup :: ( MultipleRenderTargets mrt, IsShaderData frameU frameT ) =>
-                        PassDescr mrt (ShaderData frameU frameT) e v -> ResourceManager (FramebufferSetup frameU)
+                        PassDescr mrt (ShaderData frameU frameT) e v -> ResourceManager (FramebufferSetup (Uniforms frameU))
 requestFramebufferSetup PassDescr{..} = 
     FramebufferSetup 
         <$> case passTarget of
