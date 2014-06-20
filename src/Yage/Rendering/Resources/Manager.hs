@@ -17,6 +17,7 @@ import           Yage.Lens
 import           Yage.Geometry.Vertex
 
 import           Foreign.Ptr                          (nullPtr)
+import qualified Data.Vector.Storable                 as VS (Vector, map)
 
 import           Control.Monad.RWS                    hiding (forM, forM_, mapM_)
 
@@ -42,7 +43,6 @@ import           Yage.Rendering.RenderEntity
 
 
 import           Linear                               (V2 (..), _x, _y)
-
 
 ---------------------------------------------------------------------------------------------------
 
@@ -86,7 +86,7 @@ requestFramebuffer (fboIdent, mrt)
 
     -- | creates a new framebuffer according to the given specs
     compileFBO = do
-        tell [ format "create fbo {0}" [ show fboIdent ] ]
+        tell [ unpack $ format "create fbo {}" (Only $ Shown fboIdent ) ]
         fbo <- io $ GL.genObjectName
         io $ GL.bindFramebuffer GL.Framebuffer $= fbo
 
@@ -141,14 +141,14 @@ requestTexture texture@(Texture name newConfig texData) = do
 
     newTexture :: ResourceManager TextureRHI
     newTexture = do
-        let chkErr = checkErrorOf ( format "newTexture: {0}" [show texture ] )
+        let chkErr = checkErrorOf ( unpack $ format "newTexture: {}" (Only $ Shown texture ) )
         obj <- io $ GL.genObjectName
         io $ withTextureBind texture $= Just obj
 
         chkErr $ loadData $ textureData texture
         setTextureConfig
         
-        tell [ format "newTexture: RHI = {0}: {1}" [ show texture, show obj ] ]
+        tell [ unpack $ format "newTexture: RHI = {}: {}" ( Shown texture, Shown obj ) ]
         return (textureSpec texture, textureConfig texture, obj)
 
     -- | pushes texture to opengl
@@ -205,9 +205,9 @@ requestTexture texture@(Texture name newConfig texData) = do
                 glPixelData                                 = GL.PixelData pxfmt dataType nullPtr
                 Tex.PixelSpec dataType pxfmt internalFormat = Tex.texSpecPixelSpec newSpec
             in do
-                tell [ format "resizeTexture: {0}\nfrom:\t{1}\nto:\t{2}" [ show name, show currentSpec, show newSpec ] ]
+                tell [ unpack $ format "resizeTexture: {}\nfrom:\t{}\nto:\t{}" ( Shown name, Shown currentSpec, Shown newSpec ) ]
                 
-                checkErrorOf ( format "resizeTexture: {0}" [ show texture ] ) $ io $
+                checkErrorOf ( unpack $ format "resizeTexture: {}" (Only $ Shown texture ) ) $ io $
                     case texData of
                         TextureBuffer target _ -> GL.texImage2D target GL.NoProxy 0 internalFormat texSize 0 glPixelData
                         _                      -> error "Manager.resizeTexture: invalid texture resize. Only TextureBuffer resizing currently supported!"
@@ -215,7 +215,7 @@ requestTexture texture@(Texture name newConfig texData) = do
 
 
     setTextureConfig :: ResourceManager ()
-    setTextureConfig = checkErrorOf (format "setTextureConfig {0} {1}" [ show name, show newConfig ]) $ io $ do
+    setTextureConfig = checkErrorOf ( unpack $ format "setTextureConfig {} {}" ( Shown name, Shown newConfig ) ) $ io $ do
         let TextureFiltering minification mipmap magnification = newConfig^.texConfFiltering
             TextureWrapping repetition clamping = newConfig^.texConfWrapping
             
@@ -242,7 +242,7 @@ requestRenderbuffer buff@(Renderbuffer _ newSpec@(Tex.TextureImageSpec sz pxSpec
         let size           = GL.RenderbufferSize (fromIntegral $ sz^._x) (fromIntegral $ sz^._y)
             internalFormat = Tex.pxSpecGLFormat pxSpec
         in do
-            tell [ format "loadRenderbuffer: {0}" [ show buff ] ]
+            tell [ unpack $ format "loadRenderbuffer: {}" ( Only $ Shown buff ) ]
             checkErrorOf ("loadRenderbuffer: ") $ io $ do
                 rObj <- GL.genObjectName
                 GL.bindRenderbuffer GL.Renderbuffer $= rObj
@@ -256,7 +256,7 @@ requestRenderbuffer buff@(Renderbuffer _ newSpec@(Tex.TextureImageSpec sz pxSpec
             let size            = GL.RenderbufferSize (fromIntegral $ sz^._x) (fromIntegral $ sz^._y)
                 internalFormat  = Tex.pxSpecGLFormat pxSpec
             in do 
-                tell [ format "resizeBuffer {0}" [ show buff ] ]
+                tell [ unpack $ format "resizeBuffer {}" ( Only $ Shown buff ) ]
                 checkErrorOf ("resizeBuffer: ") $ io $ do
                     GL.bindRenderbuffer GL.Renderbuffer $= rObj
                     GL.renderbufferStorage GL.Renderbuffer internalFormat size
@@ -274,7 +274,7 @@ requestShader shader = requestResource loadedShaders loadShader return shader
 
 
 
-requestVertexbuffer :: (Storable (Vertex vr)) => Mesh vr -> ResourceManager (BufferedVertices vr)
+requestVertexbuffer :: (Storable (Vertex vr)) => Mesh (Vertex vr) -> ResourceManager (BufferedVertices vr)
 requestVertexbuffer mesh = do
     vMap <- use loadedVertexBuffer
 
@@ -282,45 +282,74 @@ requestVertexbuffer mesh = do
                 (loadVertexBuffer)
                 (updateVertexBuffer)
                 (vMap^.at (mesh^.meshId))
-
     loadedVertexBuffer.at (mesh^.meshId) ?= (mesh^.meshHash, getVertexBuffer vbuff)
     return vbuff
 
     where
 
-    loadVertexBuffer = 
-        io $ bufferVertices (mesh^.meshVertices)
+    loadVertexBuffer =
+        io $ bufferVertices (mesh^.meshVertexBuffer)
 
     updateVertexBuffer (oldHash, buff) = do
         let vBuff = BufferedVertices buff
-        when (mesh^.meshHash /= oldHash) $ io $ reloadVertices vBuff (mesh^.meshVertices)
+        when (mesh^.meshHash /= oldHash) $ io $ reloadVertices vBuff (mesh^.meshVertexBuffer)
         return vBuff
 
 
-requestVAO :: (ViableVertex (Vertex vr)) => Mesh vr -> ShaderResource -> ResourceManager VertexArrayRHI
+-- | request a ElementBuffer for all `MeshComponent`s in a Mesh
+requestElementBuffer :: Mesh v -> ResourceManager EBO
+requestElementBuffer mesh = do
+    eMap <- use loadedIndexBuffers
+
+    ebo <- maybe
+            (loadIndexBuffer)
+            (updateIndexBuffer)
+            (eMap^.at (mesh^.meshId))
+
+    loadedIndexBuffers.at (mesh^.meshId) ?= (mesh^.meshComponentsHash, ebo)
+    return ebo
+    where
+
+    -- flatten all indices
+    loadIndexBuffer = io $ GL.bufferIndices (VS.map fromIntegral $ mesh^.concatedMeshIndices)
+
+    updateIndexBuffer (oldHash, ebo) 
+        | mesh^.meshComponentsHash == oldHash = return ebo
+        | otherwise = io $ do
+            GL.bindBuffer GL.ElementArrayBuffer $= Just ebo
+            GL.replaceVector GL.ElementArrayBuffer $ (VS.map fromIntegral $ mesh^.concatedMeshIndices :: VS.Vector Word32)
+            GL.bindBuffer GL.ElementArrayBuffer $= Nothing
+            return ebo
+
+
+requestVAO :: (ViableVertex (Vertex vr)) => Mesh (Vertex vr) -> ShaderResource -> ResourceManager VertexArrayRHI
 requestVAO mesh shader = requestResource loadedVertexArrays loadVertexArray return (mesh^.meshId,shader) 
     where
     loadVertexArray = do
         vbuff           <- requestVertexbuffer mesh
         shaderProg      <- requestShader shader
+        ebo             <- requestElementBuffer mesh
 
-        tell [ format "RenderSet: {0} - {1}" [show mesh, show shader] ] 
+        tell [ unpack $ format "RenderSet: {} - {}" ( Shown "mesh", Shown shader ) ] 
         io $ GL.makeVAO $ do
             bindVertices vbuff
             enableVertices' shaderProg vbuff
             -- it is really part of vao:
-            -- http://stackoverflow.com/questions/8973690/vao-and-element-array-buffer-state
-            --GL.bindBuffer GL.ElementArrayBuffer $= Just ebo
+            --   - http://stackoverflow.com/questions/8973690/vao-and-element-array-buffer-state
+            -- The index buffer binding is stored within the VAO. If no VAO is bound, then you cannot bind a buffer object to GL_ELEMENT_ARRAY_BUFFER​.
+            --   - http://www.opengl.org/wiki/Vertex_Specification#Vertex_Array_Object
+            GL.bindBuffer GL.ElementArrayBuffer $= Just ebo
 
 
 
 requestRenderSet :: ( ViableVertex (Vertex vr), IsShaderData u t ) => 
-                 ShaderResource -> RenderEntity vr (ShaderData u t) -> ResourceManager (RenderSet u)
+                 ShaderResource -> RenderEntity (Vertex vr) (ShaderData u t) -> ResourceManager (RenderSet u)
 requestRenderSet withProgram ent = 
     RenderSet  <$> ( requestVAO ( ent^.entMesh ) withProgram )
                <*> ( pure $ ent^.entData.shaderUniforms )
-               <*> ( forM ( ent^.entData.shaderTextures.to fieldAssocs ) requestTextureItem)
-               <*> ( pure $ fromIntegral . Mesh.vertexCount $ ent^.entMesh )
+               <*> ( forM ( ent^.entData.shaderTextures.to fieldAssocs ) requestTextureItem )
+               <*> ( pure $ fromIntegral $ ent^.entMesh.vertexCount )
+               <*> ( pure $ ent^.entMesh.meshIndexRanges )
                <*> ( pure $ ent^.entSettings )
 
 
@@ -352,7 +381,7 @@ requestFramebufferSetup PassDescr{..} =
 ---------------------------------------------------------------------------------------------------
 initialGLRenderResources :: GLResources
 initialGLRenderResources =
-    GLResources mempty mempty mempty mempty mempty mempty
+    GLResources mempty mempty mempty mempty mempty mempty mempty
 
 
 replaceIndices :: [Word32] -> IO ()

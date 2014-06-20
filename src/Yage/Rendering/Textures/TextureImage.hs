@@ -180,11 +180,11 @@ compsToInternal GL.BGRA             = GL.RGBA8
 compsToInternal GL.Luminance        = GL.Luminance8
 compsToInternal GL.LuminanceAlpha   = GL.Luminance8Alpha8
 -- TODO complete mapping
-compsToInternal pf = error $ format "unsupported format: {0}" [ show pf]
+compsToInternal pf = error $ unpack $ format "unsupported format: {}" (Only $ Shown pf )
 
 
 debugString :: TextureImage -> String
-debugString img = format "{0}: {{1}}" [show $ toConstr img, show $ textureImageSpec img]
+debugString img = unpack $ format "{}: {}" (Shown $ toConstr img, Shown $ textureImageSpec img)
 
 instance Show TextureImage where
     show = debugString
