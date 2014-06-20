@@ -12,11 +12,11 @@ module Yage.Rendering.Mesh
 
 import           Yage.Prelude                        hiding (Index, toList)
 import           Yage.Lens                           hiding (snoc)
-import qualified Yage.Text                           as TF
 
 import qualified Data.Vector.Storable                as VS
 import qualified Data.Vector                         as V
 import           Data.Foldable                       (toList)
+import qualified Data.Map                            as M
 import           Data.List                           (mapAccumL)
 import qualified Data.Digest.XXHash                  as XH
 import qualified Data.Vector.Storable.ByteString     as BS
@@ -54,22 +54,22 @@ makeLenses ''Mesh
 
 
 instance (Storable v, Show v) => Show (Mesh v) where
-    show Mesh{..} = TF.unpack $ 
-      TF.format "Mesh { id = {}, #vertexBuffer = {}, meshHash = {}-{}, components = {} }"
-               ( TF.Shown _meshId
-               , TF.Shown $ VS.length _meshVertexBuffer
-               , TF.Shown $ _meshVertexBuffer
-               , TF.hex _meshHash
-               , TF.Shown $ _meshComponents^..traverse
+    show Mesh{..} = show $ 
+      format "Mesh { id = {}, #vertexBuffer = {}, meshHash = {}-{}, components = {} }"
+               ( Shown _meshId
+               , Shown $ VS.length _meshVertexBuffer
+               , Shown $ _meshVertexBuffer
+               , hex _meshHash
+               , Shown $ _meshComponents^..traverse
                )
 
 instance Show MeshComponent where
-  show MeshComponent{..} = TF.unpack $
-    TF.format "MeshComponent { id = {}, #indexBuffer = {}-{}, hash = {} }"
-      ( TF.Shown _componentId
-      , TF.Shown $ VS.length _componentIndexBuffer
-      , TF.Shown $ _componentIndexBuffer
-      , TF.hex _componentHash
+  show MeshComponent{..} = show $
+    format "MeshComponent { id = {}, #indexBuffer = {}-{}, hash = {} }"
+      ( Shown _componentId
+      , Shown $ VS.length _componentIndexBuffer
+      , Shown $ _componentIndexBuffer
+      , hex _componentHash
       )
 
 instance Eq (Mesh v) where
@@ -176,6 +176,11 @@ appendGeometry mesh (ident, geo) =
         verts = VS.convert $ geo^.geoVertices
     in mesh `appendComponent` (makeComponent ident idxs, verts)
 
+mkMeshFromGeometries :: ( Storable v ) => Text -> Map Text (TriGeo v) -> Mesh v
+mkMeshFromGeometries ident geoMap =
+  let mesh = emptyMesh & meshId .~ ident
+  in foldl' appendGeometry mesh $ M.toList geoMap
+
 {--
 Utilities
 --}
@@ -183,7 +188,7 @@ Utilities
 -- | colapse surfaces 
 flattenIndices :: Getter (TriGeo v) (VS.Vector Int)
 flattenIndices = to $ VS.concatMap (VS.fromList . toList) . VS.convert . flatten . _geoSurfaces
-  where flatten = V.foldl' (V.++) V.empty
+  where flatten = V.foldl' (\accum (GeoSurface surf) -> accum V.++ surf) V.empty
 
 
 hashVector :: Storable a => VS.Vector a -> XH.XXHash

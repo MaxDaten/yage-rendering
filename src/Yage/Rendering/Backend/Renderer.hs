@@ -14,7 +14,6 @@ module Yage.Rendering.Backend.Renderer where
 ---------------------------------------------------------------------------------------------------
 import           Yage.Prelude                            hiding (log, traceM, last)
 import           Yage.Lens
-import qualified Yage.Text                               as TF
 import           Foreign.Ptr                             ( nullPtr, plusPtr )
 import qualified Data.Vector.Storable                    as VS
 import qualified Data.Map.Strict                         as M
@@ -168,8 +167,8 @@ afterRender = checkError "afterRender: "
 ---------------------------------------------------------------------------------------------------
 
 renderRenderSet :: UniformFields (Uniforms u) => RenderSet u -> Renderer ()
-renderRenderSet set@RenderSet{..} = checkErrorOf (format "renderRenderSet: {0}" [ show _rsVao ] ) $! do
-    traceMf "render: {0}" [show set]
+renderRenderSet set@RenderSet{..} = checkErrorOf (unpack $ format "renderRenderSet: {}" ( Only $ Shown _rsVao ) ) $! do
+    traceM $ unpack $ format "render: {}" (Only $ Shown set)
     withVAO _rsVao . withTextures _rsTextures $ do
             -- set element-wise uniform fields
             mShader <- use rStCurrentShader
@@ -177,7 +176,7 @@ renderRenderSet set@RenderSet{..} = checkErrorOf (format "renderRenderSet: {0}" 
 
             io $ GL.cullFace $= _rsDrawSettings^.cullFace
             -- todo sub elements with own texture settings
-            let msg = TF.unpack $ TF.format "multiDrawElements {}" (TF.Only $ TF.Shown _rsIndexRanges)
+            let msg = unpack $ format "multiDrawElements {}" (Only $ Shown _rsIndexRanges)
             checkErrorOf msg $ io . withMultiDrawIndices _rsIndexRanges $ \indexCountPtr byteOffsetPtr drawCount ->
                 GL.multiDrawElements ( _rsDrawSettings^.renderMode ) indexCountPtr GL.UnsignedInt byteOffsetPtr drawCount
 
@@ -205,7 +204,7 @@ renderRenderSet set@RenderSet{..} = checkErrorOf (format "renderRenderSet: {0}" 
         return ()
 
     setTextureSampler shader name unit = do
-        traceMf "setTextureSampler: {0} {1}" [show name, show unit]
+        traceM $ unpack $ format "setTextureSampler: {} {}" (Shown name, Shown unit)
         io $ setUniform shader name (unit^.unitGL)
 
 ---------------------------------------------------------------------------------------------------
@@ -268,7 +267,7 @@ withTextures texs ma =
 
 withActiveUnits :: [(TextureUnit, GLTextureItem)] -> Renderer a -> Renderer a
 withActiveUnits units ma = do
-    traceMf "withActiveUnits: {0}" [show units] 
+    traceM $ unpack $ format "withActiveUnits: {}" (Only $ Shown units) 
     forM_ units $ activateUnit
     a <- ma
     forM_ units deactivateUnit
@@ -279,13 +278,13 @@ withActiveUnits units ma = do
     activateUnit ( (TextureUnit _ Nothing), _)   = error "withActiveUnits:activateUnit: invalid empty TextureUnit"
     activateUnit ( unit@(TextureUnit _ (Just item)), tex ) = 
         case tex of
-        GLTextureItem target _ -> checkErrorOf (format "activateUnit: {0}" [show unit]) $ do
+        GLTextureItem target _ -> checkErrorOf (unpack $ format "activateUnit: {}" (Only $ Shown unit)) $ do
             io $ GL.activeTexture         GL.$= unit^.unitGL 
             io $ GL.textureBinding target GL.$= ( Just $ item^.itemTexObj )
 
     deactivateUnit (unit, tex) =
         case tex of
-        GLTextureItem target _ -> checkErrorOf (format "deactivateUnit: {0}" [show unit]) $ do
+        GLTextureItem target _ -> checkErrorOf (unpack $ format "deactivateUnit: {}" (Only $ Shown unit)) $ do
             io $ GL.activeTexture         GL.$= unit^.unitGL
             io $ GL.textureBinding target GL.$= Nothing
 
@@ -369,9 +368,9 @@ emptyRenderLog = mempty
 
 
 instance Show ( RenderSet urec ) where
-    show RenderSet{..} = 
-        format "RenderSet: { vao: {0}, texs: {1}, mode: {2}, elem# {3} }"
-               [ show _rsVao, show _rsTextures, show _rsDrawSettings, show _rsVertexCount ]
+    show RenderSet{..} = show $
+        format "RenderSet: { vao: {}, texs: {}, mode: {}, elem# {} }"
+               ( Shown _rsVao, Shown _rsTextures, Shown _rsDrawSettings, Shown _rsVertexCount )
 
 instance Monoid RenderLog where
     mempty = RenderLog 0 0 [] []
@@ -387,9 +386,6 @@ logCountObj = scribe rlLogObjCount 1
 
 logCountTriangles :: (Integral i) => i -> Renderer ()
 logCountTriangles = scribe rlLogTriCount . fromIntegral
-
-traceMf :: String -> [String] -> Renderer ()
-traceMf msg = traceM . format msg
 
 
 checkError :: (MonadIO m) => String -> m ()

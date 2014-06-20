@@ -5,9 +5,8 @@
 {-# LANGUAGE LambdaCase                         #-}
 module Yage.Rendering.Resources.ResTypes where
 
-import           Yage.Prelude                        hiding ( Text, unpack )
+import           Yage.Prelude                        hiding ( Text )
 import           Yage.Lens                           ( makeLenses )
-import           Yage.Text                           as TF
 
 import           Data.Data
 import           Data.Hashable                       ()
@@ -28,7 +27,7 @@ type FBO = GL.FramebufferObject
 type BufferSpec = TexImg.TextureImageSpec
 data Renderbuffer = Renderbuffer String BufferSpec
 
-type TextureId = Text
+type TextureId = LText
 
 data Texture = Texture TextureId TextureConfig TextureData
     deriving ( Typeable, Data )
@@ -61,8 +60,8 @@ makeLenses ''TextureWrapping
 
 type RenderTargets = AttachmentTypes Texture Renderbuffer
 
-textureId :: Texture -> Text
-textureId (Texture tid _ texData) = TF.format "{}.{}" ( Shown $ toConstr texData, Shown tid )
+textureId :: Texture -> LText
+textureId (Texture tid _ texData) = format "{}.{}" ( Shown $ toConstr texData, Shown tid )
 
 
 textureData :: Texture -> TextureData
@@ -90,7 +89,7 @@ instance Ord Texture where
 
 instance Show Texture where
     show tex = 
-        unpack $ TF.format "{} spec={}, conf={}" ( textureId tex, Shown $ textureSpec tex, Shown $ textureConfig tex )
+        unpack $ format "{} spec={}, conf={}" ( textureId tex, Shown $ textureSpec tex, Shown $ textureConfig tex )
 
 
 instance Eq Texture where
@@ -99,7 +98,7 @@ instance Eq Texture where
 
 instance Show Renderbuffer where
     show ( Renderbuffer name spec ) =
-        unpack $ TF.format "Renderbuffer.{} spec={}" ( name, Shown spec )
+        unpack $ format "Renderbuffer.{} spec={}" ( name, Shown spec )
 
 
 instance Eq Renderbuffer where

@@ -70,6 +70,7 @@ library
   -- ghc-prof-options:     -rtsopts -prof -auto-all
   default-language:     Haskell2010
   default-extensions:   NoImplicitPrelude
+                        OverloadedStrings
                         UnicodeSyntax
                         RecordWildCards
                         TupleSections
@@ -84,7 +85,7 @@ library
                         
 
   build-depends:          base                    <  5
-                        , yage-contrib            == 0.0.0.3
+                        , yage-contrib            == 0.0.1.0
                         , yage-geometry           == 0.0.0.2
 
                         , system-filepath         >= 0.4
@@ -108,7 +109,6 @@ library
 
                         , vinyl                   == 0.3.*
                         , vinyl-gl                == 0.2.*
-                        , text-format-simple      >= 1
 
 -------------------------------------------------------------------------------
 

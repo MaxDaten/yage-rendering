@@ -86,7 +86,7 @@ requestFramebuffer (fboIdent, mrt)
 
     -- | creates a new framebuffer according to the given specs
     compileFBO = do
-        tell [ format "create fbo {0}" [ show fboIdent ] ]
+        tell [ unpack $ format "create fbo {}" (Only $ Shown fboIdent ) ]
         fbo <- io $ GL.genObjectName
         io $ GL.bindFramebuffer GL.Framebuffer $= fbo
 
@@ -141,14 +141,14 @@ requestTexture texture@(Texture name newConfig texData) = do
 
     newTexture :: ResourceManager TextureRHI
     newTexture = do
-        let chkErr = checkErrorOf ( format "newTexture: {0}" [show texture ] )
+        let chkErr = checkErrorOf ( unpack $ format "newTexture: {}" (Only $ Shown texture ) )
         obj <- io $ GL.genObjectName
         io $ withTextureBind texture $= Just obj
 
         chkErr $ loadData $ textureData texture
         setTextureConfig
         
-        tell [ format "newTexture: RHI = {0}: {1}" [ show texture, show obj ] ]
+        tell [ unpack $ format "newTexture: RHI = {}: {}" ( Shown texture, Shown obj ) ]
         return (textureSpec texture, textureConfig texture, obj)
 
     -- | pushes texture to opengl
@@ -205,9 +205,9 @@ requestTexture texture@(Texture name newConfig texData) = do
                 glPixelData                                 = GL.PixelData pxfmt dataType nullPtr
                 Tex.PixelSpec dataType pxfmt internalFormat = Tex.texSpecPixelSpec newSpec
             in do
-                tell [ format "resizeTexture: {0}\nfrom:\t{1}\nto:\t{2}" [ show name, show currentSpec, show newSpec ] ]
+                tell [ unpack $ format "resizeTexture: {}\nfrom:\t{}\nto:\t{}" ( Shown name, Shown currentSpec, Shown newSpec ) ]
                 
-                checkErrorOf ( format "resizeTexture: {0}" [ show texture ] ) $ io $
+                checkErrorOf ( unpack $ format "resizeTexture: {}" (Only $ Shown texture ) ) $ io $
                     case texData of
                         TextureBuffer target _ -> GL.texImage2D target GL.NoProxy 0 internalFormat texSize 0 glPixelData
                         _                      -> error "Manager.resizeTexture: invalid texture resize. Only TextureBuffer resizing currently supported!"
@@ -215,7 +215,7 @@ requestTexture texture@(Texture name newConfig texData) = do
 
 
     setTextureConfig :: ResourceManager ()
-    setTextureConfig = checkErrorOf (format "setTextureConfig {0} {1}" [ show name, show newConfig ]) $ io $ do
+    setTextureConfig = checkErrorOf ( unpack $ format "setTextureConfig {} {}" ( Shown name, Shown newConfig ) ) $ io $ do
         let TextureFiltering minification mipmap magnification = newConfig^.texConfFiltering
             TextureWrapping repetition clamping = newConfig^.texConfWrapping
             
@@ -242,7 +242,7 @@ requestRenderbuffer buff@(Renderbuffer _ newSpec@(Tex.TextureImageSpec sz pxSpec
         let size           = GL.RenderbufferSize (fromIntegral $ sz^._x) (fromIntegral $ sz^._y)
             internalFormat = Tex.pxSpecGLFormat pxSpec
         in do
-            tell [ format "loadRenderbuffer: {0}" [ show buff ] ]
+            tell [ unpack $ format "loadRenderbuffer: {}" ( Only $ Shown buff ) ]
             checkErrorOf ("loadRenderbuffer: ") $ io $ do
                 rObj <- GL.genObjectName
                 GL.bindRenderbuffer GL.Renderbuffer $= rObj
@@ -256,7 +256,7 @@ requestRenderbuffer buff@(Renderbuffer _ newSpec@(Tex.TextureImageSpec sz pxSpec
             let size            = GL.RenderbufferSize (fromIntegral $ sz^._x) (fromIntegral $ sz^._y)
                 internalFormat  = Tex.pxSpecGLFormat pxSpec
             in do 
-                tell [ format "resizeBuffer {0}" [ show buff ] ]
+                tell [ unpack $ format "resizeBuffer {}" ( Only $ Shown buff ) ]
                 checkErrorOf ("resizeBuffer: ") $ io $ do
                     GL.bindRenderbuffer GL.Renderbuffer $= rObj
                     GL.renderbufferStorage GL.Renderbuffer internalFormat size
@@ -330,7 +330,7 @@ requestVAO mesh shader = requestResource loadedVertexArrays loadVertexArray retu
         shaderProg      <- requestShader shader
         ebo             <- requestElementBuffer mesh
 
-        tell [ format "RenderSet: {0} - {1}" [show "mesh", show shader] ] 
+        tell [ unpack $ format "RenderSet: {} - {}" ( Shown "mesh", Shown shader ) ] 
         io $ GL.makeVAO $ do
             bindVertices vbuff
             enableVertices' shaderProg vbuff
