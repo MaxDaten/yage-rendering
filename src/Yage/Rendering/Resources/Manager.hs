@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing  #-}
+{-# OPTIONS_GHC -fno-warn-type-defaults   #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns        #-}

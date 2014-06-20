@@ -16,7 +16,6 @@ import           Yage.Lens                           hiding (snoc)
 import qualified Data.Vector.Storable                as VS
 import qualified Data.Vector                         as V
 import           Data.Foldable                       (toList)
-import qualified Data.Map                            as M
 import           Data.List                           (mapAccumL)
 import qualified Data.Digest.XXHash                  as XH
 import qualified Data.Vector.Storable.ByteString     as BS
@@ -34,17 +33,17 @@ type MeshId   = Text
 
 -- TODO: Materials to component
 data MeshComponent = MeshComponent
-  { _componentId             :: !MeshId
-  , _componentIndexBuffer    :: !(VS.Vector Int) 
+  { _componentId             :: MeshId
+  , _componentIndexBuffer    :: (VS.Vector Int) 
   , _componentHash           :: MeshHash
   } deriving ( Typeable, Generic )
 
 
 -- TODO: smart vertex book-keeping? 
 data Mesh v = Mesh
-    { _meshId             :: !MeshId
-    , _meshVertexBuffer   :: !(VS.Vector v)
-    , _meshComponents     :: !(Map MeshId MeshComponent)
+    { _meshId             :: MeshId
+    , _meshVertexBuffer   :: (VS.Vector v)
+    , _meshComponents     :: (Map MeshId MeshComponent)
     , _meshHash           :: MeshHash
     } deriving ( Typeable, Generic )
 
@@ -80,32 +79,41 @@ instance Eq (Mesh v) where
 instance Ord (Mesh v) where
     compare a b = compare (_meshId a) (_meshId b)
 
+instance NFData v => NFData (Mesh v) where rnf = genericRnf
+instance NFData MeshComponent        where rnf = genericRnf
 
 
 vertexCount :: Storable v => Getter (Mesh v) Int
 vertexCount = meshVertexBuffer.to VS.length
+{-# INLINE vertexCount #-}
+
 
 componentCount :: Getter (Mesh v) Int
 componentCount = meshComponents.to (lengthOf traverse)
+{-# INLINE componentCount #-}
 
 indexCount :: Getter MeshComponent Int
 indexCount = componentIndexBuffer.to (VS.length)
+{-# INLINE indexCount #-}
 
 meshComponentsHash :: Getter (Mesh v) MeshHash
 meshComponentsHash = meshComponents.to compHashes where
     compHashes compMap = XH.xxHash . pack $ concatMap octets $ compMap^..traverse.componentHash
+{-# INLINE meshComponentsHash #-}
 
 
 -- | concat of the indices of all `MeshComponent`s 
 concatedMeshIndices :: Getter (Mesh v) (VS.Vector Int)
 concatedMeshIndices = meshComponents.to concatIndices where
     concatIndices compMap = VS.concat $ compMap^..traverse.componentIndexBuffer
+{-# INLINE concatedMeshIndices #-}
 
 
 meshIndexRanges :: Getter (Mesh v) [(Int, Int)]
 meshIndexRanges = meshComponents.to ranges where
     ranges compMap = snd $ mapAccumL (\pos len -> (pos+len, (pos, pos+len-1))) 0 $ 
                         filter (>0) $ compMap^..traverse.componentIndexBuffer.to VS.length
+{-# INLINE meshIndexRanges #-}
 
 ---------------------------------------------------------------------------------------------------
 
@@ -114,6 +122,7 @@ meshVertices :: Storable v => Lens' (Mesh v) (VS.Vector v)
 meshVertices = lens _meshVertexBuffer setter where
   setter mesh verts = mesh & meshVertexBuffer .~ verts
                            & meshHash .~ hashVector verts 
+{-# INLINE meshVertices #-}
 
 
 mkFromVerticesF :: ( Storable v, Foldable f ) => MeshId -> f v -> Mesh v
@@ -131,12 +140,14 @@ mkFromVertices ident verts =
 
 makeComponent :: MeshId -> VS.Vector Int -> MeshComponent
 makeComponent ident indices = MeshComponent ident indices (hashVector indices) 
+{-# INLINE makeComponent #-}
 
 
 componentIndices :: Lens' MeshComponent (VS.Vector Int)
 componentIndices = lens _componentIndexBuffer setter where
   setter comp idxs = comp & componentIndexBuffer .~ idxs
                           & componentHash .~ (hashVector idxs)
+{-# INLINE componentIndices #-}
 
 -- | builds a mesh from geometry
 
@@ -152,6 +163,7 @@ meshFromTriGeo ident geo@Geometry{..} =
 -- | unified empty mesh with "" identifier
 emptyMesh :: Storable v => Mesh v
 emptyMesh = Mesh "" VS.empty mempty 0
+{-# INLINE emptyMesh #-}
 
 
 -- | appends a new component to a mesh
@@ -168,6 +180,7 @@ appendComponent mesh (comp, verts) =
     where
     componentToAdd =
         comp & componentIndices     %~ VS.map (+ VS.length (mesh^.meshVertices) )
+{-# INLINE appendComponent #-}
 
 
 appendGeometry :: ( Storable v ) => Mesh v -> (MeshId, TriGeo v) -> Mesh v
@@ -175,11 +188,7 @@ appendGeometry mesh (ident, geo) =
     let idxs  = geo^.flattenIndices
         verts = VS.convert $ geo^.geoVertices
     in mesh `appendComponent` (makeComponent ident idxs, verts)
-
-mkMeshFromGeometries :: ( Storable v ) => Text -> Map Text (TriGeo v) -> Mesh v
-mkMeshFromGeometries ident geoMap =
-  let mesh = emptyMesh & meshId .~ ident
-  in foldl' appendGeometry mesh $ M.toList geoMap
+{-# INLINE appendGeometry #-}
 
 {--
 Utilities
@@ -189,10 +198,12 @@ Utilities
 flattenIndices :: Getter (TriGeo v) (VS.Vector Int)
 flattenIndices = to $ VS.concatMap (VS.fromList . toList) . VS.convert . flatten . _geoSurfaces
   where flatten = V.foldl' (\accum (GeoSurface surf) -> accum V.++ surf) V.empty
+{-# INLINE flattenIndices #-}
 
 
 hashVector :: Storable a => VS.Vector a -> XH.XXHash
 hashVector = XH.xxHash' . BS.vectorToByteString
+{-# INLINE hashVector #-}
 
 -- stolen from http://www.haskell.org/pipermail/beginners/2010-October/005571.html
 octets :: Word32 -> [Word8]
@@ -202,4 +213,6 @@ octets w =
     , fromIntegral (w `shiftR` 8)
     , fromIntegral w
     ]
+{-# INLINE octets #-}
+
 
