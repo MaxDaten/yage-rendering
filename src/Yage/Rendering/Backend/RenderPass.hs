@@ -4,9 +4,13 @@
 {-# LANGUAGE NamedFieldPuns           #-}
 {-# LANGUAGE KindSignatures           #-}
 {-# LANGUAGE DataKinds                #-}
+{-# LANGUAGE TypeSynonymInstances     #-}
+{-# LANGUAGE FlexibleInstances        #-}
+{-# LANGUAGE MultiParamTypeClasses    #-}
 module Yage.Rendering.Backend.RenderPass where
 
 import Yage.Prelude
+import qualified Yage.Core.OpenGL as GL
 
 import Yage.Rendering.Shader
 
@@ -21,6 +25,7 @@ import Yage.Rendering.Resources.ResTypes
 
 
 type MultipleRenderTargets mrt = FramebufferSpec mrt RenderTargets
+newtype SingleRenderTarget = SingleRenderTarget Texture
 
 type DefaultRenderTarget = DefaultFramebuffer RenderTargets
 
@@ -47,3 +52,8 @@ renderTargets PassDescr{passTarget} = let RenderTarget _ mrt = passTarget in mrt
 
 defaultRenderTarget :: RenderTarget (DefaultFramebuffer a)
 defaultRenderTarget = RenderTarget "default" DefaultFramebuffer
+
+instance FramebufferSpec SingleRenderTarget RenderTargets where
+    fboColors (SingleRenderTarget texture) = 
+        [ Attachment (ColorAttachment 0) $ TextureTarget GL.Texture2D texture 0
+        ] 

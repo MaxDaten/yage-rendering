@@ -53,6 +53,7 @@ class FramebufferSpec f a | f -> a where
 data DefaultFramebuffer a = DefaultFramebuffer
 instance FramebufferSpec (DefaultFramebuffer a) a where {}
 
+
 allAttachments :: FramebufferSpec f a => f -> [a]
 allAttachments fbo =
     fboColors fbo 
