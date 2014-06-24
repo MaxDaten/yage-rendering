@@ -22,3 +22,4 @@ enumartion-record.hs
 generic-test.hscabal.config
 cabal.config
 hlint.html
+.ghc-make.*
