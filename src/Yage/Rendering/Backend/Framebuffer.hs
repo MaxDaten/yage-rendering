@@ -28,7 +28,6 @@ data FramebufferAttachmentSlot
 data AttachmentTarget tex rbuff
     = TextureTarget GL.TextureTarget2D tex GL.Level 
     | RenderbufferTarget rbuff
-    | NullTarget
     deriving (Eq, Ord)
 
 
@@ -72,3 +71,4 @@ data Framebuffer f = Framebuffer
 
 
 ---------------------------------------------------------------------------------------------------
+

@@ -60,7 +60,9 @@ mkRenderSystem toRender = do
 
 runRenderPass :: ( MultipleRenderTargets mrt, ViableVertex (Vertex vr)
                  , IsShaderData entU entT, IsShaderData frameU frameT ) => 
-              PassDescr mrt (ShaderData frameU frameT) (ShaderData entU entT) (Vertex vr) -> [RenderEntity (Vertex vr) (ShaderData entU entT)] -> RenderSystem ()
+              PassDescr mrt (ShaderData frameU frameT) (ShaderData entU entT) (Vertex vr) -> 
+              [ RenderEntity (Vertex vr) (ShaderData entU entT) ] -> 
+              RenderSystem ()
 runRenderPass passDescr@PassDescr{..} entities = do
     -- transform all Renderables into RenderSets
     (setup, renderSets) <- managePassResoures

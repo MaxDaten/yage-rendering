@@ -10,13 +10,14 @@
 module Yage.Rendering.Backend.RenderPass where
 
 import Yage.Prelude
+import Yage.Lens
 import qualified Yage.Core.OpenGL as GL
 
 import Yage.Rendering.Shader
 
 import Yage.Rendering.Backend.Framebuffer
 import Yage.Rendering.Backend.Renderer
-
+import Yage.Geometry.D2.Rectangle
 
 
 
@@ -57,3 +58,17 @@ instance FramebufferSpec SingleRenderTarget RenderTargets where
     fboColors (SingleRenderTarget texture) = 
         [ Attachment (ColorAttachment 0) $ TextureTarget GL.Texture2D texture 0
         ] 
+
+instance GetRectangle (RenderTarget SingleRenderTarget) Int where
+    asRectangle = to getter where
+        getter (RenderTarget _ target) = target^.asRectangle
+
+
+instance GetRectangle (SingleRenderTarget) Int where
+    asRectangle = to getter where
+        getter (SingleRenderTarget tex) = tex^.asRectangle
+
+
+instance HasTextureSpec SingleRenderTarget where
+    textureSpec = to getter where
+        getter (SingleRenderTarget tex) = tex^.textureSpec

@@ -2,11 +2,14 @@
 {-# LANGUAGE TemplateHaskell                    #-}
 {-# LANGUAGE OverloadedStrings                  #-}
 {-# LANGUAGE ConstraintKinds                    #-}
+{-# LANGUAGE FlexibleInstances                  #-}
+{-# LANGUAGE FlexibleContexts                   #-}
+{-# LANGUAGE MultiParamTypeClasses              #-}
 {-# LANGUAGE LambdaCase                         #-}
 module Yage.Rendering.Resources.ResTypes where
 
 import           Yage.Prelude                        hiding ( Text )
-import           Yage.Lens                           ( makeLenses )
+import           Yage.Lens
 
 import           Data.Data
 import           Data.Hashable                       ()
@@ -17,6 +20,8 @@ import           Filesystem.Path.CurrentOS           ( encode )
 import           Yage.Rendering.Backend.Framebuffer
 import qualified Yage.Rendering.Textures             as TexImg
 import           Yage.Rendering.Textures.Instances   ()
+
+import           Yage.Geometry.D2.Rectangle
 
 type VBO = GL.BufferObject
 type EBO = GL.BufferObject
@@ -71,16 +76,51 @@ textureConfig :: Texture -> TextureConfig
 textureConfig (Texture _ conf _) = conf
 
 
-textureSpec :: Texture -> BufferSpec
-textureSpec tex = 
-    case textureData tex of
-    Texture2D img        -> TexImg.textureImageSpec img
-    TextureBuffer _ spec -> spec
-    TextureCube TexImg.Cube{TexImg.cubeFaceRight = img} -> TexImg.textureImageSpec img
-
 
 mkTexture :: TextureId -> TextureData -> Texture
-mkTexture texid texdata = Texture texid def texdata 
+mkTexture texid texdata = Texture texid def texdata
+
+
+class HasTextureSpec t where
+    textureSpec :: Getter t BufferSpec
+
+instance HasTextureSpec Texture where
+    textureSpec = to getter where
+        getter tex =
+            case textureData tex of
+            Texture2D img        -> TexImg.textureImageSpec img
+            TextureBuffer _ spec -> spec
+            TextureCube TexImg.Cube{TexImg.cubeFaceRight = img} -> TexImg.textureImageSpec img
+    {-# INLINE textureSpec #-}
+
+
+instance HasTextureSpec Renderbuffer where
+    textureSpec = to getter where
+        getter (Renderbuffer _ spec) = spec
+    {-# INLINE textureSpec #-}
+
+
+instance GetRectangle Renderbuffer Int where
+    asRectangle = to getter where
+        getter tex = Rectangle 0 (TexImg.texSpecDimension $ tex^.textureSpec)
+    {-# INLINE asRectangle #-}
+
+instance GetRectangle Texture Int where
+    asRectangle = to getter where
+        getter tex = Rectangle 0 (TexImg.texSpecDimension $ tex^.textureSpec)
+    {-# INLINE asRectangle #-}
+
+
+
+--instance (FramebufferSpec target RenderTargets) => HasRectangle target Int where
+--    rectangle = lens getter setter where
+--        getter fboSpec =
+--            let ((Attachment _ target):_) = allAttachments fboSpec
+--            in target^.textureSpec.rectangle
+
+--        setter = error "FramebufferSpec: no settable rectangle"
+
+
 
 
 instance Ord Texture where
@@ -89,7 +129,7 @@ instance Ord Texture where
 
 instance Show Texture where
     show tex = 
-        unpack $ format "{} spec={}, conf={}" ( textureId tex, Shown $ textureSpec tex, Shown $ textureConfig tex )
+        unpack $ format "{} spec={}, conf={}" ( textureId tex, Shown $ tex^.textureSpec, Shown $ textureConfig tex )
 
 
 instance Eq Texture where

@@ -109,7 +109,6 @@ requestFramebuffer (fboIdent, mrt)
             (glSlot, RenderbufferTarget rbuff)     -> do
                 (_, robj) <- requestRenderbuffer rbuff
                 io $ GL.framebufferRenderbuffer GL.Framebuffer glSlot GL.Renderbuffer robj
-            (_, NullTarget) -> return ()
 
     -- toGLAttachment :: GLFBOAttachment -> (GL.FramebufferObjectAttachment, GLFBOAttachment)
     toGLAttachment (Attachment (ColorAttachment index) target) = (GL.ColorAttachment (fromIntegral index), target)
@@ -129,7 +128,6 @@ requestFramebuffer (fboIdent, mrt)
     requestAttachment :: RenderTargets -> ResourceManager ()
     requestAttachment (Attachment _ (TextureTarget _ tex _))    = void $ requestTexture tex
     requestAttachment (Attachment _ (RenderbufferTarget rbuff)) = void $ requestRenderbuffer rbuff
-    requestAttachment (Attachment _ NullTarget) = return ()
 
 
 
@@ -150,7 +148,7 @@ requestTexture texture@(Texture name newConfig texData) = do
         setTextureConfig
         
         tell [ unpack $ format "newTexture: RHI = {}: {}" ( Shown texture, Shown obj ) ]
-        return (textureSpec texture, textureConfig texture, obj)
+        return (texture^.textureSpec, textureConfig texture, obj)
 
     -- | pushes texture to opengl
     loadData :: TextureData -> ResourceManager ()
@@ -198,9 +196,9 @@ requestTexture texture@(Texture name newConfig texData) = do
     
 
     resizeTexture current@(currentSpec, _,_) 
-        | textureSpec texture == currentSpec = return current
+        | texture^.textureSpec == currentSpec = return current
         | otherwise =
-            let newSpec                                     = textureSpec texture
+            let newSpec                                     = texture^.textureSpec
                 V2 newWidth newHeight                       = fromIntegral <$> Tex.texSpecDimension newSpec
                 texSize                                     = GL.TextureSize2D newWidth newHeight
                 glPixelData                                 = GL.PixelData pxfmt dataType nullPtr
