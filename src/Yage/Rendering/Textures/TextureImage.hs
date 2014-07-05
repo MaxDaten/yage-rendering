@@ -1,3 +1,4 @@
+{-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE RankNTypes                 #-}
@@ -9,6 +10,7 @@
 module Yage.Rendering.Textures.TextureImage where
 
 import              Yage.Prelude
+import              Yage.Lens
 
 import              Data.Data
 import              Graphics.GLUtil.Textures            ( IsPixelData(..) )
@@ -48,17 +50,19 @@ data TextureImage =
      deriving ( Typeable, Data )
 
 
-data TextureImageSpec = TextureImageSpec
-    { texSpecDimension :: !(V2 Int)
-    , texSpecPixelSpec :: !PixelSpec
-    } deriving ( Show, Eq, Data, Typeable )
-
 
 data PixelSpec = PixelSpec
     { pxSpecType        :: !GL.DataType
     , pxSpecComponents  :: !GL.PixelFormat
     , pxSpecGLFormat    :: !GL.PixelInternalFormat
     } deriving ( Show, Eq, Data, Typeable )
+
+data TextureImageSpec = TextureImageSpec
+    { _texSpecDimension :: !(V2 Int)
+    , _texSpecPixelSpec :: !PixelSpec
+    } deriving ( Show, Eq, Data, Typeable )
+
+makeLenses ''TextureImageSpec
 
 
 type TextureCtr p = (GLTexture p -> TextureImage)
@@ -136,8 +140,8 @@ pixelDataType :: forall pixel. (Pixel pixel, HasGLType (PixelBaseComponent pixel
 pixelDataType _ = glType ( error "pixelDataType: invalid access" :: PixelBaseComponent pixel)
 
 
-textureDimension :: TextureImage -> V2 Int
-textureDimension = texSpecDimension . textureImageSpec
+textureDimension :: Getter TextureImage (V2 Int)
+textureDimension = textureImageSpec.texSpecDimension
 
 
 textureImageMap :: (forall pixel. Pixel pixel => Image pixel -> a) -> TextureImage -> a
@@ -151,11 +155,12 @@ textureImageMap f = aux
     aux (TexSRGB8  (GLTexture img)) = f img
 
 
-textureImageSpec :: TextureImage -> TextureImageSpec
-textureImageSpec tex =
-    let dimension = V2 (textureImageMap imageWidth tex) (textureImageMap imageHeight tex)
-        pxSpec    = pixelSpec tex
-    in TextureImageSpec dimension pxSpec
+textureImageSpec :: Getter TextureImage TextureImageSpec
+textureImageSpec = to getter where
+    getter tex =
+        let dimension = V2 (textureImageMap imageWidth tex) (textureImageMap imageHeight tex)
+            pxSpec    = pixelSpec tex
+        in TextureImageSpec dimension pxSpec
 
 
 mkTextureSpec :: V2 Int -> GL.DataType -> GL.PixelFormat -> GL.PixelInternalFormat -> TextureImageSpec
@@ -184,7 +189,7 @@ compsToInternal pf = error $ unpack $ format "unsupported format: {}" (Only $ Sh
 
 
 debugString :: TextureImage -> String
-debugString img = unpack $ format "{}: {}" (Shown $ toConstr img, Shown $ textureImageSpec img)
+debugString img = unpack $ format "{}: {}" (Shown $ toConstr img, Shown $ img^.textureImageSpec)
 
 instance Show TextureImage where
     show = debugString

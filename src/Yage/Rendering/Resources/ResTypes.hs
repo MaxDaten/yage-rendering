@@ -101,9 +101,9 @@ instance HasTextureSpec Texture where
     textureSpec = to getter where
         getter tex =
             case tex^.textureData of
-            Texture2D img        -> TexImg.textureImageSpec img
+            Texture2D img        -> img^.TexImg.textureImageSpec
             TextureBuffer _ spec -> spec
-            TextureCube TexImg.Cube{TexImg.cubeFaceRight = img} -> TexImg.textureImageSpec img
+            TextureCube TexImg.Cube{TexImg.cubeFaceRight = img} -> img^.TexImg.textureImageSpec
     {-# INLINE textureSpec #-}
 
 
@@ -115,12 +115,12 @@ instance HasTextureSpec Renderbuffer where
 
 instance GetRectangle Renderbuffer Int where
     asRectangle = to getter where
-        getter tex = Rectangle 0 (TexImg.texSpecDimension $ tex^.textureSpec)
+        getter tex = Rectangle 0 (tex^.textureSpec.TexImg.texSpecDimension)
     {-# INLINE asRectangle #-}
 
 instance GetRectangle Texture Int where
     asRectangle = to getter where
-        getter tex = Rectangle 0 (TexImg.texSpecDimension $ tex^.textureSpec)
+        getter tex = Rectangle 0 (tex^.textureSpec.TexImg.texSpecDimension)
     {-# INLINE asRectangle #-}
 
 

@@ -14,10 +14,10 @@ module Yage.Rendering.Backend.RenderSystem
     ) where
 
 
-import           Yage.Prelude
+import           Yage.Prelude                           hiding (pass)
 import           Yage.Lens
 
-import           Control.Monad.RWS                      hiding (forM)
+import           Control.Monad.RWS                      hiding (forM, pass)
 
 import           Yage.Rendering.Backend.Renderer        as Renderer
 import           Yage.Rendering.Backend.RenderPass      as Pass
@@ -63,7 +63,7 @@ runRenderPass :: ( MultipleRenderTargets mrt, ViableVertex (Vertex vr)
               PassDescr mrt (ShaderData frameU frameT) (ShaderData entU entT) (Vertex vr) -> 
               [ RenderEntity (Vertex vr) (ShaderData entU entT) ] -> 
               RenderSystem ()
-runRenderPass passDescr@PassDescr{..} entities = do
+runRenderPass pass entities = do
     -- transform all Renderables into RenderSets
     (setup, renderSets) <- managePassResoures
     mkRenderSystem $ mkRenderPass setup renderSets
@@ -75,8 +75,8 @@ runRenderPass passDescr@PassDescr{..} entities = do
 
         -- load resources from framebuffer setup and all entities
         ((results, res', reslog), time) <- ioTime $ runResourceManager res $ 
-            (,) <$> (requestFramebufferSetup passDescr)
-                <*> (forM entities $ requestRenderSet passShader)
+            (,) <$> (requestFramebufferSetup pass)
+                <*> (forM entities $ requestRenderSet $ pass^.passShader)
         
         -- write resource loading log
         scribe resourceLog reslog

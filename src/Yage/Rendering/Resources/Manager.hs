@@ -159,9 +159,9 @@ requestTexture texture@(Texture name newConfig texData) = do
         Tex.loadCubeTextureImage cubemap
 
     loadData (TextureBuffer target spec) = io $ do
-        let V2 w h      = Tex.texSpecDimension spec
+        let V2 w h      = spec^.Tex.texSpecDimension 
             texSize     = GL.TextureSize2D (fromIntegral w) (fromIntegral h)
-            Tex.PixelSpec dataType pxfmt internalFormat = Tex.texSpecPixelSpec spec
+            Tex.PixelSpec dataType pxfmt internalFormat = spec^.Tex.texSpecPixelSpec
             glPixelData = GL.PixelData pxfmt dataType nullPtr    
         GL.textureLevelRange target $= (0,0)
         GL.texImage2D target GL.NoProxy 0 internalFormat texSize 0 glPixelData
@@ -199,10 +199,10 @@ requestTexture texture@(Texture name newConfig texData) = do
         | texture^.textureSpec == currentSpec = return current
         | otherwise =
             let newSpec                                     = texture^.textureSpec
-                V2 newWidth newHeight                       = fromIntegral <$> Tex.texSpecDimension newSpec
+                V2 newWidth newHeight                       = fromIntegral <$> newSpec^.Tex.texSpecDimension
                 texSize                                     = GL.TextureSize2D newWidth newHeight
                 glPixelData                                 = GL.PixelData pxfmt dataType nullPtr
-                Tex.PixelSpec dataType pxfmt internalFormat = Tex.texSpecPixelSpec newSpec
+                Tex.PixelSpec dataType pxfmt internalFormat = newSpec^.Tex.texSpecPixelSpec
             in do
                 tell [ unpack $ format "resizeTexture: {}\nfrom:\t{}\nto:\t{}" ( Shown name, Shown currentSpec, Shown newSpec ) ]
                 
@@ -367,15 +367,15 @@ requestTextureItem (fieldName, texture) = do
 
 requestFramebufferSetup :: ( MultipleRenderTargets mrt, IsShaderData frameU frameT ) =>
                         PassDescr mrt (ShaderData frameU frameT) e v -> ResourceManager (FramebufferSetup (Uniforms frameU))
-requestFramebufferSetup PassDescr{..} = 
+requestFramebufferSetup pass = 
     FramebufferSetup 
-        <$> case passTarget of
+        <$> case pass^.passTarget of
             RenderTarget ident mrt -> requestFramebuffer (ident, mrt)
-        <*> requestShader passShader
-        <*> ( pure $ passPerFrameData^.shaderUniforms )
-        <*> ( forM ( passPerFrameData^.shaderTextures.to fieldAssocs ) requestTextureItem )
-        <*> pure passPreRendering
-        <*> pure passPostRendering
+        <*> requestShader (pass^.passShader)
+        <*> ( pure $ pass^.passPerFrameData.shaderUniforms )
+        <*> ( forM ( pass^.passPerFrameData.shaderTextures.to fieldAssocs ) requestTextureItem )
+        <*> pure (pass^.passPreRendering)
+        <*> pure (pass^.passPostRendering)
 
 ---------------------------------------------------------------------------------------------------
 initialGLRenderResources :: GLResources
