@@ -144,11 +144,11 @@ requestTexture texture@(Texture name newConfig texData) = do
         obj <- io $ GL.genObjectName
         io $ withTextureBind texture $= Just obj
 
-        chkErr $ loadData $ textureData texture
+        chkErr $ loadData $ texture^.textureData
         setTextureConfig
         
         tell [ unpack $ format "newTexture: RHI = {}: {}" ( Shown texture, Shown obj ) ]
-        return (texture^.textureSpec, textureConfig texture, obj)
+        return (texture^.textureSpec, texture^.textureConfig, obj)
 
     -- | pushes texture to opengl
     loadData :: TextureData -> ResourceManager ()
@@ -168,7 +168,7 @@ requestTexture texture@(Texture name newConfig texData) = do
 
     withTextureBind :: Texture -> GL.StateVar (Maybe GL.TextureObject)
     withTextureBind tex =
-        case textureData tex of
+        case tex^.textureData of
             Texture2D _ -> GL.textureBinding GL.Texture2D
             TextureCube _ -> GL.textureBinding GL.TextureCubeMap
             TextureBuffer t _ -> GL.textureBinding t
@@ -176,7 +176,7 @@ requestTexture texture@(Texture name newConfig texData) = do
 
     withTextureParameter :: Texture -> (forall t. GL.ParameterizedTextureTarget t => t -> a) -> a
     withTextureParameter tex varFun =
-        case textureData tex of
+        case tex^.textureData of
             Texture2D _ -> varFun GL.Texture2D
             TextureCube _ -> varFun GL.TextureCubeMap
             TextureBuffer t _ -> varFun t
@@ -329,7 +329,7 @@ requestVAO mesh shader = requestResource loadedVertexArrays loadVertexArray retu
         shaderProg      <- requestShader shader
         ebo             <- requestElementBuffer mesh
 
-        tell [ unpack $ format "RenderSet: {} - {}" ( Shown "mesh", Shown shader ) ] 
+        tell [ unpack $ format "RenderSet: {} - {}" ( Shown $ mesh^.meshId, Shown shader ) ] 
         io $ GL.makeVAO $ do
             bindVertices vbuff
             enableVertices' shaderProg vbuff
@@ -356,7 +356,7 @@ requestRenderSet withProgram ent =
 requestTextureItem :: (String, Texture) -> ResourceManager GLTextureItem
 requestTextureItem (fieldName, texture) = do
     (_,_, texObj) <- requestTexture texture
-    return $ case textureData texture of
+    return $ case texture^.textureData of
         Texture2D _       -> mkTextureItem texObj GL.Texture2D
         TextureCube _     -> mkTextureItem texObj GL.TextureCubeMap
         TextureBuffer t _ -> mkTextureItem texObj t

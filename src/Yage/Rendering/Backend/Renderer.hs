@@ -194,7 +194,7 @@ renderRenderSet set@RenderSet{..} = checkErrorOf (unpack $ format "renderRenderS
     setShaderFields :: ShaderProgram -> Renderer ()
     setShaderFields shader = do
         -- set all uniform fields (excluding texture units)
-        io $ setUniforms shader _rsUniforms
+        io $ setUniforms shader _rsUniforms 
 
         -- set all asigned textures to it's sampler
         texMapping <- use $ rStTextures.slottedUnits

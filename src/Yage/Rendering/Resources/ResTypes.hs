@@ -32,7 +32,7 @@ type FBO = GL.FramebufferObject
 type BufferSpec = TexImg.TextureImageSpec
 data Renderbuffer = Renderbuffer String BufferSpec
 
-type TextureId = LText
+type TextureId = ByteString
 
 data Texture = Texture TextureId TextureConfig TextureData
     deriving ( Typeable, Data )
@@ -46,7 +46,7 @@ data TextureData =
 data TextureConfig = TextureConfig
     { _texConfFiltering :: !TextureFiltering
     , _texConfWrapping  :: !TextureWrapping
-    } deriving ( Show, Eq, Typeable, Data )
+    } deriving ( Show, Eq, Ord, Typeable, Data )
 
 data TextureFiltering = TextureFiltering
     { _texMinFilter    :: !GL.TextureFilter
@@ -65,20 +65,33 @@ makeLenses ''TextureWrapping
 
 type RenderTargets = AttachmentTypes Texture Renderbuffer
 
-textureId :: Texture -> LText
-textureId (Texture tid _ texData) = format "{}.{}" ( Shown $ toConstr texData, Shown tid )
+textureId :: Lens' Texture ByteString
+textureId = lens getter setter where
+    getter (Texture tid _ _) = tid
+    setter (Texture _ conf tdata) tid = Texture tid conf tdata  
 
 
-textureData :: Texture -> TextureData
-textureData (Texture _ _ texData) = texData
+textureData :: Lens' Texture TextureData
+textureData = lens getter setter where
+    getter (Texture _ _ texData)      = texData
+    setter (Texture tid conf _) texData = Texture tid conf texData
 
-textureConfig :: Texture -> TextureConfig
-textureConfig (Texture _ conf _) = conf
-
+textureConfig :: Lens' Texture TextureConfig
+textureConfig = lens getter setter where
+    getter (Texture _ conf _) = conf
+    setter (Texture tid _ texData) conf = Texture tid conf texData
 
 
 mkTexture :: TextureId -> TextureData -> Texture
 mkTexture texid texdata = Texture texid def texdata
+
+
+
+isTextureBuffer :: Texture -> Bool
+isTextureBuffer tex = 
+    case tex^.textureData of
+        TextureBuffer _ _ -> True
+        _ -> False
 
 
 class HasTextureSpec t where
@@ -87,7 +100,7 @@ class HasTextureSpec t where
 instance HasTextureSpec Texture where
     textureSpec = to getter where
         getter tex =
-            case textureData tex of
+            case tex^.textureData of
             Texture2D img        -> TexImg.textureImageSpec img
             TextureBuffer _ spec -> spec
             TextureCube TexImg.Cube{TexImg.cubeFaceRight = img} -> TexImg.textureImageSpec img
@@ -124,16 +137,21 @@ instance GetRectangle Texture Int where
 
 
 instance Ord Texture where
-    compare a b = compare (textureId a) (textureId b)
+    compare a b = compare (a^.textureId) (b^.textureId)
 
 
 instance Show Texture where
     show tex = 
-        unpack $ format "{} spec={}, conf={}" ( textureId tex, Shown $ tex^.textureSpec, Shown $ textureConfig tex )
+        unpack $ format "{}.{} spec={}, conf={}" 
+            ( Shown $ tex^.textureData.to toConstr
+            , Shown $ tex^.textureId
+            , Shown $ tex^.textureSpec
+            , Shown $ tex^.textureConfig
+            )
 
 
 instance Eq Texture where
-    (==) a b = textureId a == textureId b
+    (==) a b = a^.textureId == b^.textureId
 
 
 instance Show Renderbuffer where
@@ -151,7 +169,7 @@ instance Ord Renderbuffer where
 
 instance Hashable Texture where
     hashWithSalt salt tex =
-        salt `hashWithSalt` (textureId tex)
+        salt `hashWithSalt` (tex^.textureId)
 
 
 data ShaderResource = ShaderResource

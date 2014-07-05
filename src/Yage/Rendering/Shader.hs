@@ -5,6 +5,7 @@
 {-# LANGUAGE MultiParamTypeClasses        #-}
 {-# LANGUAGE FlexibleInstances            #-}
 {-# LANGUAGE FlexibleContexts             #-}
+{-# LANGUAGE ScopedTypeVariables          #-}
 {-# LANGUAGE UndecidableInstances         #-} -- FIXME : should not be neccessary
 module Yage.Rendering.Shader
     ( module Yage.Rendering.Shader
@@ -18,7 +19,8 @@ import          Data.Vinyl                as VinylGL
 import          Data.Vinyl.Utils          as VinylGL
 import          Data.Vinyl.Idiom.Identity as V
 
-import          Graphics.VinylGL.Uniforms as VinylGL
+import          Graphics.VinylGL.Uniforms as VinylGL hiding (setUniforms)
+import qualified Graphics.VinylGL.Uniforms as V
 import          Data.Vinyl.Reflect
 
 import          Graphics.VinylGL.Vertex   as VinylGL
@@ -26,6 +28,7 @@ import          Graphics.VinylGL.Vertex   as VinylGL
 
 import          Graphics.GLUtil
 import          Yage.Rendering.Resources.ResTypes
+import          Control.Exception         (ErrorCall)
 
 
 type Uniforms a = PlainRec a
@@ -63,3 +66,9 @@ instance (Monoid (Uniforms u), Monoid (Textures t)) => Monoid (ShaderData u t) w
 
 append :: ShaderData u t -> ShaderData u' t' -> ShaderData (u ++ u') (t ++ t')
 append (ShaderData u t) (ShaderData u' t') = ShaderData (u <+> u') (t <+> t')
+
+setUniforms :: forall ts. UniformFields (PlainRec ts)
+            => ShaderProgram -> PlainRec ts -> IO ()
+setUniforms s x = 
+    V.setUniforms s x 
+        `catch` \(e::ErrorCall) -> error . show $ format "{}: {}" (Shown e, Shown s)
