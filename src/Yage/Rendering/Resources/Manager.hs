@@ -242,7 +242,7 @@ requestRenderbuffer buff@(Renderbuffer _ newSpec@(Tex.TextureImageSpec sz pxSpec
             internalFormat = Tex.pxSpecGLFormat pxSpec
         in do
             tell [ unpack $ format "loadRenderbuffer: {}" ( Only $ Shown buff ) ]
-            checkErrorOf ("loadRenderbuffer: ") $ io $ do
+            checkErrorOf "loadRenderbuffer: " $ io $ do
                 rObj <- GL.genObjectName
                 GL.bindRenderbuffer GL.Renderbuffer $= rObj
                 GL.renderbufferStorage GL.Renderbuffer internalFormat size
@@ -256,7 +256,7 @@ requestRenderbuffer buff@(Renderbuffer _ newSpec@(Tex.TextureImageSpec sz pxSpec
                 internalFormat  = Tex.pxSpecGLFormat pxSpec
             in do 
                 tell [ unpack $ format "resizeBuffer {}" ( Only $ Shown buff ) ]
-                checkErrorOf ("resizeBuffer: ") $ io $ do
+                checkErrorOf "resizeBuffer: " $ io $ do
                     GL.bindRenderbuffer GL.Renderbuffer $= rObj
                     GL.renderbufferStorage GL.Renderbuffer internalFormat size
                     GL.bindRenderbuffer GL.Renderbuffer $= GL.noRenderbufferObject

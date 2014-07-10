@@ -50,8 +50,11 @@ data TextureConfig = TextureConfig
 
 data TextureFiltering = TextureFiltering
     { _texMinFilter    :: !GL.TextureFilter
+    -- ^ GL.Nearest | GL.Linear'
     , _texMipmapFilter :: !(Maybe GL.TextureFilter)
+    -- ^ GL.Nearest | GL.Linear'
     , _texMagFilter    :: !GL.TextureFilter
+    -- ^ GL.Nearest | GL.Linear'
     } deriving ( Show, Eq, Ord, Typeable, Data )
 
 data TextureWrapping = TextureWrapping
