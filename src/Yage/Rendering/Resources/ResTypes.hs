@@ -56,7 +56,9 @@ data TextureFiltering = TextureFiltering
 
 data TextureWrapping = TextureWrapping
     { _texWrapRepetition :: GL.Repetition 
+    -- ^ GL.Repeated | GL.Mirrored
     , _texWrapClamping   :: GL.Clamping
+    -- ^ GL.Clamp | GL.Repeat | GL.ClampToEdge | GL.ClampToBorder
     } deriving ( Show, Eq, Ord, Typeable, Data )
 
 makeLenses ''TextureConfig
