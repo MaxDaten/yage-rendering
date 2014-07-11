@@ -59,20 +59,24 @@ requestResource :: (Ord key)
                 -- ^ state-field accessor
                 -> (ResourceManager res)
                 -- ^ loading function
-                -> (res -> ResourceManager res)
+                -> (res -> ResourceManager (UpdateTag res))
                 -- ^ updating function old res to new res
                 -> key
                 -- ^ resource to load
                 -> ResourceManager res
 requestResource accessor loader updater resource = do
     resmap <- use accessor
-    item <- maybe
-        ( loader  )
+    uitem <- maybe
+        ( Dirty <$> loader  )
         ( updater )
         ( resmap^.at resource )
 
-    accessor.at resource ?= item
-    return $ item
+    updateTag return updateItem uitem
+
+    where
+    updateItem item = do
+        accessor.at resource ?= item
+        return item
 
 
 requestFramebuffer :: (Show ident, MultipleRenderTargets mrt) => 
@@ -120,10 +124,10 @@ requestFramebuffer (fboIdent, mrt)
     toBufferMode _ = error "Yage.Rendering.ResourceManager: invalid buffer-mode"
 
 
-    --updateFramebuffer :: Framebuffer TextureResource RenderbufferResource -> ResourceManager (Framebuffer TextureResource RenderbufferResource)
+    -- updateFramebuffer :: Framebuffer TextureResource RenderbufferResource -> ResourceManager (Framebuffer TextureResource RenderbufferResource)
     updateFramebuffer f = do
         forM_  (allAttachments mrt) requestAttachment
-        return f
+        return $ Dirty f -- | TODO : Correct UpdateTag
 
     requestAttachment :: RenderTargets -> ResourceManager ()
     requestAttachment (Attachment _ (TextureTarget _ tex _))    = void $ requestTexture tex
@@ -187,16 +191,20 @@ requestTexture texture@(Texture name newConfig texData) = do
         updateConfig =<< resizeTexture current
 
 
-    updateConfig :: TextureRHI -> ResourceManager TextureRHI
-    updateConfig current@(_, currentConfig, _)
-        | newConfig == currentConfig = return current
+    updateConfig :: UpdateTag TextureRHI -> ResourceManager (UpdateTag TextureRHI)
+    updateConfig = updateTag innerUpdate (fmap (join.Dirty) . innerUpdate)
+
+
+    innerUpdate :: TextureRHI -> ResourceManager (UpdateTag TextureRHI)
+    innerUpdate current@(_, currentConfig, _)
+        | newConfig == currentConfig = return (Clean current)
         | otherwise = do
             setTextureConfig
-            return $ current & _2 .~ newConfig
+            return $ tagDirty $ current & _2 .~ newConfig
     
 
     resizeTexture current@(currentSpec, _,_) 
-        | texture^.textureSpec == currentSpec = return current
+        | texture^.textureSpec == currentSpec = return $ Clean current
         | otherwise =
             let newSpec                                     = texture^.textureSpec
                 V2 newWidth newHeight                       = fromIntegral <$> newSpec^.Tex.texSpecDimension
@@ -210,7 +218,7 @@ requestTexture texture@(Texture name newConfig texData) = do
                     case texData of
                         TextureBuffer target _ -> GL.texImage2D target GL.NoProxy 0 internalFormat texSize 0 glPixelData
                         _                      -> error "Manager.resizeTexture: invalid texture resize. Only TextureBuffer resizing currently supported!"
-                return $ current & _1 .~ newSpec
+                return $ tagDirty $ current & _1 .~ newSpec
 
 
     setTextureConfig :: ResourceManager ()
@@ -219,7 +227,7 @@ requestTexture texture@(Texture name newConfig texData) = do
             TextureWrapping repetition clamping = newConfig^.texConfWrapping
             
         -- NOTE: filtering is neccessary for texture completeness
-        when (isJust mipmap) $ GL.generateMipmap' texData
+        when (isJust mipmap) $ autoGenerateMipMap texData
         withTextureParameter texture GL.textureFilter $= ((minification, mipmap), magnification)
         case texData of
             Texture2D _ -> do
@@ -230,6 +238,13 @@ requestTexture texture@(Texture name newConfig texData) = do
             
             TextureBuffer _ _ -> do                
                 GL.texture2DWrap $= (repetition, clamping)
+
+    autoGenerateMipMap :: TextureData -> IO ()
+    autoGenerateMipMap = \case
+        Texture2D   _     -> GL.generateMipmap' GL.Texture2D
+        TextureCube _     -> GL.generateMipmap' GL.TextureCubeMap
+        TextureBuffer t _ -> GL.generateMipmap' t
+                
 
 
 requestRenderbuffer :: Renderbuffer -> ResourceManager RenderbufferRHI
@@ -250,7 +265,7 @@ requestRenderbuffer buff@(Renderbuffer _ newSpec@(Tex.TextureImageSpec sz pxSpec
                 return (newSpec, rObj)
 
     resizeBuffer current@(currentSpec, rObj) 
-        | newSpec == currentSpec = return current
+        | newSpec == currentSpec = return $ return current
         | otherwise =
             let size            = GL.RenderbufferSize (fromIntegral $ sz^._x) (fromIntegral $ sz^._y)
                 internalFormat  = Tex.pxSpecGLFormat pxSpec
@@ -260,12 +275,12 @@ requestRenderbuffer buff@(Renderbuffer _ newSpec@(Tex.TextureImageSpec sz pxSpec
                     GL.bindRenderbuffer GL.Renderbuffer $= rObj
                     GL.renderbufferStorage GL.Renderbuffer internalFormat size
                     GL.bindRenderbuffer GL.Renderbuffer $= GL.noRenderbufferObject
-                return (newSpec, rObj)
+                return $ tagDirty (newSpec, rObj)
 
 
 
 requestShader :: ShaderResource -> ResourceManager ShaderRHI
-requestShader shader = requestResource loadedShaders loadShader return shader
+requestShader shader = requestResource loadedShaders loadShader (return.return) shader
     where
     loadShader :: ResourceManager ShaderRHI
     loadShader = io $!
@@ -322,7 +337,7 @@ requestElementBuffer mesh = do
 
 
 requestVAO :: (ViableVertex (Vertex vr)) => Mesh (Vertex vr) -> ShaderResource -> ResourceManager VertexArrayRHI
-requestVAO mesh shader = requestResource loadedVertexArrays loadVertexArray return (mesh^.meshId,shader) 
+requestVAO mesh shader = requestResource loadedVertexArrays loadVertexArray (return.return) (mesh^.meshId,shader) 
     where
     loadVertexArray = do
         vbuff           <- requestVertexbuffer mesh

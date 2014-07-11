@@ -28,7 +28,7 @@ import Yage.Geometry.Elements as E (Triangle(..))
 
 
 type MeshHash = XH.XXHash
-type MeshId   = Text
+type MeshId   = ByteString
 
 
 -- TODO: Materials to component
@@ -73,7 +73,6 @@ instance Show MeshComponent where
 
 instance Eq (Mesh v) where
     a == b = _meshId a == _meshId b
-
 
 
 instance Ord (Mesh v) where

@@ -153,7 +153,8 @@ textureImageMap f = aux
     aux (TexRGBF   (GLTexture img)) = f img
     aux (TexRGBA8  (GLTexture img)) = f img
     aux (TexSRGB8  (GLTexture img)) = f img
-
+    {-# INLINE aux #-}
+{-# INLINE textureImageMap #-}
 
 textureImageSpec :: Getter TextureImage TextureImageSpec
 textureImageSpec = to getter where
@@ -161,16 +162,20 @@ textureImageSpec = to getter where
         let dimension = V2 (textureImageMap imageWidth tex) (textureImageMap imageHeight tex)
             pxSpec    = pixelSpec tex
         in TextureImageSpec dimension pxSpec
+    {-# INLINE getter #-}
+{-# INLINE textureImageSpec #-}
 
 
 mkTextureSpec :: V2 Int -> GL.DataType -> GL.PixelFormat -> GL.PixelInternalFormat -> TextureImageSpec
 mkTextureSpec dim dataType components internalFormat = TextureImageSpec dim $ PixelSpec dataType components internalFormat
+{-# INLINE mkTextureSpec #-}
 
 
 -- | derives complete 'TextureImageSpec' from the components
 -- The component type will be UnsignedByte (Word8)
 mkTextureSpec' :: V2 Int -> GL.PixelFormat -> TextureImageSpec
 mkTextureSpec' dim components = TextureImageSpec dim $ PixelSpec GL.UnsignedByte components (compsToInternal components)
+{-# INLINE mkTextureSpec' #-}
 
 
 -- | simple pixel component to internalFormat mapping, assumes UnsignedByte (Word8) components
@@ -186,10 +191,12 @@ compsToInternal GL.Luminance        = GL.Luminance8
 compsToInternal GL.LuminanceAlpha   = GL.Luminance8Alpha8
 -- TODO complete mapping
 compsToInternal pf = error $ unpack $ format "unsupported format: {}" (Only $ Shown pf )
+{-# INLINE compsToInternal #-}
 
 
 debugString :: TextureImage -> String
 debugString img = unpack $ format "{}: {}" (Shown $ toConstr img, Shown $ img^.textureImageSpec)
+{-# INLINE debugString #-}
 
 instance Show TextureImage where
     show = debugString

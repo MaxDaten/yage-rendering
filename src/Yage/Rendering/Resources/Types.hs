@@ -1,5 +1,5 @@
-{-# LANGUAGE TemplateHaskell                    #-}
-{-# LANGUAGE ExistentialQuantification          #-}
+{-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE LambdaCase          #-}
 module Yage.Rendering.Resources.Types where
 
 import           Yage.Prelude
@@ -42,4 +42,36 @@ makeLenses ''GLResources
 
 type ResourceManager = RWST () [String] GLResources IO
 
+data UpdateTag a = Clean a | Dirty a
+    deriving ( Show, Eq, Ord, Functor, Foldable, Traversable )
+
+
+instance Applicative UpdateTag where
+    pure = return 
+    (<*>) = ap 
+
+
+instance Monad UpdateTag where
+    return = Clean
+    Clean a >>= f = f a
+    Dirty a >>= f = case f a of
+        Dirty b -> Dirty b
+        Clean b -> Dirty b
+
+tagDirty :: a -> UpdateTag a
+tagDirty = Dirty
+
+updateTag :: (a -> c) -> (a -> c) -> UpdateTag a -> c
+updateTag clean dirty = \case
+    Clean a -> clean a
+    Dirty a -> dirty a
+
+
+isDirty :: UpdateTag a -> Bool
+isDirty (Dirty _) = True
+isDirty _         = False
+
+isClean :: UpdateTag a -> Bool
+isClean (Clean _) = True
+isClean _         = False
 

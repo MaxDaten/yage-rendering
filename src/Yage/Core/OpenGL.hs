@@ -6,7 +6,7 @@ module Yage.Core.OpenGL (
 
 import Yage.Prelude
 
-import Graphics.Rendering.OpenGL as GL hiding (generateMipmap')
+import Graphics.Rendering.OpenGL as GL
 import Graphics.GLUtil           as GL hiding (texture3DWrap)
 import Data.Data
 
@@ -22,3 +22,4 @@ texture3DWrap :: ParameterizedTextureTarget t => t -> StateVar (Repetition, Clam
 texture3DWrap target = makeStateVar (get (textureWrapMode target S))
                              (forM_ [S,T,R] . aux)
   where aux x d = textureWrapMode target d $= x
+

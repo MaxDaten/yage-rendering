@@ -55,6 +55,8 @@ library
                         Yage.Rendering.Textures.Instances
 
 
+  ghc-prof-options:     -rtsopts -Wall -prof
+
   If flag(perf)
     ghc-options:        -threaded -O2
   Else
@@ -87,8 +89,8 @@ library
 
                         , system-filepath         >= 0.4
                         , OpenGLRaw               >= 1.4
-                        , OpenGL                  >= 2.9     &&   < 3
-                        , GLUtil                  >= 0.7.1
+                        , OpenGL                  >= 2.9.2 && < 2.10                        
+                        , GLUtil                  >= 0.7.5 && < 0.8
                         , JuicyPixels             >= 3
                         , spool                   == 0.1
 
