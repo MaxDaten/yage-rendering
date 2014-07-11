@@ -14,6 +14,7 @@ import           Graphics.GLUtil
 
 
 import           Yage.Rendering.Mesh
+import           Yage.Rendering.Backend.RenderPass (TargetSlot)
 import           Yage.Rendering.Resources.ResTypes
 
 
@@ -34,7 +35,7 @@ data GLResources = GLResources
     , _loadedIndexBuffers  :: (Map MeshId                   IndexBufferRHI       )
     , _loadedTextures      :: (Map Texture                  TextureRHI           )
     , _loadedRenderbuffers :: (Map Renderbuffer             RenderbufferRHI      )
-    , _compiledFBOs        :: (Map String                   FramebufferRHI       )
+    , _compiledFBOs        :: (Map TargetSlot               FramebufferRHI       )
     }
 
 makeLenses ''GLResources
@@ -60,6 +61,9 @@ instance Monad UpdateTag where
 
 tagDirty :: a -> UpdateTag a
 tagDirty = Dirty
+
+tagClean :: a -> UpdateTag a
+tagClean = Clean
 
 updateTag :: (a -> c) -> (a -> c) -> UpdateTag a -> c
 updateTag clean dirty = \case

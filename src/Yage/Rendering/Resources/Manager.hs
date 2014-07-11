@@ -69,23 +69,23 @@ requestResource accessor loader updater resource = do
     uitem <- maybe
         ( Dirty <$> loader  )
         ( updater )
-        ( resmap^.at resource )
+        ( {-# SCC "requestResource.at" #-} resmap^.at resource )
 
     updateTag return updateItem uitem
 
     where
-    updateItem item = do
+    updateItem item = {-# SCC "requestResource.updateItem" #-} do
         accessor.at resource ?= item
         return item
 
 
-requestFramebuffer :: (Show ident, MultipleRenderTargets mrt) => 
-                   (ident, mrt) -> ResourceManager FramebufferRHI
+requestFramebuffer :: MultipleRenderTargets mrt => 
+                   (TargetSlot, mrt) -> ResourceManager FramebufferRHI
 requestFramebuffer (fboIdent, mrt) 
     | isDefault mrt = return GL.defaultFramebufferObject
     | otherwise =
-    let compiler = compileFBO <&> flip (^?!) folded -- unsafe head
-    in requestResource compiledFBOs compiler updateFramebuffer (show fboIdent)
+    let compiler = {-# SCC "compileFBO" #-} compileFBO <&> flip (^?!) folded -- unsafe head
+    in requestResource compiledFBOs compiler ({-# SCC "compileFBO" #-} updateFramebuffer) fboIdent
 
     where
 
@@ -280,7 +280,7 @@ requestRenderbuffer buff@(Renderbuffer _ newSpec@(Tex.TextureImageSpec sz pxSpec
 
 
 requestShader :: ShaderResource -> ResourceManager ShaderRHI
-requestShader shader = requestResource loadedShaders loadShader (return.return) shader
+requestShader shader = requestResource loadedShaders loadShader (return.tagClean) shader
     where
     loadShader :: ResourceManager ShaderRHI
     loadShader = io $!
@@ -385,12 +385,12 @@ requestFramebufferSetup :: ( MultipleRenderTargets mrt, IsShaderData frameU fram
 requestFramebufferSetup pass = 
     FramebufferSetup 
         <$> case pass^.passTarget of
-            RenderTarget ident mrt -> requestFramebuffer (ident, mrt)
-        <*> requestShader (pass^.passShader)
-        <*> ( pure $ pass^.passPerFrameData.shaderUniforms )
-        <*> ( forM ( pass^.passPerFrameData.shaderTextures.to fieldAssocs ) requestTextureItem )
-        <*> pure (pass^.passPreRendering)
-        <*> pure (pass^.passPostRendering)
+            RenderTarget ident mrt -> {-# SCC "rq.fb" #-} requestFramebuffer (ident, mrt)
+        <*> ( {-# SCC "rq.sh" #-} requestShader (pass^.passShader) )
+        <*> ( {-# SCC "rq.uni" #-} pure $ pass^.passPerFrameData.shaderUniforms )
+        <*> ( {-# SCC "rq.texfields" #-} forM ( pass^.passPerFrameData.shaderTextures.to fieldAssocs ) requestTextureItem )
+        <*> pure ({-# SCC "rq.pre" #-} pass^.passPreRendering)
+        <*> pure ({-# SCC "rq.post" #-} pass^.passPostRendering)
 
 ---------------------------------------------------------------------------------------------------
 initialGLRenderResources :: GLResources
