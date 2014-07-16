@@ -47,7 +47,7 @@ makeLenses ''PassDescr
 
 
 mkRenderPass :: ( UniformFields (Uniforms fbU), UniformFields (Uniforms entU) ) =>
-             FramebufferSetup (Uniforms fbU) -> [RenderSet (Uniforms entU)] -> Renderer ()
+             FramebufferSetup (Uniforms fbU) -> [ RenderSet (Uniforms entU) ] -> Renderer ()
 mkRenderPass fboSetup rSets = withFramebufferSetup fboSetup (renderFrame rSets)
 
 

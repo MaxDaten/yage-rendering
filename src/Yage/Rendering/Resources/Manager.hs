@@ -15,12 +15,11 @@ module Yage.Rendering.Resources.Manager where
 
 import           Yage.Prelude
 import           Yage.Lens
-import           Yage.Geometry.Vertex
 
 import           Foreign.Ptr                          (nullPtr)
 import qualified Data.Vector.Storable                 as VS (Vector, map)
 
-import           Control.Monad.RWS                    hiding (forM, forM_, mapM_)
+import           Control.Monad.RWS                    hiding (forM, forM_, mapM_, mapM)
 
 
 import qualified Yage.Core.OpenGL                     as GL
@@ -357,38 +356,36 @@ requestVAO mesh shader = requestResource loadedVertexArrays loadVertexArray (ret
 
 
 requestRenderSet :: ( ViableVertex (Vertex vr), IsShaderData u t ) => 
-                 ShaderResource -> RenderEntity (Vertex vr) (ShaderData u t) -> ResourceManager (RenderSet (Uniforms u))
+                 ShaderResource -> RenderEntity (Vertex vr) (ShaderData u t) -> ResourceManager ( RenderSet (Uniforms u) )
 requestRenderSet withProgram ent = 
     RenderSet  <$> ( requestVAO ( ent^.entMesh ) withProgram )
                <*> ( pure $ ent^.entData.shaderUniforms )
-               <*> ( forM ( ent^.entData.shaderTextures.to fieldAssocs ) requestTextureItem )
+               <*> ( mapM requestTextureItem $ textureFields $ ent^.entData.shaderTextures )
                <*> ( pure $ fromIntegral $ ent^.entMesh.vertexCount )
                <*> ( pure $ ent^.entMesh.meshIndexRanges )
                <*> ( pure $ ent^.entSettings )
 
 
 
-requestTextureItem :: (String, Texture) -> ResourceManager GLTextureItem
-requestTextureItem (fieldName, texture) = do
+requestTextureItem :: HasTexture t => (String, t) -> ResourceManager GLTextureItem
+requestTextureItem (fieldName, t) = do
+    let texture = getTexture t
     (_,_, texObj) <- requestTexture texture
     return $ case texture^.textureData of
-        Texture2D _       -> mkTextureItem texObj GL.Texture2D
-        TextureCube _     -> mkTextureItem texObj GL.TextureCubeMap
-        TextureBuffer t _ -> mkTextureItem texObj t
-    where
-    mkTextureItem :: forall t. ( GL.BindableTextureTarget t, Show t ) => GL.TextureObject -> t -> GLTextureItem
-    mkTextureItem texObj target =  GLTextureItem target $ TextureItem texObj fieldName
+        Texture2D _       -> GLTextureItem GL.Texture2D $ TextureItem texObj fieldName
+        TextureCube _     -> GLTextureItem GL.TextureCubeMap $ TextureItem texObj fieldName
+        TextureBuffer t _ -> GLTextureItem t $ TextureItem texObj fieldName
         
 
 requestFramebufferSetup :: ( MultipleRenderTargets mrt, IsShaderData frameU frameT ) =>
-                        PassDescr mrt (ShaderData frameU frameT) e v -> ResourceManager (FramebufferSetup (Uniforms frameU))
+                        PassDescr mrt (ShaderData frameU frameT) e v -> ResourceManager ( FramebufferSetup (Uniforms frameU) )
 requestFramebufferSetup pass = 
     FramebufferSetup 
         <$> case pass^.passTarget of
             RenderTarget ident mrt -> {-# SCC "rq.fb" #-} requestFramebuffer (ident, mrt)
         <*> ( {-# SCC "rq.sh" #-} requestShader (pass^.passShader) )
         <*> ( {-# SCC "rq.uni" #-} pure $ pass^.passPerFrameData.shaderUniforms )
-        <*> ( {-# SCC "rq.texfields" #-} forM ( pass^.passPerFrameData.shaderTextures.to fieldAssocs ) requestTextureItem )
+        <*> ( {-# SCC "rq.texfields" #-} mapM requestTextureItem $ textureFields $ pass^.passPerFrameData.shaderTextures )
         <*> pure ({-# SCC "rq.pre" #-} pass^.passPreRendering)
         <*> pure ({-# SCC "rq.post" #-} pass^.passPostRendering)
 

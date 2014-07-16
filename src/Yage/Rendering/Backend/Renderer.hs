@@ -54,7 +54,7 @@ Textureing
 type TextureField = String
 
 data TextureItem = TextureItem
-    { _itemTexObj   :: !GL.TextureObject 
+    { _itemTexObj   :: !GL.TextureObject
     , _itemKey      :: !TextureField
     -- , _itemTarget   :: !TexTarget
     } deriving ( Show, Eq, Ord )
@@ -147,7 +147,7 @@ withFramebufferSetup FramebufferSetup{..} ma = do
 
 
 
-renderFrame :: UniformFields (Uniforms urec) => [RenderSet (Uniforms urec)] -> Renderer ()
+renderFrame :: UniformFields (Uniforms urec) => [ RenderSet (Uniforms urec) ] -> Renderer ()
 renderFrame = mapM_ renderRenderSet
 
 
@@ -255,7 +255,7 @@ withVAO v ma = checkErrorOf "withVAO" $ do
 # Texturing
 --}
 
-withTextures :: [GLTextureItem] -> Renderer a -> Renderer a
+withTextures :: [ GLTextureItem ] -> Renderer a -> Renderer a
 withTextures texs ma = 
     withAssignedItems (map getItem texs) $ \units ->
         withActiveUnits (zip units texs) ma
