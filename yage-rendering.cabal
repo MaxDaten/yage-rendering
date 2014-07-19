@@ -69,9 +69,12 @@ library
   -- ghc-prof-options:     -rtsopts -prof -auto-all
   default-language:     Haskell2010
   default-extensions:   NoImplicitPrelude
-                        OverloadedStrings
                         UnicodeSyntax
+                        
+                        OverloadedStrings
+                        
                         RecordWildCards
+                        NamedFieldPuns
                         TupleSections
                         
                         StandaloneDeriving
@@ -106,8 +109,9 @@ library
                         , linear                  == 1.10.*
                         , lens                    == 4.3.*
 
-                        , vinyl                   == 0.4.*
+                        , vinyl                   == 0.4.3
                         , vinyl-gl                == 0.2.*
+                        , vinyl-glsl              == 0.1.*
 
 -------------------------------------------------------------------------------
 

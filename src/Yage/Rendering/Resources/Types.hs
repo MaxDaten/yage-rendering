@@ -14,6 +14,7 @@ import           Graphics.GLUtil
 
 
 import           Yage.Rendering.Mesh
+import           Yage.Rendering.Shader
 import           Yage.Rendering.Backend.RenderPass (TargetSlot)
 import           Yage.Rendering.Resources.ResTypes
 
@@ -29,13 +30,13 @@ type FramebufferRHI        = GL.FramebufferObject
 
 
 data GLResources = GLResources
-    { _loadedShaders       :: (Map ShaderResource           ShaderRHI            )
-    , _loadedVertexBuffer  :: (Map MeshId                   VertexBufferRHI      )
-    , _loadedVertexArrays  :: (Map (MeshId, ShaderResource) VertexArrayRHI       )
-    , _loadedIndexBuffers  :: (Map MeshId                   IndexBufferRHI       )
-    , _loadedTextures      :: (Map Texture                  TextureRHI           )
-    , _loadedRenderbuffers :: (Map Renderbuffer             RenderbufferRHI      )
-    , _compiledFBOs        :: (Map TargetSlot               FramebufferRHI       )
+    { _loadedShaders       :: Map ShaderProgramUnit             ShaderRHI
+    , _loadedVertexBuffer  :: Map MeshId                        VertexBufferRHI
+    , _loadedVertexArrays  :: Map (MeshId, ShaderProgramUnit)   VertexArrayRHI
+    , _loadedIndexBuffers  :: Map MeshId                        IndexBufferRHI
+    , _loadedTextures      :: Map Texture                       TextureRHI
+    , _loadedRenderbuffers :: Map Renderbuffer                  RenderbufferRHI
+    , _compiledFBOs        :: Map TargetSlot                    FramebufferRHI
     }
 
 makeLenses ''GLResources

@@ -278,13 +278,14 @@ requestRenderbuffer buff@(Renderbuffer _ newSpec@(Tex.TextureImageSpec sz pxSpec
 
 
 
-requestShader :: ShaderResource -> ResourceManager ShaderRHI
-requestShader shader = requestResource loadedShaders loadShader (return.tagClean) shader
-    where
-    loadShader :: ResourceManager ShaderRHI
-    loadShader = io $!
-        GL.simpleShaderProgram (encodeString $ shader^.srVertSrc) (encodeString $ shader^.srFragSrc)
+requestShader :: ShaderProgramUnit -> ResourceManager ShaderRHI
+requestShader shader = requestResource loadedShaders loadShader (return.tagClean) shader where
 
+    loadShader :: ResourceManager ShaderRHI
+    loadShader = -- _shaderSrcRaw.to unRaw
+        io $! GL.loadShaderProgramBS (shader^.shaderSources^..traverse.compilationUnit) 
+            `catch` 
+            (\(e::IOError) -> ioError (userError $ (shader^.shaderName) ++ ": " ++ show e))
 
 
 requestVertexbuffer :: (Storable (Vertex vr)) => Mesh (Vertex vr) -> ResourceManager (BufferedVertices vr)
@@ -335,7 +336,7 @@ requestElementBuffer mesh = do
             return ebo
 
 
-requestVAO :: (ViableVertex (Vertex vr)) => Mesh (Vertex vr) -> ShaderResource -> ResourceManager VertexArrayRHI
+requestVAO :: (ViableVertex (Vertex vr)) => Mesh (Vertex vr) -> ShaderProgramUnit -> ResourceManager VertexArrayRHI
 requestVAO mesh shader = requestResource loadedVertexArrays loadVertexArray (return.return) (mesh^.meshId,shader) 
     where
     loadVertexArray = do
@@ -356,7 +357,7 @@ requestVAO mesh shader = requestResource loadedVertexArrays loadVertexArray (ret
 
 
 requestRenderSet :: ( ViableVertex (Vertex vr), IsShaderData u t ) => 
-                 ShaderResource -> RenderEntity (Vertex vr) (ShaderData u t) -> ResourceManager ( RenderSet (Uniforms u) )
+                 ShaderProgramUnit -> RenderEntity (Vertex vr) (ShaderData u t) -> ResourceManager ( RenderSet (Uniforms u) )
 requestRenderSet withProgram ent = 
     RenderSet  <$> ( requestVAO ( ent^.entMesh ) withProgram )
                <*> ( pure $ ent^.entData.shaderUniforms )
@@ -383,11 +384,11 @@ requestFramebufferSetup pass =
     FramebufferSetup 
         <$> case pass^.passTarget of
             RenderTarget ident mrt -> {-# SCC "rq.fb" #-} requestFramebuffer (ident, mrt)
-        <*> ( {-# SCC "rq.sh" #-} requestShader (pass^.passShader) )
-        <*> ( {-# SCC "rq.uni" #-} pure $ pass^.passPerFrameData.shaderUniforms )
-        <*> ( {-# SCC "rq.texfields" #-} mapM requestTextureItem $ textureFields $ pass^.passPerFrameData.shaderTextures )
-        <*> pure ({-# SCC "rq.pre" #-} pass^.passPreRendering)
-        <*> pure ({-# SCC "rq.post" #-} pass^.passPostRendering)
+        <*> ( requestShader (pass^.passShader.shaderProgram) )
+        <*> ( pure $ pass^.passShader.shaderData.shaderUniforms )
+        <*> ( mapM requestTextureItem $ textureFields $ pass^.passShader.shaderData.shaderTextures )
+        <*> ( pure $ pass^.passPreRendering )
+        <*> ( pure $ pass^.passPostRendering )
 
 ---------------------------------------------------------------------------------------------------
 initialGLRenderResources :: GLResources

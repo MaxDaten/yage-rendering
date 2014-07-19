@@ -177,20 +177,6 @@ instance Hashable Texture where
         salt `hashWithSalt` (tex^.textureId)
 
 
-data ShaderResource = ShaderResource
-    { _srVertSrc :: FilePath
-    , _srFragSrc :: FilePath
-    } deriving (Show, Eq, Ord)
-
-makeLenses ''ShaderResource
-
-
-instance Hashable ShaderResource where
-    hashWithSalt salt ShaderResource{..} =
-        salt       `hashWithSalt`
-        _srVertSrc `hashWithSalt` _srFragSrc
-
-
 instance Hashable FilePath where
     hashWithSalt salt = hashWithSalt salt . encode
 

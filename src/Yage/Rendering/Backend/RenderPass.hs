@@ -36,9 +36,7 @@ data RenderTarget mrt = RenderTarget TargetSlot mrt
 
 data PassDescr target perFrame perEntity vertex where
     PassDescr :: { _passTarget         :: RenderTarget target
-                 , _passShader         :: ShaderResource
-                 , _passPerFrameData   :: perFrame
-                 -- , passPerEntityData  :: RenderEntity vr entU entT -> ShaderData entU entT
+                 , _passShader         :: ShaderUnit perFrame
                  , _passPreRendering   :: Renderer ()
                  , _passPostRendering  :: Renderer ()
                  } -> PassDescr target perFrame perEntity vertex

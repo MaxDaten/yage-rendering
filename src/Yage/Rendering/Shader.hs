@@ -14,15 +14,20 @@ module Yage.Rendering.Shader
     ( module Yage.Rendering.Shader
     , module VinylGL
     , module U
+    , module GLSL
     , Symbol, KnownSymbol
     ) where
 
 import           Yage.Prelude
 import           Yage.Lens
 
+import           GHC.TypeLits (Symbol, KnownSymbol)
+
 import           Data.Vinyl                as VinylGL
 import           Data.Vinyl.Universe       as U
 import qualified Data.Vinyl.Universe.Const as U
+
+import           Control.Exception         (ErrorCall)
 
 import           Graphics.VinylGL.Uniforms as VinylGL hiding (setUniforms)
 
@@ -30,10 +35,10 @@ import qualified Graphics.VinylGL.Uniforms as V
 import qualified Data.Vinyl.Idiom.Identity as I
 
 
-import           Graphics.GLUtil
+import           Yage.Core.OpenGL hiding (Shader)
+import           GLSL
+
 import           Yage.Rendering.Resources.ResTypes
-import           Control.Exception         (ErrorCall)
-import           GHC.TypeLits (Symbol, KnownSymbol)
 
 class HasTexture t where
     getTexture :: t -> Texture
@@ -55,6 +60,40 @@ data ShaderData uniforms textures = ShaderData
     }
 
 makeLenses ''ShaderData
+
+
+data ShaderSource = ShaderSource
+    { _srcName   :: !String
+    , _srcType   :: !ShaderType
+    , _srcRaw    :: !GLShaderRaw
+    } deriving (Show, Eq, Ord)
+
+makeLenses ''ShaderSource
+
+compilationUnit :: Getter ShaderSource (ShaderType, ByteString)
+compilationUnit = to unit where
+    unit src = (src^.srcType, src^.srcRaw.to unRaw.to toStrict)
+
+instance Hashable ShaderSource where
+    hashWithSalt salt ShaderSource{_srcRaw} =
+        salt `hashWithSalt` (unRaw _srcRaw)
+
+
+data ShaderProgramUnit = ShaderProgramUnit
+    { _shaderName    :: !String
+    , _shaderSources :: [ShaderSource]
+    } deriving (Show, Eq, Ord)
+
+makeLenses ''ShaderProgramUnit
+
+
+data ShaderUnit d = ShaderUnit
+    { _shaderProgram    :: !ShaderProgramUnit
+    , _shaderData       :: d
+    } deriving (Show, Eq, Ord)
+
+makeLenses ''ShaderUnit
+
 ---------------------------------------------------------------------------------------------------
 
 

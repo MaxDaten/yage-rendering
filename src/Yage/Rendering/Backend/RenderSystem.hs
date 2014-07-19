@@ -59,14 +59,18 @@ mkRenderSystem toRender = do
 
 
 runRenderPass :: ( MultipleRenderTargets mrt, ViableVertex (Vertex vr)
-                 , IsShaderData entU entT, IsShaderData frameU frameT ) => 
+                 , IsShaderData entU entT
+                 , IsShaderData frameU frameT ) => 
+              
               PassDescr mrt (ShaderData frameU frameT) (ShaderData entU entT) (Vertex vr) -> 
+              
               [ RenderEntity (Vertex vr) (ShaderData entU entT) ] -> 
+              
               RenderSystem ()
 runRenderPass pass entities = do
     -- transform all Renderables into RenderSets
-    (setup, renderSets) <- {-# SCC managePassResoures #-} managePassResoures
-    {-# SCC managePassResoures #-} mkRenderSystem $ mkRenderPass setup renderSets
+    (setup, renderSets) <- managePassResoures
+    mkRenderSystem $ mkRenderPass setup renderSets
 
     where
     managePassResoures = do
@@ -75,8 +79,8 @@ runRenderPass pass entities = do
 
         -- load resources from framebuffer setup and all entities
         ((results, res', reslog), time) <- ioTime $ runResourceManager res $ 
-            (,) <$> ({-# SCC requestFramebufferSetup #-} requestFramebufferSetup pass)
-                <*> ({-# SCC requestRenderSets #-} forM entities $ requestRenderSet $ pass^.passShader)
+            (,) <$> (requestFramebufferSetup pass)
+                <*> (forM entities $ requestRenderSet $ pass^.passShader.shaderProgram)
         
         -- write resource loading log
         scribe resourceLog reslog
