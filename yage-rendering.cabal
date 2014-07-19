@@ -2,7 +2,7 @@
 -- see http://haskell.org/cabal/users-guide/
 
 name:                yage-rendering
-version:             0.0.4.0
+version:             0.0.5.0
 synopsis:            render framework for yet another graphics engine
 -- description:         
 license:             MIT
@@ -69,9 +69,12 @@ library
   -- ghc-prof-options:     -rtsopts -prof -auto-all
   default-language:     Haskell2010
   default-extensions:   NoImplicitPrelude
-                        OverloadedStrings
                         UnicodeSyntax
+                        
+                        OverloadedStrings
+                        
                         RecordWildCards
+                        NamedFieldPuns
                         TupleSections
                         
                         StandaloneDeriving
@@ -106,7 +109,7 @@ library
                         , linear                  == 1.10.*
                         , lens                    == 4.3.*
 
-                        , vinyl                   == 0.4.*
+                        , vinyl                   == 0.4.3
                         , vinyl-gl                == 0.2.*
 
 -------------------------------------------------------------------------------
