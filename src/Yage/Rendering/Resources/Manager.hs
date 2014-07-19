@@ -357,7 +357,9 @@ requestVAO mesh shader = requestResource loadedVertexArrays loadVertexArray (ret
 
 
 requestRenderSet :: ( ViableVertex (Vertex vr), IsShaderData u t ) => 
-                 ShaderProgramUnit -> RenderEntity (Vertex vr) (ShaderData u t) -> ResourceManager ( RenderSet (Uniforms u) )
+                    ShaderProgramUnit 
+                 -> RenderEntity (Vertex vr) (ShaderData u t)
+                 -> ResourceManager ( RenderSet (Uniforms u) )
 requestRenderSet withProgram ent = 
     RenderSet  <$> ( requestVAO ( ent^.entMesh ) withProgram )
                <*> ( pure $ ent^.entData.shaderUniforms )

@@ -14,7 +14,6 @@ module Yage.Rendering.Shader
     ( module Yage.Rendering.Shader
     , module VinylGL
     , module U
-    , module GLSL
     , Symbol, KnownSymbol
     ) where
 
@@ -36,7 +35,6 @@ import qualified Data.Vinyl.Idiom.Identity as I
 
 
 import           Yage.Core.OpenGL hiding (Shader)
-import           GLSL
 
 import           Yage.Rendering.Resources.ResTypes
 
@@ -63,20 +61,22 @@ makeLenses ''ShaderData
 
 
 data ShaderSource = ShaderSource
-    { _srcName   :: !String
-    , _srcType   :: !ShaderType
-    , _srcRaw    :: !GLShaderRaw
+    { _srcDebugName   :: !String
+    -- ^ just for debug
+    , _srcType        :: !ShaderType
+    , _srcRaw         :: !ByteString
+    -- ^ strict bytestring
     } deriving (Show, Eq, Ord)
 
 makeLenses ''ShaderSource
 
 compilationUnit :: Getter ShaderSource (ShaderType, ByteString)
 compilationUnit = to unit where
-    unit src = (src^.srcType, src^.srcRaw.to unRaw.to toStrict)
+    unit src = (src^.srcType, src^.srcRaw)
 
 instance Hashable ShaderSource where
     hashWithSalt salt ShaderSource{_srcRaw} =
-        salt `hashWithSalt` (unRaw _srcRaw)
+        salt `hashWithSalt` _srcRaw
 
 
 data ShaderProgramUnit = ShaderProgramUnit
