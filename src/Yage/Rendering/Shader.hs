@@ -15,6 +15,7 @@ module Yage.Rendering.Shader
     , module VinylGL
     , module U
     , Symbol, KnownSymbol
+    , ShaderType(..)
     ) where
 
 import           Yage.Prelude
@@ -65,7 +66,7 @@ data ShaderSource = ShaderSource
     -- ^ just for debug
     , _srcType        :: !ShaderType
     , _srcRaw         :: !ByteString
-    -- ^ strict bytestring
+    -- ^ strict `ByteString`
     } deriving (Show, Eq, Ord)
 
 makeLenses ''ShaderSource
