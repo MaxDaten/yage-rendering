@@ -1,6 +1,7 @@
 {-# LANGUAGE TemplateHaskell  #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ConstraintKinds  #-}
+{-# LANGUAGE TypeOperators    #-}
 module Yage.Rendering.Backend.RenderSystem
     ( module Yage.Rendering.Backend.RenderSystem
     , module Renderer
@@ -60,14 +61,15 @@ mkRenderSystem toRender = do
 
 runRenderPass :: ( MultipleRenderTargets mrt, ViableVertex (Vertex vr)
                  , IsShaderData entU entT
-                 , IsShaderData frameU frameT ) => 
-              
-              PassDescr mrt (ShaderData frameU frameT) (ShaderData entU entT) (Vertex vr) -> 
-              
-              [ RenderEntity (Vertex vr) (ShaderData entU entT) ] -> 
-              
-              RenderSystem ()
-runRenderPass pass entities = do
+                 , IsShaderData frameU frameT
+                 , u <: frameU, t <: frameT
+                 , u <: entU, t <: entT
+                 ) =>
+                  PassDescr mrt (Shader u t (Vertex vr))
+               -> ShaderData frameU frameT
+               -> [ RenderEntity (Vertex vr) (ShaderData entU entT) ]
+               -> RenderSystem ()
+runRenderPass pass frameData entities = do
     -- transform all Renderables into RenderSets
     (setup, renderSets) <- managePassResoures
     mkRenderSystem $ mkRenderPass setup renderSets
@@ -79,7 +81,7 @@ runRenderPass pass entities = do
 
         -- load resources from framebuffer setup and all entities
         ((results, res', reslog), time) <- ioTime $ runResourceManager res $ 
-            (,) <$> (requestFramebufferSetup pass)
+            (,) <$> (requestFramebufferSetup pass frameData)
                 <*> (forM entities $ requestRenderSet $ pass^.passShader.shaderProgram)
         
         -- write resource loading log

@@ -34,12 +34,12 @@ type MeshId   = ByteString
 -- TODO: Materials to component
 data MeshComponent = MeshComponent
   { _componentId             :: MeshId
-  , _componentIndexBuffer    :: (VS.Vector Int) 
+  , _componentIndexBuffer    :: (VS.Vector Int)
   , _componentHash           :: MeshHash
   } deriving ( Typeable, Generic )
 
 
--- TODO: smart vertex book-keeping? 
+-- TODO: smart vertex book-keeping?
 data Mesh v = Mesh
     { _meshId             :: MeshId
     , _meshVertexBuffer   :: (VS.Vector v)
@@ -52,12 +52,12 @@ makeLenses ''Mesh
 
 
 
-instance (Storable v, Show v) => Show (Mesh v) where
-    show Mesh{..} = show $ 
-      format "Mesh { id = {}, #vertexBuffer = {}, meshHash = {}-{}, components = {} }"
+instance (Storable v) => Show (Mesh v) where
+    show Mesh{..} = show $
+      format "Mesh { id = {}, #vertexBuffer = {}, meshHash = {}, components = {} }"
                ( Shown _meshId
                , Shown $ VS.length _meshVertexBuffer
-               , Shown $ _meshVertexBuffer
+               --, Shown $ _meshVertexBuffer
                , hex _meshHash
                , Shown $ _meshComponents^..traverse
                )
@@ -101,7 +101,7 @@ meshComponentsHash = meshComponents.to compHashes where
 {-# INLINE meshComponentsHash #-}
 
 
--- | concat of the indices of all `MeshComponent`s 
+-- | concat of the indices of all `MeshComponent`s
 concatedMeshIndices :: Getter (Mesh v) (VS.Vector Int)
 concatedMeshIndices = meshComponents.to concatIndices where
     concatIndices compMap = VS.concat $ compMap^..traverse.componentIndexBuffer
@@ -110,7 +110,7 @@ concatedMeshIndices = meshComponents.to concatIndices where
 
 meshIndexRanges :: Getter (Mesh v) [(Int, Int)]
 meshIndexRanges = meshComponents.to ranges where
-    ranges compMap = snd $ mapAccumL (\pos len -> (pos+len, (pos, pos+len-1))) 0 $ 
+    ranges compMap = snd $ mapAccumL (\pos len -> (pos+len, (pos, pos+len-1))) 0 $
                         filter (>0) $ compMap^..traverse.componentIndexBuffer.to VS.length
 {-# INLINE meshIndexRanges #-}
 
@@ -120,25 +120,25 @@ meshIndexRanges = meshComponents.to ranges where
 meshVertices :: Storable v => Lens' (Mesh v) (VS.Vector v)
 meshVertices = lens _meshVertexBuffer setter where
   setter mesh verts = mesh & meshVertexBuffer .~ verts
-                           & meshHash .~ hashVector verts 
+                           & meshHash .~ hashVector verts
 {-# INLINE meshVertices #-}
 
 
 mkFromVerticesF :: ( Storable v, Foldable f ) => MeshId -> f v -> Mesh v
-mkFromVerticesF ident = mkFromVertices ident . VS.fromList . toList 
+mkFromVerticesF ident = mkFromVertices ident . VS.fromList . toList
 
 
 -- | mesh with single component with trivial indices
 mkFromVertices :: Storable v => MeshId -> VS.Vector v -> Mesh v
 mkFromVertices ident verts =
-  emptyMesh & meshId               .~ ident 
+  emptyMesh & meshId               .~ ident
             & meshVertices         .~ verts
             & meshComponents.at "" ?~ (makeComponent "" ( VS.generate (VS.length verts) id ))
 
 
 
 makeComponent :: MeshId -> VS.Vector Int -> MeshComponent
-makeComponent ident indices = MeshComponent ident indices (hashVector indices) 
+makeComponent ident indices = MeshComponent ident indices (hashVector indices)
 {-# INLINE makeComponent #-}
 
 
@@ -183,7 +183,7 @@ appendComponent mesh (comp, verts) =
 
 
 appendGeometry :: ( Storable v ) => Mesh v -> (MeshId, TriGeo v) -> Mesh v
-appendGeometry mesh (ident, geo) = 
+appendGeometry mesh (ident, geo) =
     let idxs  = geo^.flattenIndices
         verts = VS.convert $ geo^.geoVertices
     in mesh `appendComponent` (makeComponent ident idxs, verts)
@@ -193,7 +193,7 @@ appendGeometry mesh (ident, geo) =
 Utilities
 --}
 
--- | colapse surfaces 
+-- | colapse surfaces
 flattenIndices :: Getter (TriGeo v) (VS.Vector Int)
 flattenIndices = to $ VS.concatMap (VS.fromList . toList) . VS.convert . flatten . _geoSurfaces
   where flatten = V.foldl' (\accum (GeoSurface surf) -> accum V.++ surf) V.empty
@@ -206,7 +206,7 @@ hashVector = XH.xxHash' . BS.vectorToByteString
 
 -- stolen from http://www.haskell.org/pipermail/beginners/2010-October/005571.html
 octets :: Word32 -> [Word8]
-octets w = 
+octets w =
     [ fromIntegral (w `shiftR` 24)
     , fromIntegral (w `shiftR` 16)
     , fromIntegral (w `shiftR` 8)

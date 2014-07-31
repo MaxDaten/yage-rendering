@@ -35,7 +35,7 @@ import qualified Graphics.VinylGL.Uniforms as V
 import qualified Data.Vinyl.Idiom.Identity as I
 
 
-import           Yage.Core.OpenGL hiding (Shader)
+import           Yage.Core.OpenGL hiding (Shader, shaderSource)
 
 import           Yage.Rendering.Resources.ResTypes
 
@@ -88,12 +88,17 @@ data ShaderProgramUnit = ShaderProgramUnit
 makeLenses ''ShaderProgramUnit
 
 
-data ShaderUnit d = ShaderUnit
-    { _shaderProgram    :: !ShaderProgramUnit
-    , _shaderData       :: d
+data ShaderUnit p d v = ShaderUnit
+    { _shaderProgram    :: p
     } deriving (Show, Eq, Ord)
 
 makeLenses ''ShaderUnit
+
+
+type Shader u t v = ShaderUnit ShaderProgramUnit (ShaderData u t) v
+
+class HasShaderSource t where
+    shaderSource :: Getter t ShaderSource
 
 ---------------------------------------------------------------------------------------------------
 
@@ -105,7 +110,7 @@ deriving instance Show ShaderProgram
 
 
 textureFields :: (AllHasTextures ts, Implicit (FieldNames ts)) => Textures ts -> [(String, Texture)]
-textureFields rec = go implicitly rec [] where 
+textureFields rec = go implicitly rec [] where
     go :: AllHasTextures ts => FieldNames ts -> PlainFieldRec ts -> [(String, Texture)] -> [(String, Texture)]
     go RNil RNil ts = ts
     go (I.Identity n :& ns) (x :& xs) ts = (n, getTexture x) : go ns xs ts
@@ -121,8 +126,8 @@ append (ShaderData u t) (ShaderData u' t') = ShaderData (u <+> u') (t <+> t')
 
 setUniforms :: forall ts. UniformFields (Uniforms ts)
             => ShaderProgram -> Uniforms ts -> IO ()
-setUniforms s x = 
-    V.setUniforms s x 
+setUniforms s x =
+    V.setUniforms s x
         `catch` \(e::ErrorCall) -> error . show $ format "{}: {}" (Shown e, Shown s)
 
 instance Implicit (FieldNames '[]) where

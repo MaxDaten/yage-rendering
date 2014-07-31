@@ -49,8 +49,8 @@ data UpdateTag a = Clean a | Dirty a
 
 
 instance Applicative UpdateTag where
-    pure = return 
-    (<*>) = ap 
+    pure = return
+    (<*>) = ap
 
 
 instance Monad UpdateTag where

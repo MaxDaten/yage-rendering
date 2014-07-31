@@ -34,12 +34,12 @@ type DefaultRenderTarget = DefaultFramebuffer RenderTargets
 type TargetSlot = ByteString
 data RenderTarget mrt = RenderTarget TargetSlot mrt
 
-data PassDescr target perFrame perEntity vertex where
+data PassDescr target prog where
     PassDescr :: { _passTarget         :: RenderTarget target
-                 , _passShader         :: ShaderUnit perFrame
+                 , _passShader         :: prog
                  , _passPreRendering   :: Renderer ()
                  , _passPostRendering  :: Renderer ()
-                 } -> PassDescr target perFrame perEntity vertex
+                 } -> PassDescr target prog
 
 makeLenses ''PassDescr
 
@@ -61,7 +61,7 @@ mkSingleTargetFromSpec name spec = RenderTarget (name ++ "-fbo")
     $ SingleRenderTarget $ mkTexture (name ++ "-buffer") $ TextureBuffer GL.Texture2D spec
 
 
-renderTargets :: PassDescr mrt f e v -> mrt
+renderTargets :: PassDescr mrt p -> mrt
 renderTargets PassDescr{_passTarget} = let RenderTarget _ mrt = _passTarget in mrt 
 
 
