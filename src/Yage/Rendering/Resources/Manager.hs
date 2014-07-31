@@ -346,8 +346,15 @@ requestElementBuffer mesh = do
 
 
 requestVAO :: (ViableVertex (Vertex vr)) => Mesh (Vertex vr) -> ShaderProgramUnit -> ResourceManager VertexArrayRHI
-requestVAO mesh shader = requestResource loadedVertexArrays loadVertexArray (return.return) (mesh^.meshId,shader)
+requestVAO mesh shader = requestResource loadedVertexArrays loadVertexArray updateBindings (mesh^.meshId,shader)
     where
+
+    updateBindings vao = do
+        _vbuff           <- requestVertexbuffer mesh
+        _shaderProg      <- requestShader shader
+        _ebo             <- requestElementBuffer mesh
+        return $ Clean vao
+
     loadVertexArray = do
         vbuff           <- requestVertexbuffer mesh
         shaderProg      <- requestShader shader
