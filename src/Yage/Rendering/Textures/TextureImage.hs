@@ -42,7 +42,7 @@ data TextureImage =
        -- | An image in true color and an alpha channel.
      | TexRGBA8 (GLTexture PixelRGBA8)
      --  An image in the colorspace used by Jpeg images.
-     -- we does not support YCbrCr as an internal texture format 
+     -- we does not support YCbrCr as an internal texture format
      -- (converting will be supported outside the rendering core)
      -- | TexYCbCr8 (Image PixelYCbCr8)
        -- | An Image in the sRGB color space
@@ -91,17 +91,17 @@ fromDynamic = aux
 
 -- |deriving version of texture loading. derives the PixelInternalFormat an PixelType of the image
 -- loads into the currently bound texture object in the context
-loadTextureImage' :: GL.TwoDimensionalTextureTarget t => 
+uploadTextureImage' :: GL.TwoDimensionalTextureTarget t =>
                   t -> TextureImage -> IO ()
-loadTextureImage' target textureImg = 
-    loadTextureImage target textureImg ( pixelSpec textureImg ) 
+uploadTextureImage' target textureImg =
+    uploadTextureImage target textureImg ( pixelSpec textureImg )
 
 
 -- |explicit texture loading. the types and internalFormat
 -- loads into the currently bound texture object in the context
-loadTextureImage :: GL.TwoDimensionalTextureTarget t => 
+uploadTextureImage :: GL.TwoDimensionalTextureTarget t =>
                  t -> TextureImage -> PixelSpec -> IO ()
-loadTextureImage target textureImg spec = aux textureImg
+uploadTextureImage target textureImg spec = aux textureImg
     where
     aux (TexY8     (GLTexture (Image w h p))) = loadTex p (texSize w h)
     aux (TexYF     (GLTexture (Image w h p))) = loadTex p (texSize w h)
@@ -109,17 +109,17 @@ loadTextureImage target textureImg spec = aux textureImg
     aux (TexRGBF   (GLTexture (Image w h p))) = loadTex p (texSize w h)
     aux (TexRGBA8  (GLTexture (Image w h p))) = loadTex p (texSize w h)
     aux (TexSRGB8  (GLTexture (Image w h p))) = loadTex p (texSize w h)
-    
-    loadTex :: IsPixelData p => p -> GL.TextureSize2D -> IO () 
+
+    loadTex :: IsPixelData p => p -> GL.TextureSize2D -> IO ()
     loadTex p sz = texImage2D target p sz spec
-    
+
     texSize w h = GL.TextureSize2D (fromIntegral w) (fromIntegral h)
 
 
 
-texImage2D :: (GL.TwoDimensionalTextureTarget t, IsPixelData d) => 
+texImage2D :: (GL.TwoDimensionalTextureTarget t, IsPixelData d) =>
             t -> d -> GL.TextureSize2D -> PixelSpec -> IO ()
-texImage2D target pxdata texSize (PixelSpec dataType components internalFormat) = 
+texImage2D target pxdata texSize (PixelSpec dataType components internalFormat) =
     withPixels pxdata $
         GL.texImage2D target GL.NoProxy 0 internalFormat texSize 0 . GL.PixelData components dataType
 

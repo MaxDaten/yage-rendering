@@ -16,17 +16,17 @@ import Yage.Rendering.Textures.TextureImage
 
 -- | In OpenGL Order
 data Cube a = Cube
-    { cubeFaceRight :: !a 
-    -- ^ TextureCubeMapPositiveX   
-    , cubeFaceLeft  :: !a 
-    -- ^ TextureCubeMapNegativeX  
-    , cubeFaceTop   :: !a 
-    -- ^ TextureCubeMapPositiveY  
-    , cubeFaceBottom:: !a 
-    -- ^ TextureCubeMapNegativeY  
-    , cubeFaceFront :: !a 
-    -- ^ TextureCubeMapPositiveZ  
-    , cubeFaceBack  :: !a 
+    { cubeFaceRight :: !a
+    -- ^ TextureCubeMapPositiveX
+    , cubeFaceLeft  :: !a
+    -- ^ TextureCubeMapNegativeX
+    , cubeFaceTop   :: !a
+    -- ^ TextureCubeMapPositiveY
+    , cubeFaceBottom:: !a
+    -- ^ TextureCubeMapNegativeY
+    , cubeFaceFront :: !a
+    -- ^ TextureCubeMapPositiveZ
+    , cubeFaceBack  :: !a
     -- ^ TextureCubeMapNegativeZ
     } deriving ( Show, Functor, Foldable, Traversable, Data, Typeable )
 
@@ -53,12 +53,12 @@ glCubeFaces =
         GL.TextureCubeMapNegativeZ
 
 
-loadCubeTextureImage :: TextureCube -> IO ()
-loadCubeTextureImage cubeTexs = 
+uploadCubeTextureImage :: TextureCube -> IO ()
+uploadCubeTextureImage cubeTexs =
     sequenceA_ $ loadTex <$> glCubeFaces <*> cubeTexs
 
     where
 
     loadTex :: GL.TextureTargetCubeMapFace -> TextureImage -> IO ()
-    loadTex = loadTextureImage'
+    loadTex = uploadTextureImage'
 

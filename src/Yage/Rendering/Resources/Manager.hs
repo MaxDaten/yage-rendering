@@ -157,10 +157,10 @@ requestTexture texture@(Texture name newConfig texData) = do
     -- | pushes texture to opengl
     loadData :: TextureData -> ResourceManager ()
     loadData (Texture2D img) = io $ do
-        Tex.loadTextureImage' GL.Texture2D img
+        Tex.uploadTextureImage' GL.Texture2D img
 
     loadData (TextureCube cubemap) = io $ do
-        Tex.loadCubeTextureImage cubemap
+        Tex.uploadCubeTextureImage cubemap
 
     loadData (TextureBuffer target spec) = io $ do
         let V2 w h      = spec^.Tex.texSpecDimension
