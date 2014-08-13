@@ -10,6 +10,7 @@ module Yage.Rendering.Resources.ResTypes where
 
 import           Yage.Prelude                        hiding ( Text )
 import           Yage.Lens
+import           Yage.Math                           (V2)
 
 import           Data.Data
 import           Data.Hashable                       ()
@@ -58,7 +59,7 @@ data TextureFiltering = TextureFiltering
     } deriving ( Show, Eq, Ord, Typeable, Data )
 
 data TextureWrapping = TextureWrapping
-    { _texWrapRepetition :: GL.Repetition 
+    { _texWrapRepetition :: GL.Repetition
     -- ^ GL.Repeated | GL.Mirrored
     , _texWrapClamping   :: GL.Clamping
     -- ^ GL.Clamp | GL.Repeat | GL.ClampToEdge | GL.ClampToBorder
@@ -73,7 +74,7 @@ type RenderTargets = AttachmentTypes Texture Renderbuffer
 textureId :: Lens' Texture ByteString
 textureId = lens getter setter where
     getter (Texture tid _ _) = tid
-    setter (Texture _ conf tdata) tid = Texture tid conf tdata  
+    setter (Texture _ conf tdata) tid = Texture tid conf tdata
 
 
 textureData :: Lens' Texture TextureData
@@ -93,7 +94,7 @@ mkTexture texid texdata = Texture texid def texdata
 
 
 isTextureBuffer :: Texture -> Bool
-isTextureBuffer tex = 
+isTextureBuffer tex =
     case tex^.textureData of
         TextureBuffer _ _ -> True
         _ -> False
@@ -130,6 +131,10 @@ instance GetRectangle Texture Int where
 
 
 
+textureDimension :: Getter Texture (V2 Int)
+textureDimension = textureSpec.TexImg.texSpecDimension
+
+
 --instance (FramebufferSpec target RenderTargets) => HasRectangle target Int where
 --    rectangle = lens getter setter where
 --        getter fboSpec =
@@ -146,8 +151,8 @@ instance Ord Texture where
 
 
 instance Show Texture where
-    show tex = 
-        unpack $ format "{}.{} spec={}, conf={}" 
+    show tex =
+        unpack $ format "{}.{} spec={}, conf={}"
             ( Shown $ tex^.textureData.to toConstr
             , Shown $ tex^.textureId
             , Shown $ tex^.textureSpec

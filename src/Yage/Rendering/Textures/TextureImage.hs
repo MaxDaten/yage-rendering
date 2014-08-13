@@ -88,6 +88,18 @@ fromDynamic = aux
     aux (ImageRGBA16    _img) = Left "not supported format: RGBA16"
     aux (ImageCMYK8     _img) = Left "not supported format: CMYK8"
     aux (ImageCMYK16    _img) = Left "not supported format: CMYK16"
+{-# INLINE fromDynamic #-}
+
+toDynamic :: TextureImage -> DynamicImage
+toDynamic = aux
+    where
+    aux ( TexY8    ( GLTexture img ) )   = ImageY8 img
+    aux ( TexYF    ( GLTexture img ) )   = ImageYF img
+    aux ( TexRGB8  ( GLTexture img ) )   = ImageRGB8 img
+    aux ( TexRGBF  ( GLTexture img ) )   = ImageRGBF img
+    aux ( TexRGBA8 ( GLTexture img ) )   = ImageRGBA8 img
+    aux ( TexSRGB8 ( GLTexture img ) )   = ImageRGB8 (convertImage img)
+{-# INLINE toDynamic #-}
 
 -- |deriving version of texture loading. derives the PixelInternalFormat an PixelType of the image
 -- loads into the currently bound texture object in the context
@@ -140,26 +152,27 @@ pixelDataType :: forall pixel. (Pixel pixel, HasGLType (PixelBaseComponent pixel
 pixelDataType _ = glType ( error "pixelDataType: invalid access" :: PixelBaseComponent pixel)
 
 
-textureDimension :: Getter TextureImage (V2 Int)
-textureDimension = textureImageSpec.texSpecDimension
+textureImageDimension :: Getter TextureImage (V2 Int)
+textureImageDimension = textureImageSpec.texSpecDimension
 
+withTextureImage :: TextureImage -> (forall pixel. Pixel pixel => Image pixel -> a) -> a
+withTextureImage texImg f = withTextureImageCtr texImg (uncurry $ const f)
 
-textureImageMap :: (forall pixel. Pixel pixel => Image pixel -> a) -> TextureImage -> a
-textureImageMap f = aux
-    where
-    aux (TexY8     (GLTexture img)) = f img
-    aux (TexYF     (GLTexture img)) = f img
-    aux (TexRGB8   (GLTexture img)) = f img
-    aux (TexRGBF   (GLTexture img)) = f img
-    aux (TexRGBA8  (GLTexture img)) = f img
-    aux (TexSRGB8  (GLTexture img)) = f img
+withTextureImageCtr :: TextureImage -> (forall pixel. Pixel pixel => (TextureCtr pixel, Image pixel) -> a) -> a
+withTextureImageCtr texImg f = aux texImg where
+    aux (TexY8     (GLTexture img)) = f (TexY8, img)
+    aux (TexYF     (GLTexture img)) = f (TexYF, img)
+    aux (TexRGB8   (GLTexture img)) = f (TexRGB8, img)
+    aux (TexRGBF   (GLTexture img)) = f (TexRGBF, img)
+    aux (TexRGBA8  (GLTexture img)) = f (TexRGBA8, img)
+    aux (TexSRGB8  (GLTexture img)) = f (TexSRGB8, img)
     {-# INLINE aux #-}
-{-# INLINE textureImageMap #-}
+{-# INLINE withTextureImage #-}
 
 textureImageSpec :: Getter TextureImage TextureImageSpec
 textureImageSpec = to getter where
     getter tex =
-        let dimension = V2 (textureImageMap imageWidth tex) (textureImageMap imageHeight tex)
+        let dimension = V2 (withTextureImage tex imageWidth) (withTextureImage tex imageHeight)
             pxSpec    = pixelSpec tex
         in TextureImageSpec dimension pxSpec
     {-# INLINE getter #-}
@@ -202,3 +215,23 @@ instance Show TextureImage where
     show = debugString
 
 
+class IsTextureImage a where
+    toTextureImage :: a -> TextureImage
+
+instance IsTextureImage (Image Pixel8) where
+    toTextureImage = mkTextureImg TexY8
+
+instance IsTextureImage (Image PixelF) where
+    toTextureImage = mkTextureImg TexYF
+
+instance IsTextureImage (Image PixelRGB8) where
+    toTextureImage = mkTextureImg TexRGB8
+
+instance IsTextureImage (Image PixelRGBF) where
+    toTextureImage = mkTextureImg TexRGBF
+
+instance IsTextureImage (Image PixelRGBA8) where
+    toTextureImage = mkTextureImg TexRGBA8
+
+instance IsTextureImage (Image PixelSRGB8) where
+    toTextureImage = mkTextureImg TexSRGB8
