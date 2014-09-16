@@ -143,7 +143,8 @@ textureDimension = textureSpec.TexImg.texSpecDimension
 
 --        setter = error "FramebufferSpec: no settable rectangle"
 
-
+defaultTextureConfig :: TextureConfig
+defaultTextureConfig = TextureConfig def def
 
 
 instance Ord Texture where
@@ -186,7 +187,7 @@ instance Hashable FilePath where
     hashWithSalt salt = hashWithSalt salt . encode
 
 instance Default TextureConfig where
-    def = TextureConfig def def
+    def = defaultTextureConfig
 
 instance Default TextureWrapping where
     def = TextureWrapping GL.Repeated GL.Repeat
