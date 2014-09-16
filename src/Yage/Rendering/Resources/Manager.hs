@@ -226,18 +226,19 @@ requestTexture texture@(Texture name newConfig texData) = do
         let TextureFiltering minification mipmap magnification = newConfig^.texConfFiltering
             TextureWrapping repetition clamping = newConfig^.texConfWrapping
 
-        -- NOTE: filtering is neccessary for texture completeness
         when (isJust mipmap) $ autoGenerateMipMap texData
+
+        -- NOTE: filtering is neccessary for texture completeness
         withTextureParameter texture GL.textureFilter $= ((minification, mipmap), magnification)
         case texData of
             Texture2D _ -> do
+                GL.texture2DWrap $= (repetition, clamping)
+            TextureBuffer _ _ -> do
                 GL.texture2DWrap $= (repetition, clamping)
 
             TextureCube _ -> do
                 GL.texture3DWrap GL.TextureCubeMap $= (repetition, clamping)
 
-            TextureBuffer _ _ -> do
-                GL.texture2DWrap $= (repetition, clamping)
 
     autoGenerateMipMap :: TextureData -> IO ()
     autoGenerateMipMap = \case
