@@ -187,24 +187,24 @@ mkTextureSpec dim dataType components internalFormat = TextureImageSpec dim $ Pi
 -- | derives complete 'TextureImageSpec' from the components
 -- The component type will be UnsignedByte (Word8)
 mkTextureSpec' :: V2 Int -> GL.PixelFormat -> TextureImageSpec
-mkTextureSpec' dim components = TextureImageSpec dim $ PixelSpec GL.UnsignedByte components (compsToInternal components)
+mkTextureSpec' dim components = TextureImageSpec dim $ PixelSpec GL.UnsignedByte components (defaultInternal components)
 {-# INLINE mkTextureSpec' #-}
 
 
 -- | simple pixel component to internalFormat mapping, assumes UnsignedByte (Word8) components
-compsToInternal :: GL.PixelFormat -> GL.PixelInternalFormat
-compsToInternal GL.DepthComponent   = GL.DepthComponent'
-compsToInternal GL.DepthStencil     = GL.Depth32fStencil8
-compsToInternal GL.Red              = GL.R8
-compsToInternal GL.RGB              = GL.RGB8
-compsToInternal GL.BGR              = GL.RGB8
-compsToInternal GL.RGBA             = GL.RGBA8
-compsToInternal GL.BGRA             = GL.RGBA8
-compsToInternal GL.Luminance        = GL.Luminance8
-compsToInternal GL.LuminanceAlpha   = GL.Luminance8Alpha8
+defaultInternal :: GL.PixelFormat -> GL.PixelInternalFormat
+defaultInternal GL.DepthComponent   = GL.DepthComponent'
+defaultInternal GL.DepthStencil     = GL.Depth32fStencil8
+defaultInternal GL.Red              = GL.R8
+defaultInternal GL.RGB              = GL.RGB8
+defaultInternal GL.BGR              = GL.RGB8
+defaultInternal GL.RGBA             = GL.RGBA8
+defaultInternal GL.BGRA             = GL.RGBA8
+defaultInternal GL.Luminance        = GL.Luminance8
+defaultInternal GL.LuminanceAlpha   = GL.Luminance8Alpha8
 -- TODO complete mapping
-compsToInternal pf = error $ unpack $ format "unsupported format: {}" (Only $ Shown pf )
-{-# INLINE compsToInternal #-}
+defaultInternal pf = error $ unpack $ format "unsupported format: {}" (Only $ Shown pf )
+{-# INLINE defaultInternal #-}
 
 
 debugString :: TextureImage -> String
