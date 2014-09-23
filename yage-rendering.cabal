@@ -56,11 +56,7 @@ library
 
 
   ghc-prof-options:     -rtsopts -Wall -prof
-
-  If flag(perf)
-    ghc-options:        -threaded -O2
-  Else
-    ghc-options:        -threaded -O0
+  ghc-options:          -threaded
 
   if flag(dev)
     ghc-options:        -Wall
