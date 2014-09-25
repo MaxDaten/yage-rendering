@@ -36,7 +36,7 @@ import           Yage.Rendering.Resources.Types
 
 
 
-import           Yage.Rendering.Shader
+import           Yage.Rendering.Shader                as Shader
 import qualified Yage.Rendering.Textures              as Tex
 import           Yage.Rendering.Vertex
 import           Yage.Rendering.Mesh                  as Mesh
@@ -285,7 +285,7 @@ requestShader shader = requestResource loadedShaders loadShader (return.tagClean
 
     loadShader :: ResourceManager ShaderRHI
     loadShader = do -- _shaderSrcRaw.to unRaw
-        prg <- io $! GL.loadShaderProgramBS ( shader^.shaderSources^..traverse.compilationUnit )
+        prg <- io $! Shader.loadShaderProgram ( shader^.shaderSources^..traverse.compilationUnit )
                 `catch`
                 (\(e::IOError) -> ioError (userError $ (shader^.shaderName) ++ ": " ++ show e))
 
