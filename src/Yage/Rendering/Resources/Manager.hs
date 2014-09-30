@@ -1,49 +1,49 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing  #-}
 {-# OPTIONS_GHC -fno-warn-type-defaults   #-}
+{-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns        #-}
 {-# LANGUAGE Rank2Types            #-}
-{-# LANGUAGE RecordWildCards       #-}
-{-# LANGUAGE TupleSections         #-}
-{-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
-{-# LANGUAGE LambdaCase            #-}
-{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE TupleSections         #-}
 {-# LANGUAGE TypeOperators         #-}
 
 module Yage.Rendering.Resources.Manager where
 
-import           Yage.Prelude
 import           Yage.Lens
+import           Yage.Prelude
 
-import           Foreign.Ptr                          (nullPtr)
-import qualified Data.Vector.Storable                 as VS (Vector, map)
+import qualified Data.Vector.Storable               as VS (Vector, map)
+import           Foreign.Ptr                        (nullPtr)
 
-import           Control.Monad.RWS                    hiding (forM, forM_, mapM_, mapM)
+import           Control.Monad.RWS                  hiding (forM, forM_, mapM,
+                                                     mapM_)
 
 
-import qualified Yage.Core.OpenGL                     as GL
-import           Yage.Core.OpenGL                     (($=))
+import           Yage.Core.OpenGL                   (($=))
+import qualified Yage.Core.OpenGL                   as GL
 
 
 import           Yage.Rendering.Backend.Framebuffer
-import           Yage.Rendering.Backend.RenderPass
 import           Yage.Rendering.Backend.Renderer
+import           Yage.Rendering.Backend.RenderPass
 
 import           Yage.Rendering.Resources.ResTypes
 import           Yage.Rendering.Resources.Types
 
 
 
-import           Yage.Rendering.Shader                as Shader
-import qualified Yage.Rendering.Textures              as Tex
-import           Yage.Rendering.Vertex
-import           Yage.Rendering.Mesh                  as Mesh
+import           Yage.Rendering.Mesh                as Mesh
 import           Yage.Rendering.RenderEntity
+import           Yage.Rendering.Shader              as Shader
+import qualified Yage.Rendering.Textures            as Tex
+import           Yage.Rendering.Vertex
 
 
-import           Linear                               (V2 (..), _x, _y)
+import           Linear                             (V2 (..), _x, _y)
 
 ---------------------------------------------------------------------------------------------------
 
@@ -57,7 +57,7 @@ runResourceManager res rm = io $ runRWST rm () res
 requestResource :: (Ord key)
                 => Lens' GLResources (Map key res)
                 -- ^ state-field accessor
-                -> (ResourceManager res)
+                -> ResourceManager res
                 -- ^ loading function
                 -> (res -> ResourceManager (UpdateTag res))
                 -- ^ updating function old res to new res
@@ -68,7 +68,7 @@ requestResource accessor loader updater resource = do
     resmap <- use accessor
     uitem <- maybe
         ( Dirty <$> loader  )
-        ( updater )
+         updater
         ( {-# SCC "requestResource.at" #-} resmap^.at resource )
 
     updateTag return updateItem uitem
@@ -92,13 +92,13 @@ requestFramebuffer (fboIdent, mrt)
     -- | creates a new framebuffer according to the given specs
     compileFBO = do
         tell [ unpack $ format "create fbo {}" (Only $ Shown fboIdent ) ]
-        fbo <- io $ GL.genObjectName
+        fbo <- io GL.genObjectName
         io $ GL.bindFramebuffer GL.Framebuffer $= fbo
 
         forM_ (allAttachments mrt) attachTargetToFBO
-        if (null $ fboColors mrt)
-            then io $ GL.drawBuffer  $= GL.NoBuffers
-            else io $ GL.drawBuffers $= (map toBufferMode $ fboColors mrt)
+        io $ if null $ fboColors mrt
+            then GL.drawBuffer  $= GL.NoBuffers
+            else GL.drawBuffers $= map toBufferMode (fboColors mrt)
 
         status <- io . GL.get $ GL.framebufferStatus GL.Framebuffer
         return $ case status of
@@ -145,7 +145,7 @@ requestTexture texture@(Texture name newConfig texData) = do
     newTexture :: ResourceManager TextureRHI
     newTexture = do
         let chkErr = checkErrorOf ( unpack $ format "newTexture: {}" (Only $ Shown texture ) )
-        obj <- io $ GL.genObjectName
+        obj <- io GL.genObjectName
         io $ withTextureBind texture $= Just obj
 
         chkErr $ loadData $ texture^.textureData
@@ -156,10 +156,10 @@ requestTexture texture@(Texture name newConfig texData) = do
 
     -- | pushes texture to opengl
     loadData :: TextureData -> ResourceManager ()
-    loadData (Texture2D img) = io $ do
+    loadData (Texture2D img) = io $
         Tex.uploadTextureImage' GL.Texture2D img
 
-    loadData (TextureCube cubemap) = io $ do
+    loadData (TextureCube cubemap) = io $
         Tex.uploadCubeTextureImage cubemap
 
     loadData (TextureBuffer target spec) = io $ do
@@ -231,12 +231,12 @@ requestTexture texture@(Texture name newConfig texData) = do
         -- NOTE: filtering is neccessary for texture completeness
         withTextureParameter texture GL.textureFilter $= ((minification, mipmap), magnification)
         case texData of
-            Texture2D _ -> do
+            Texture2D _ ->
                 GL.texture2DWrap $= (repetition, clamping)
-            TextureBuffer _ _ -> do
+            TextureBuffer _ _ ->
                 GL.texture2DWrap $= (repetition, clamping)
 
-            TextureCube _ -> do
+            TextureCube _ ->
                 GL.texture3DWrap GL.TextureCubeMap $= (repetition, clamping)
 
 
@@ -284,18 +284,10 @@ requestShader :: ShaderProgramUnit -> ResourceManager ShaderRHI
 requestShader shader = requestResource loadedShaders loadShader (return.tagClean) shader where
 
     loadShader :: ResourceManager ShaderRHI
-    loadShader = do -- _shaderSrcRaw.to unRaw
-        prg <- io $! Shader.loadShaderProgram ( shader^.shaderSources^..traverse.compilationUnit )
-                `catch`
-                (\(e::IOError) -> ioError (userError $ (shader^.shaderName) ++ ": " ++ show e))
+    loadShader = io $!
+        Shader.loadShaderProgram ( shader^.shaderSources^..traverse.compilationUnit )
+            `catch` \(e::IOError) -> ioError (userError $ (shader^.shaderName) ++ ": " ++ show e)
 
-        -- warning missing Link error
-        --printTF "shader: {}\n{}\n{}\n\n"
-        --        ( Shown $ shader^.shaderName
-        --        , Shown $ shader^.shaderSources^..traverse.compilationUnit
-        --        , Shown $ prg
-        --        )
-        return prg
 
 
 requestVertexbuffer :: (Storable (Vertex vr)) => Mesh (Vertex vr) -> ResourceManager (BufferedVertices vr)
@@ -387,9 +379,8 @@ requestRenderSet withProgram ent =
 
 
 
-requestTextureItem :: HasTexture t => (String, t) -> ResourceManager GLTextureItem
-requestTextureItem (fieldName, t) = do
-    let texture = getTexture t
+requestTextureItem :: (String, Texture) -> ResourceManager GLTextureItem
+requestTextureItem (fieldName, texture) = do
     (_,_, texObj) <- requestTexture texture
     return $ case texture^.textureData of
         Texture2D _       -> GLTextureItem GL.Texture2D $ TextureItem texObj fieldName
@@ -419,5 +410,3 @@ initialGLRenderResources =
 
 replaceIndices :: [Word32] -> IO ()
 replaceIndices = GL.replaceBuffer GL.ElementArrayBuffer
-
-

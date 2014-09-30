@@ -36,7 +36,7 @@ import           Yage.Rendering.RenderEntity
 -- import           Paths_yage_rendering
 
 
-data RenderLog = RenderLog 
+data RenderLog = RenderLog
     { _rlLogObjCount :: !Int
     , _rlLogTriCount :: !Int
     , _rlTrace       :: ![String]
@@ -70,7 +70,7 @@ data TextureUnit = TextureUnit
 makeLenses ''TextureUnit
 
 
-data TextureAssignments = TextureAssignments 
+data TextureAssignments = TextureAssignments
     { _freeUnits      :: ![TextureUnit]
     , _slottedUnits   :: !(Map TextureField TextureUnit)
     } deriving ( Show )
@@ -89,7 +89,7 @@ data RenderState = RenderState
 makeLenses ''RenderState
 
 type Renderer = RWST () RenderLog RenderState IO
----------------------------------------------------------------------------------------------------  
+---------------------------------------------------------------------------------------------------
 
 data GLTextureItem = forall t. (GL.BindableTextureTarget t, Show t) => GLTextureItem t TextureItem
 
@@ -123,7 +123,7 @@ data FramebufferSetup u = FramebufferSetup
 -- TODO :: combine this with the scene setup
 runRenderer :: Renderer a -> IO (a, RenderLog)
 runRenderer renderer = do
-    GL.TextureUnit maxTextureUnits <- return $ GL.TextureUnit 16 -- GL.get GL.maxTextureUnit
+    GL.TextureUnit maxTextureUnits <- return $ GL.TextureUnit 16 -- FIXME: GL.get GL.maxTextureUnit crashes here
     (a, _st, rlog) <- runRWST render () $ initRenderState ( fromIntegral maxTextureUnits )
     return (a, rlog)
     where
@@ -183,7 +183,7 @@ renderRenderSet set@RenderSet{..} = checkErrorOf (unpack $ format "renderRenderS
 
     where
 
-    withMultiDrawIndices ranges ma = 
+    withMultiDrawIndices ranges ma =
         let countV      = VS.fromList $ map (\(start, end) -> fromIntegral $ end - start + 1) ranges
             byteOffsetV = VS.fromList $ map (\(start, _) -> nullPtr `plusPtr` (start*4)) ranges
             blockCnt    = fromIntegral $ length ranges
@@ -194,7 +194,7 @@ renderRenderSet set@RenderSet{..} = checkErrorOf (unpack $ format "renderRenderS
     setShaderFields :: ShaderProgram -> Renderer ()
     setShaderFields shader = do
         -- set all uniform fields (excluding texture units)
-        io $ setUniforms shader _rsUniforms 
+        io $ checkErrorOf "setUniforms" $ setUniforms shader _rsUniforms
 
         -- set all asigned textures to it's sampler
         texMapping <- use $ rStTextures.slottedUnits
@@ -202,28 +202,29 @@ renderRenderSet set@RenderSet{..} = checkErrorOf (unpack $ format "renderRenderS
         return ()
 
     setTextureSampler shader name unit = do
-        traceM $ unpack $ format "setTextureSampler: {} {}" (Shown name, Shown unit)
-        io $ setUniform shader name (unit^.unitGL)
+        let msg = unpack $ format "setTextureSampler: {} {}" (Shown name, Shown unit)
+        traceM msg
+        io $ checkErrorOf msg $ setUniform shader name (unit^.unitGL)
 
 ---------------------------------------------------------------------------------------------------
 
 -- | the current bound fbo is NOT restored (lack of support by the OpenGL lib),
--- instead the default is restored 
+-- instead the default is restored
 withFramebuffer :: GL.FramebufferObject -> FBOTarget -> Renderer a -> Renderer a
 withFramebuffer fbo t action =
     let target = toGLTarget t in do
     -- old <- return GL.FramebufferObject 0 -- TODO get real git glGetIntegerv GL_FRAMEBUFFER_BINDING
     --currentFramebuffer ?= fb
     io $ GL.bindFramebuffer target $= fbo
-    
+
     result <- action
-    
+
     io $ GL.bindFramebuffer target $= GL.defaultFramebufferObject
     --currentFramebuffer .= Nothing
     return result
     where
     toGLTarget :: FBOTarget -> GL.FramebufferTarget
-    toGLTarget DrawTarget        = GL.DrawFramebuffer 
+    toGLTarget DrawTarget        = GL.DrawFramebuffer
     toGLTarget ReadTarget        = GL.ReadFramebuffer
     toGLTarget FramebufferTarget = GL.Framebuffer
 
@@ -233,9 +234,9 @@ withShader :: ShaderProgram -> (ShaderProgram -> Renderer a) -> Renderer a
 withShader shader m = checkErrorOf ("withShader" ++ show shader) $ do
     rStCurrentShader ?= shader
     io $! GL.currentProgram $= Just (program shader)
-    
+
     res <- m shader
-    
+
     io $! GL.currentProgram $= Nothing
     rStCurrentShader .= Nothing
     return res
@@ -256,7 +257,7 @@ withVAO v ma = checkErrorOf "withVAO" $ do
 --}
 
 withTextures :: [ GLTextureItem ] -> Renderer a -> Renderer a
-withTextures texs ma = 
+withTextures texs ma =
     withAssignedItems (map getItem texs) $ \units ->
         withActiveUnits (zip units texs) ma
     where
@@ -265,19 +266,20 @@ withTextures texs ma =
 
 withActiveUnits :: [(TextureUnit, GLTextureItem)] -> Renderer a -> Renderer a
 withActiveUnits units ma = do
-    traceM $ unpack $ format "withActiveUnits: {}" (Only $ Shown units) 
-    forM_ units $ activateUnit
+    let msg = unpack $ format "withActiveUnits: {}" (Only $ Shown units)
+    traceM msg
+    forM_ units $ checkErrorOf msg . activateUnit
     a <- ma
-    forM_ units deactivateUnit
+    forM_ units $ checkErrorOf msg . deactivateUnit
     return a
 
     where
-    
+
     activateUnit ( (TextureUnit _ Nothing), _)   = error "withActiveUnits:activateUnit: invalid empty TextureUnit"
-    activateUnit ( unit@(TextureUnit _ (Just item)), tex ) = 
+    activateUnit ( unit@(TextureUnit _ (Just item)), tex ) =
         case tex of
         GLTextureItem target _ -> checkErrorOf (unpack $ format "activateUnit: {}" (Only $ Shown unit)) $ do
-            io $ GL.activeTexture         GL.$= unit^.unitGL 
+            io $ GL.activeTexture         GL.$= unit^.unitGL
             io $ GL.textureBinding target GL.$= ( Just $ item^.itemTexObj )
 
     deactivateUnit (unit, tex) =
@@ -291,7 +293,7 @@ withActiveUnits units ma = do
 
 withAssignedItems :: [TextureItem] -> ( [TextureUnit] -> Renderer a ) -> Renderer a
 withAssignedItems items ma = do
-    units <- forM items assignTextureUnit 
+    units <- forM items assignTextureUnit
     a     <- ma units
     forM_ units releaseTextureUnit
     return a
@@ -327,7 +329,7 @@ takeFreeUnit :: Renderer TextureUnit
 takeFreeUnit = zoom rStTextures $ do
     (unit:queue) <- use $ freeUnits
     freeUnits   .= queue
-    return unit 
+    return unit
 
 
 putFreeUnit :: TextureUnit -> Renderer ()
@@ -346,7 +348,7 @@ releaseUnit unit@( TextureUnit _ ( Just slot ) ) = do
 
 initTextureUnits :: Int -> TextureAssignments
 initTextureUnits unitCount =
-    TextureAssignments { _freeUnits     = map newEmptyUnit [0..unitCount-1] 
+    TextureAssignments { _freeUnits     = map newEmptyUnit [0..unitCount-1]
                        , _slottedUnits  = M.empty
                        }
 

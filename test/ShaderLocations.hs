@@ -1,17 +1,19 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE QuasiQuotes       #-}
 
-import Yage.Prelude as P
-import Test.Hspec
+import           Test.Hspec
+import           Yage.Prelude                      as P
 
-import Data.ByteString.Char8 as BS
-import Data.Map.Strict as M
-import Data.Set        as S
-import Data.Foldable ( traverse_ )
+import           Data.ByteString.Char8             as BS
+import           Data.Foldable                     (traverse_)
+import           Data.Map.Strict                   as M
+import           Data.Set                          as S
 
-import Yage.Rendering.Shader as Shader
-import Graphics.UI.GLFW as GLFW
-import qualified Yage.Core.OpenGL as GL
+import           Graphics.UI.GLFW                  as GLFW
+import qualified Yage.Core.OpenGL                  as GL
+import           Yage.Rendering
+import           Yage.Rendering.Shader             as Shader
+
 
 
 hints :: [WindowHint]
@@ -51,6 +53,26 @@ main :: IO ()
 main = hspec $ around withOpenGLContext $ do
 
     describe "glsl shader locations" $ do
+
+        it "array locations are unrolled starting with index 0\
+            \when no array index is given" $ do
+            let dummyTexture = error "invalid access" :: Texture
+                arrayfields  = P.map fst $ unrollArrayLocations ("textureSampler", P.replicate 3 dummyTexture)
+
+            arrayfields `shouldBe` [ "textureSampler[0]"
+                                   , "textureSampler[1]"
+                                   , "textureSampler[2]"
+                                   ]
+
+        it "array locations are unrolled with the given start index " $ do
+            let dummyTexture = error "invalid access" :: Texture
+                arrayfields  = P.map fst $ unrollArrayLocations ("textureSampler[3]", P.replicate 3 dummyTexture)
+
+            arrayfields `shouldBe` [ "textureSampler[3]"
+                                   , "textureSampler[4]"
+                                   , "textureSampler[5]"
+                                   ]
+
         it "has correct and complete attrib & uniform locations (even for arrays)" $ do
             prog <- Shader.loadShaderProgram shaderSrcs
 

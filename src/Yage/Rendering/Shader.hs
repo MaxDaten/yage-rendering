@@ -21,11 +21,11 @@ module Yage.Rendering.Shader
 import           Yage.Prelude
 import           Yage.Lens
 
-import           GHC.TypeLits (Symbol, KnownSymbol)
+import           GHC.TypeLits (Symbol, KnownSymbol, symbolVal)
+import           Data.Proxy
 
 import           Data.Vinyl                as VinylGL
 import           Data.Vinyl.Universe       as U
-import qualified Data.Vinyl.Universe.Const as U
 import qualified Data.Map.Strict           as M ( fromList )
 
 import qualified Data.ByteString           as BS
@@ -36,22 +36,69 @@ import           Graphics.VinylGL.Uniforms as VinylGL hiding (setUniforms)
 
 import qualified Graphics.VinylGL.Uniforms as V
 import qualified Data.Vinyl.Idiom.Identity as I
+import           Text.Regex
+import           Text.Regex.Posix
+import           Text.Read                 ( read )
 
 
-import           Yage.Core.OpenGL hiding (Shader, shaderSource, loadShaderProgramWith)
+import           Yage.Core.OpenGL hiding (Shader, shaderSource, loadShaderProgramWith, Proxy)
 
 import           Yage.Rendering.Resources.ResTypes
 
-class HasTexture t where
-    getTexture :: t -> Texture
-instance HasTexture (Texture) where
-    getTexture = id
-instance HasTexture (I.Identity Texture) where
-    getTexture (I.Identity t) = t
+class HasTextures t where
+    getTextures :: t -> [Texture]
 
-type FieldNames           = PlainRec (U.Const String)
-type AllHasTextures ts    = RecAll ElField I.Identity ts HasTexture
-type IsShaderData us ts   = (UniformFields (Uniforms us), AllHasTextures ts, Implicit (FieldNames ts))
+instance HasTextures Texture where
+    getTextures t = [t]
+
+instance HasTextures [Texture] where
+    getTextures = id
+
+instance HasTextures (I.Identity Texture) where
+    getTextures (I.Identity t) = getTextures t
+
+instance HasTextures (FieldRec f '[]) where
+    getTextures = const []
+
+instance ( HasTextures (Textures ts), HasTextures t )
+    => HasTextures ( Textures ( ( (sy::Symbol) ::: t ) ': ts ) ) where
+    getTextures (I.Identity t :& ts) = getTextures t ++ getTextures ts
+
+-- | assign each Texture to array-fields
+-- "sampler2d sampler" start with zero, bracket with idx is appended
+-- "sampler2d sampler[10]" the array bracket contains the start idx, here '10'
+unrollArrayLocations :: (String, [Texture]) -> [(String, Texture)]
+unrollArrayLocations (name, [tex]) = [(name, tex)]
+unrollArrayLocations (name, texs) =
+    -- match against the last array idx in brackets
+    case name =~ lastBracketPat :: String of
+        ""          -> zipWith ( \(idx::Int) -> (name ++ arrayIdxBracket idx,) ) [0..] texs
+        theBracket  ->
+            let startIdx        :: Int
+                startIdx        = read ( theBracket =~ ("[0-9]+" :: String) )
+                replaceIdx idx  = subRegex (mkRegex lastBracketPat) name (arrayIdxBracket idx)
+            in zipWith ( \(idx::Int) tex -> (replaceIdx idx, tex) ) [startIdx ..] texs
+    where
+    lastBracketPat :: String
+    lastBracketPat = "\\[[0-9]+\\]$"
+    arrayIdxBracket idx = "[" ++ show idx ++ "]"
+
+class HasTextureFields ts where
+    textureFields :: ts -> [(String, Texture)]
+
+instance HasTextureFields (Textures '[]) where
+    textureFields = const []
+
+instance ( HasTextureFields (Textures ts), HasTextures t, KnownSymbol sy )
+    => HasTextureFields ( Textures ( ( (sy::Symbol) ::: t ) ': ts ) ) where
+
+    textureFields (I.Identity x :& xs) =
+        unrollArrayLocations (symbolVal (Proxy::Proxy sy), getTextures x) ++ textureFields xs
+
+
+type IsShaderData us ts   = ( UniformFields (Uniforms us)
+                            , HasTextureFields (Textures ts)
+                            )
 
 type Uniforms us = PlainFieldRec us
 type Textures ts = PlainFieldRec ts
@@ -106,17 +153,11 @@ class HasShaderSource t where
 ---------------------------------------------------------------------------------------------------
 
 
-type TextureUniform u = (u::Symbol) ::: Texture
+type TextureSampler u = (u::Symbol) ::: Texture
+type TextureArray u = (u::Symbol) ::: [ Texture ]
+
 
 deriving instance Show ShaderProgram
-
-
-
-textureFields :: (AllHasTextures ts, Implicit (FieldNames ts)) => Textures ts -> [(String, Texture)]
-textureFields rec = go implicitly rec [] where
-    go :: AllHasTextures ts => FieldNames ts -> PlainFieldRec ts -> [(String, Texture)] -> [(String, Texture)]
-    go RNil RNil ts = ts
-    go (I.Identity n :& ns) (x :& xs) ts = (n, getTexture x) : go ns xs ts
 
 
 instance (Monoid (Uniforms u), Monoid (Textures t)) => Monoid (ShaderData u t) where
@@ -222,11 +263,8 @@ getActives :: Program ->
               IO ( [(String, (AttribLocation, VariableType))]
                  , [(String, (UniformLocation, VariableType))] )
 getActives p =
-  (,) <$> (get (activeAttribs p) >>= mapM (aux (attribLocation p)))
-      <*> (get (activeUniforms p)
-            >>= mapM (unifromLocationExpandArrays)
-            >>= return . concat
-           )
+  (,) <$> ( get ( activeAttribs p ) >>= mapM ( aux ( attribLocation p ) ) )
+      <*> liftM concat ( get ( activeUniforms p ) >>= mapM unifromLocationExpandArrays )
   where aux f (_,t,name) = get (f name) >>= \l -> return (name, (l, t))
 
         unifromLocationExpandArrays :: (GLint, VariableType, String) -> IO [(String, (UniformLocation, VariableType))]
@@ -248,6 +286,3 @@ getActives p =
         isArrayName = ("[0]" `isSuffixOf`)
 
 --}
-
-instance Implicit (FieldNames '[]) where
-    implicitly = RNil

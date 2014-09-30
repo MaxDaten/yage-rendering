@@ -51,32 +51,40 @@ mkRenderPass fboSetup rSets = withFramebufferSetup fboSetup (renderFrame rSets)
 
 -- | can be used to reuse TextureBuffer, this is also a waring ;)
 mkSingleTextureTarget :: Texture -> RenderTarget SingleRenderTarget
-mkSingleTextureTarget tex 
+mkSingleTextureTarget tex
     | isTextureBuffer tex = RenderTarget (tex^.textureId ++ "-fbo") $ SingleRenderTarget tex
     | otherwise = error "mkTextureTarget: not a TextureBuffer!"
 
 
 mkSingleTargetFromSpec :: ByteString -> BufferSpec -> RenderTarget SingleRenderTarget
 mkSingleTargetFromSpec name spec = RenderTarget (name ++ "-fbo")
-    $ SingleRenderTarget $ mkTexture (name ++ "-buffer") $ TextureBuffer GL.Texture2D spec
+    $ SingleRenderTarget
+    $ mkTexture (name ++ "-buffer") (TextureBuffer GL.Texture2D spec)
+        & textureConfig.texConfFiltering.texMipmapFilter  .~ Nothing
+        & textureConfig.texConfFiltering.texMinFilter     .~ GL.Linear'
+        & textureConfig.texConfFiltering.texMagFilter     .~ GL.Linear'
+        & textureConfig.texConfWrapping.texWrapRepetition .~ GL.Mirrored
+        & textureConfig.texConfWrapping.texWrapClamping   .~ GL.Clamp
+
 
 
 renderTargets :: PassDescr mrt p -> mrt
-renderTargets PassDescr{_passTarget} = let RenderTarget _ mrt = _passTarget in mrt 
+renderTargets PassDescr{_passTarget} = let RenderTarget _ mrt = _passTarget in mrt
 
 
-targetTexture :: Getter (RenderTarget SingleRenderTarget) Texture
-targetTexture = to getter where
+targetTexture :: Lens' (RenderTarget SingleRenderTarget) Texture
+targetTexture = lens getter setter where
     getter (RenderTarget _ (SingleRenderTarget tex)) = tex
+    setter (RenderTarget slot _) tex = RenderTarget slot $ SingleRenderTarget tex
 
 
 defaultRenderTarget :: RenderTarget (DefaultFramebuffer a)
 defaultRenderTarget = RenderTarget "default" DefaultFramebuffer
 
 instance FramebufferSpec SingleRenderTarget RenderTargets where
-    fboColors (SingleRenderTarget texture) = 
+    fboColors (SingleRenderTarget texture) =
         [ Attachment (ColorAttachment 0) $ TextureTarget GL.Texture2D texture 0
-        ] 
+        ]
 
 instance GetRectangle (RenderTarget SingleRenderTarget) Int where
     asRectangle = to getter where
