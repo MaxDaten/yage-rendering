@@ -147,7 +147,7 @@ withFramebufferSetup FramebufferSetup{..} ma = do
 
 
 
-renderFrame :: UniformFields (Uniforms urec) => [ RenderSet (Uniforms urec) ] -> Renderer ()
+renderFrame :: UniformFields (Uniforms urec) => Seq (RenderSet (Uniforms urec)) -> Renderer ()
 renderFrame = mapM_ renderRenderSet
 
 

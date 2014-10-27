@@ -194,7 +194,7 @@ mkTextureSpec' dim components = TextureImageSpec dim $ PixelSpec GL.UnsignedByte
 -- | simple pixel component to internalFormat mapping, assumes UnsignedByte (Word8) components
 defaultInternal :: GL.PixelFormat -> GL.PixelInternalFormat
 defaultInternal GL.DepthComponent   = GL.DepthComponent'
-defaultInternal GL.DepthStencil     = GL.Depth32fStencil8
+defaultInternal GL.DepthStencil     = GL.Depth32fStencil8 -- | FIXME : find 24/8 DepthStencil?
 defaultInternal GL.Red              = GL.R8
 defaultInternal GL.RGB              = GL.RGB8
 defaultInternal GL.BGR              = GL.RGB8

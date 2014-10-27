@@ -67,7 +67,7 @@ runRenderPass :: ( MultipleRenderTargets mrt, ViableVertex (Vertex vr)
                  ) =>
                   PassDescr mrt (Shader u t (Vertex vr))
                -> ShaderData frameU frameT
-               -> [ RenderEntity (Vertex vr) (ShaderData entU entT) ]
+               -> Seq (RenderEntity (Vertex vr) (ShaderData entU entT))
                -> RenderSystem ()
 runRenderPass pass frameData entities = do
     -- transform all Renderables into RenderSets
@@ -80,10 +80,10 @@ runRenderPass pass frameData entities = do
         res <- get
 
         -- load resources from framebuffer setup and all entities
-        ((results, res', reslog), time) <- ioTime $ runResourceManager res $ 
+        ((results, res', reslog), time) <- ioTime $ runResourceManager res $
             (,) <$> (requestFramebufferSetup pass frameData)
                 <*> (forM entities $ requestRenderSet $ pass^.passShader.shaderProgram)
-        
+
         -- write resource loading log
         scribe resourceLog reslog
         scribe resourcingTime time
