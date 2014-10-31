@@ -2,7 +2,7 @@
 -- see http://haskell.org/cabal/users-guide/
 
 name:                yage-rendering
-version:             0.0.5.0
+version:             0.0.6.0
 synopsis:            render framework for yet another graphics engine
 -- description:
 license:             MIT
@@ -40,6 +40,7 @@ library
                         Yage.Rendering.Textures
                         Yage.Rendering.Textures.TextureCube
                         Yage.Rendering.Textures.TextureImage
+                        Yage.Rendering.Textures.MipMapChain
 
                         Yage.Rendering.Backend.Renderer
                         Yage.Rendering.Backend.Framebuffer
@@ -83,7 +84,7 @@ library
 
 
   build-depends:          base                    <  5
-                        , yage-contrib            == 0.0.1.0
+                        , yage-contrib            == 0.0.2.0
                         , yage-geometry           == 0.0.0.3
 
                         , system-filepath         >= 0.4
@@ -100,6 +101,7 @@ library
                         , containers              >= 0.5
                         , vector                  >= 0.10
                         , unordered-containers    >= 0.2
+                        , mono-traversable        >= 0.6
                         , hashable                >= 1
                         , bytestring              >= 0.10
                         , transformers            == 0.4.*

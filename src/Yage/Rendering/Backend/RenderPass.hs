@@ -52,14 +52,14 @@ mkRenderPass fboSetup rSets = withFramebufferSetup fboSetup (renderFrame rSets)
 -- | can be used to reuse TextureBuffer, this is also a waring ;)
 mkSingleTextureTarget :: Texture -> RenderTarget SingleRenderTarget
 mkSingleTextureTarget tex
-    | isTextureBuffer tex = RenderTarget (tex^.textureId ++ "-fbo") $ SingleRenderTarget tex
+    | tex^.isTextureBuffer = RenderTarget (tex^.textureId ++ "-fbo") $ SingleRenderTarget tex
     | otherwise = error "mkTextureTarget: not a TextureBuffer!"
 
 
 mkSingleTargetFromSpec :: ByteString -> BufferSpec -> RenderTarget SingleRenderTarget
 mkSingleTargetFromSpec name spec = RenderTarget (name ++ "-fbo")
     $ SingleRenderTarget
-    $ mkTexture (name ++ "-buffer") (TextureBuffer GL.Texture2D spec)
+    $ mkTextureBuffer (name ++ "-buffer") GL.Texture2D spec
         & textureConfig.texConfFiltering.texMipmapFilter  .~ Nothing
         & textureConfig.texConfFiltering.texMinFilter     .~ GL.Linear'
         & textureConfig.texConfFiltering.texMagFilter     .~ GL.Linear'

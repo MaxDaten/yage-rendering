@@ -13,6 +13,7 @@ import              Yage.Prelude
 import              Yage.Lens
 
 import              Data.Data
+import              Control.Monad                       ( zipWithM_ )
 import              Graphics.GLUtil.Textures            ( IsPixelData(..) )
 import              Graphics.GLUtil.TypeMapping         ( HasGLType, glType )
 import qualified    Graphics.Rendering.OpenGL           as GL
@@ -23,6 +24,7 @@ import              JuicySRGB
 import              Linear                              ( V2(..) )
 
 import              Yage.Rendering.Textures.Instances
+import              Yage.Rendering.Textures.MipMapChain
 
 -- | A tag for opengl-related instances
 newtype GLTexture pixel = GLTexture { unGLTexture :: Image pixel }
@@ -31,22 +33,23 @@ deriving instance Typeable GLTexture
 deriving instance (TyPixel pixel) => Data (GLTexture pixel)
 
 data TextureImage =
-       -- | A greyscale image.
        TexY8    (GLTexture Pixel8)
-       -- | A greyscale HDR image
+        -- ^ A greyscale image.
      | TexYF    (GLTexture PixelF)
-       -- | An image in true color.
+        -- ^ A greyscale HDR image
      | TexRGB8  (GLTexture PixelRGB8)
-       -- | An image with HDR pixels
+        -- ^ An image in true color.
      | TexRGBF  (GLTexture PixelRGBF)
-       -- | An image in true color and an alpha channel.
+        -- ^ An image with HDR pixels
      | TexRGBA8 (GLTexture PixelRGBA8)
-     --  An image in the colorspace used by Jpeg images.
-     -- we does not support YCbrCr as an internal texture format
-     -- (converting will be supported outside the rendering core)
-     -- | TexYCbCr8 (Image PixelYCbCr8)
-       -- | An Image in the sRGB color space
+        -- ^ An image in true color and an alpha channel.
+
+        -- | TexYCbCr8 (Image PixelYCbCr8)
+        --  An image in the colorspace used by Jpeg images.
+        -- we does not support YCbrCr as an internal texture format
+        -- (converting will be supported outside the rendering core)
      | TexSRGB8  (GLTexture PixelSRGB8)
+       -- ^ An Image in the sRGB color space
      deriving ( Typeable, Data )
 
 
@@ -101,19 +104,19 @@ toDynamic = aux
     aux ( TexSRGB8 ( GLTexture img ) )   = ImageRGB8 (convertImage img)
 {-# INLINE toDynamic #-}
 
--- |deriving version of texture loading. derives the PixelInternalFormat an PixelType of the image
+-- | deriving version of texture loading. derives the PixelInternalFormat an PixelType of the image
 -- loads into the currently bound texture object in the context
-uploadTextureImage' :: GL.TwoDimensionalTextureTarget t =>
-                  t -> TextureImage -> IO ()
-uploadTextureImage' target textureImg =
-    uploadTextureImage target textureImg ( pixelSpec textureImg )
+uploadTextureImages' :: GL.TwoDimensionalTextureTarget t =>
+                  t -> MipMapChain TextureImage -> IO ()
+uploadTextureImages' target textureImgs =
+    uploadTextureImages target $ fmap (map (\img -> (img, pixelSpec img))) textureImgs
 
 
--- |explicit texture loading. the types and internalFormat
+-- | explicit texture loading. the types and internalFormat
 -- loads into the currently bound texture object in the context
-uploadTextureImage :: GL.TwoDimensionalTextureTarget t =>
-                 t -> TextureImage -> PixelSpec -> IO ()
-uploadTextureImage target textureImg spec = aux textureImg
+uploadTextureImages :: GL.TwoDimensionalTextureTarget t =>
+                 t -> MipMapChain (TextureImage, PixelSpec) -> IO ()
+uploadTextureImages target textureImgs = zipWithM_ (uncurry aux) (toList textureImgs) [0..]
     where
     aux (TexY8     (GLTexture (Image w h p))) = loadTex p (texSize w h)
     aux (TexYF     (GLTexture (Image w h p))) = loadTex p (texSize w h)
@@ -122,18 +125,18 @@ uploadTextureImage target textureImg spec = aux textureImg
     aux (TexRGBA8  (GLTexture (Image w h p))) = loadTex p (texSize w h)
     aux (TexSRGB8  (GLTexture (Image w h p))) = loadTex p (texSize w h)
 
-    loadTex :: IsPixelData p => p -> GL.TextureSize2D -> IO ()
-    loadTex p sz = texImage2D target p sz spec
+    loadTex :: IsPixelData p => p -> GL.TextureSize2D -> PixelSpec -> GL.GLint -> IO ()
+    loadTex p sz spec lvl = texImage2D target lvl p sz spec
 
     texSize w h = GL.TextureSize2D (fromIntegral w) (fromIntegral h)
 
 
 
 texImage2D :: (GL.TwoDimensionalTextureTarget t, IsPixelData d) =>
-            t -> d -> GL.TextureSize2D -> PixelSpec -> IO ()
-texImage2D target pxdata texSize (PixelSpec dataType components internalFormat) =
+            t -> GL.Level -> d -> GL.TextureSize2D -> PixelSpec -> IO ()
+texImage2D target mipLevel pxdata texSize (PixelSpec dataType components internalFormat) =
     withPixels pxdata $
-        GL.texImage2D target GL.NoProxy 0 internalFormat texSize 0 . GL.PixelData components dataType
+        GL.texImage2D target GL.NoProxy mipLevel internalFormat texSize 0 . GL.PixelData components dataType
 
 
 -- | derives the pixel-spec of a TextureImage

@@ -156,11 +156,11 @@ requestTexture texture@(Texture name newConfig texData) = do
 
     -- | pushes texture to opengl
     loadData :: TextureData -> ResourceManager ()
-    loadData (Texture2D img) = io $
-        Tex.uploadTextureImage' GL.Texture2D img
+    loadData (Texture2D imgs) = io $
+        Tex.uploadTextureImages' GL.Texture2D imgs
 
-    loadData (TextureCube cubemap) = io $
-        Tex.uploadCubeTextureImage cubemap
+    loadData (TextureCube cubemaps) = io $
+        Tex.uploadCubeTextureImages cubemaps
 
     loadData (TextureBuffer target spec) = io $ do
         let V2 w h      = spec^.Tex.texSpecDimension
@@ -226,7 +226,7 @@ requestTexture texture@(Texture name newConfig texData) = do
         let TextureFiltering minification mipmap magnification = newConfig^.texConfFiltering
             TextureWrapping repetition clamping = newConfig^.texConfWrapping
 
-        when (isJust mipmap) $ autoGenerateMipMap texData
+        when (isJust mipmap && not (texture^.hasCustomMipMaps) ) $ withTextureTarget texture GL.generateMipmap'
 
         -- NOTE: filtering is neccessary for texture completeness
         withTextureParameter texture GL.textureFilter $= ((minification, mipmap), magnification)
@@ -238,14 +238,6 @@ requestTexture texture@(Texture name newConfig texData) = do
 
             TextureCube _ ->
                 GL.texture3DWrap GL.TextureCubeMap $= (repetition, clamping)
-
-
-    autoGenerateMipMap :: TextureData -> IO ()
-    autoGenerateMipMap = \case
-        Texture2D   _     -> GL.generateMipmap' GL.Texture2D
-        TextureCube _     -> GL.generateMipmap' GL.TextureCubeMap
-        TextureBuffer t _ -> GL.generateMipmap' t
-
 
 
 requestRenderbuffer :: Renderbuffer -> ResourceManager RenderbufferRHI

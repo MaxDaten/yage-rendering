@@ -6,7 +6,20 @@
 {-# LANGUAGE FlexibleContexts                   #-}
 {-# LANGUAGE MultiParamTypeClasses              #-}
 {-# LANGUAGE LambdaCase                         #-}
+{-# LANGUAGE RankNTypes                         #-}
 module Yage.Rendering.Resources.ResTypes where
+    -- ( mkTexture2D, mkTexture2DMip, mkTextureBuffer
+    -- , Texture
+    -- , TextureConfig(..), texConfFiltering, texConfWrapping
+    -- , TextureFiltering(..), texMinFilter, texMipmapFilter, texMagFilter
+    -- , TextureWrapping(..), texWrapRepetition, texWrapClamping
+    -- , textureId, textureData, textureConfig, defaultTextureConfig
+    -- , HasTextureSpec(..)
+
+    -- , isTextureBuffer, textureDimension
+    -- , VBO, EBO, FBO, RenderTargets, BufferSpec, Renderbuffer, TextureId
+    -- )
+    -- where
 
 import           Yage.Prelude                        hiding ( Text )
 import           Yage.Lens
@@ -21,6 +34,7 @@ import           Filesystem.Path.CurrentOS           ( encode )
 import           Yage.Rendering.Backend.Framebuffer
 import qualified Yage.Rendering.Textures             as TexImg
 import           Yage.Rendering.Textures.Instances   ()
+import           Yage.Rendering.Textures.MipMapChain
 
 import           Yage.Geometry.D2.Rectangle
 
@@ -38,10 +52,18 @@ type TextureId = ByteString
 data Texture = Texture TextureId TextureConfig TextureData
     deriving ( Typeable, Data )
 
+-- | The relevant `TextureData` contains the binary pixel data for a
+--   simple 2D texture or a cube texture (e.g.  a environemnt map).
+--   For `Texture2D` or `TextureCube` a optional custom mipmap chain is supported.
+--   There is no mipmap generation with a given custom mipmap chain.
 data TextureData =
-      Texture2D        TexImg.TextureImage
-    | TextureCube      TexImg.TextureCube
-    | TextureBuffer    GL.TextureTarget2D BufferSpec
+      Texture2D          (MipMapChain TexImg.TextureImage)
+      -- ^ a simple 2D texture with an optional custom mipmap chain.
+    | TextureCube        (MipMapChain TexImg.TextureCube)
+    -- ^ a cube texture with an optional custom mipmap chain
+    | TextureBuffer      GL.TextureTarget2D BufferSpec
+    -- ^ a texture buffer, filled by and reside on the render hardware.
+    --   No direct access currently supported
     deriving ( Typeable, Data )
 
 data TextureConfig = TextureConfig
@@ -88,28 +110,67 @@ textureConfig = lens getter setter where
     setter (Texture tid _ texData) conf = Texture tid conf texData
 
 
-mkTexture :: TextureId -> TextureData -> Texture
-mkTexture texid texdata = Texture texid def texdata
+hasCustomMipMaps :: Getter Texture Bool
+hasCustomMipMaps = to get where
+    get tex = case tex^.textureData of
+        TextureBuffer _ _ -> False
+        Texture2D mips    -> hasMipMaps mips
+        TextureCube mips  -> hasMipMaps mips
 
 
-
-isTextureBuffer :: Texture -> Bool
-isTextureBuffer tex =
-    case tex^.textureData of
+isTextureBuffer :: Getter Texture Bool
+isTextureBuffer = to get where
+    get tex = case tex^.textureData of
         TextureBuffer _ _ -> True
         _ -> False
+
+withTextureTarget :: Texture -> (forall t. GL.ParameterizedTextureTarget t => t -> IO ()) -> IO ()
+withTextureTarget texture fm =
+    case texture^.textureData of
+        Texture2D   _     -> fm GL.Texture2D
+        TextureCube _     -> fm GL.TextureCubeMap
+        TextureBuffer t _ -> fm t
+
+
+-- | creates a simple 2D texture container with given id and content
+--   without custom mipmap
+mkTexture2D :: TextureId -> TexImg.TextureImage -> Texture
+mkTexture2D texId img = Texture texId def $ Texture2D (nonNull [img])
+
+-- | creates a simple 2D texture container with given id and content
+--   with a custom mipmap
+mkTexture2DMip :: TextureId -> MipMapChain TexImg.TextureImage -> Texture
+mkTexture2DMip texId mipchainImgs = Texture texId def $ Texture2D mipchainImgs
+
+-- | creates a cube texture container with given id and content
+--   without custom mipmap
+mkTextureCube :: TextureId -> TexImg.TextureCube -> Texture
+mkTextureCube texId img = Texture texId def $ TextureCube (nonNull [img])
+
+-- | creates a cube texture container with given id and content
+--   with a custom mipmap
+mkTextureCubeMip :: TextureId -> MipMapChain TexImg.TextureCube -> Texture
+mkTextureCubeMip texId mipchainImgs = Texture texId def $ TextureCube mipchainImgs
+
+-- | creates a `Texture` as a buffer texture reside on the render hardware
+mkTextureBuffer :: TextureId -> GL.TextureTarget2D -> BufferSpec -> Texture
+mkTextureBuffer texId target spec = Texture texId def (TextureBuffer target spec)
+
 
 
 class HasTextureSpec t where
     textureSpec :: Getter t BufferSpec
 
+-- | Getting the `TextureSpec` of the `Texture`.
+--   For `Texture`s with a custom mipmap chain the value is
+--   the `TextureSpec` of the base (0th) mipmap
 instance HasTextureSpec Texture where
     textureSpec = to getter where
         getter tex =
             case tex^.textureData of
-            Texture2D img        -> img^.TexImg.textureImageSpec
-            TextureBuffer _ spec -> spec
-            TextureCube TexImg.Cube{TexImg.cubeFaceRight = img} -> img^.TexImg.textureImageSpec
+            Texture2D imgs        -> imgs^.to head.TexImg.textureImageSpec
+            TextureCube imgs      -> imgs^.to head.to TexImg.cubeFaceRight.TexImg.textureImageSpec
+            TextureBuffer _ spec  -> spec
     {-# INLINE textureSpec #-}
 
 
@@ -134,14 +195,6 @@ instance GetRectangle Texture Int where
 textureDimension :: Getter Texture (V2 Int)
 textureDimension = textureSpec.TexImg.texSpecDimension
 
-
---instance (FramebufferSpec target RenderTargets) => HasRectangle target Int where
---    rectangle = lens getter setter where
---        getter fboSpec =
---            let ((Attachment _ target):_) = allAttachments fboSpec
---            in target^.textureSpec.rectangle
-
---        setter = error "FramebufferSpec: no settable rectangle"
 
 defaultTextureConfig :: TextureConfig
 defaultTextureConfig = TextureConfig def def

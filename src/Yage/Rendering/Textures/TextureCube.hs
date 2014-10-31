@@ -9,10 +9,13 @@ module Yage.Rendering.Textures.TextureCube where
 import Yage.Prelude                                                 hiding ( Vector, sequence, any )
 
 import Data.Data
+import Data.NonNull
 import Data.Foldable
+import Data.Traversable                                             ( sequenceA )
 import qualified Graphics.Rendering.OpenGL                          as GL
 
 import Yage.Rendering.Textures.TextureImage
+import Yage.Rendering.Textures.MipMapChain
 
 -- | In OpenGL Order
 data Cube a = Cube
@@ -53,12 +56,10 @@ glCubeFaces =
         GL.TextureCubeMapNegativeZ
 
 
-uploadCubeTextureImage :: TextureCube -> IO ()
-uploadCubeTextureImage cubeTexs =
-    sequenceA_ $ loadTex <$> glCubeFaces <*> cubeTexs
-
-    where
-
-    loadTex :: GL.TextureTargetCubeMapFace -> TextureImage -> IO ()
-    loadTex = uploadTextureImage'
+uploadCubeTextureImages :: MipMapChain TextureCube -> IO ()
+uploadCubeTextureImages cubeTexsMips =
+    -- first reorder the wrapping structures ( better way possible )
+    let cubeMips :: Cube (MipMapChain TextureImage)
+        cubeMips = nonNull <$> (sequenceA $ unMinLen cubeTexsMips)
+    in sequenceA_ $ uploadTextureImages' <$> glCubeFaces <*> cubeMips
 
