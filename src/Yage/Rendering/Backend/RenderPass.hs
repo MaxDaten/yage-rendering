@@ -68,8 +68,9 @@ mkSingleTargetFromSpec name spec = RenderTarget (name ++ "-fbo")
 
 
 
-renderTargets :: PassDescr mrt p -> mrt
-renderTargets PassDescr{_passTarget} = let RenderTarget _ mrt = _passTarget in mrt
+renderTargets :: Getter (PassDescr mrt p) mrt
+renderTargets = to getter where
+    getter PassDescr{_passTarget} = let RenderTarget _ mrt = _passTarget in mrt
 
 
 targetTexture :: Lens' (RenderTarget SingleRenderTarget) Texture
