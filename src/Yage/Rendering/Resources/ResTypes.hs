@@ -135,7 +135,7 @@ withTextureTarget texture fm =
 -- | creates a simple 2D texture container with given id and content
 --   without custom mipmap
 mkTexture2D :: TextureId -> TexImg.TextureImage -> Texture
-mkTexture2D texId img = Texture texId def $ Texture2D (nonNull [img])
+mkTexture2D texId img = Texture texId def $ Texture2D $ mkMipMapChain img []
 
 -- | creates a simple 2D texture container with given id and content
 --   with a custom mipmap
@@ -145,7 +145,7 @@ mkTexture2DMip texId mipchainImgs = Texture texId def $ Texture2D mipchainImgs
 -- | creates a cube texture container with given id and content
 --   without custom mipmap
 mkTextureCube :: TextureId -> TexImg.TextureCube -> Texture
-mkTextureCube texId img = Texture texId def $ TextureCube (nonNull [img])
+mkTextureCube texId img = Texture texId def $ TextureCube $ mkMipMapChain img []
 
 -- | creates a cube texture container with given id and content
 --   with a custom mipmap
