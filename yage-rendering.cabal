@@ -101,7 +101,7 @@ library
                         , containers              >= 0.5
                         , vector                  >= 0.10
                         , unordered-containers    >= 0.2
-                        , mono-traversable        >= 0.6
+                        , semigroups              >= 0.15
                         , hashable                >= 1
                         , bytestring              >= 0.10
                         , transformers            == 0.4.*

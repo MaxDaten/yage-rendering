@@ -109,7 +109,7 @@ toDynamic = aux
 uploadTextureImages' :: GL.TwoDimensionalTextureTarget t =>
                   t -> MipMapChain TextureImage -> IO ()
 uploadTextureImages' target textureImgs =
-    uploadTextureImages target $ fmap (map (\img -> (img, pixelSpec img))) textureImgs
+    uploadTextureImages target $ fmap (\img -> (img, pixelSpec img)) textureImgs
 
 
 -- | explicit texture loading. the types and internalFormat

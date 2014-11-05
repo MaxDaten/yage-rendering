@@ -168,8 +168,8 @@ instance HasTextureSpec Texture where
     textureSpec = to getter where
         getter tex =
             case tex^.textureData of
-            Texture2D imgs        -> imgs^.to head.TexImg.textureImageSpec
-            TextureCube imgs      -> imgs^.to head.to TexImg.cubeFaceRight.TexImg.textureImageSpec
+            Texture2D imgs        -> imgs^.to mipMapBase.TexImg.textureImageSpec
+            TextureCube imgs      -> imgs^.to mipMapBase.to TexImg.cubeFaceRight.TexImg.textureImageSpec
             TextureBuffer _ spec  -> spec
     {-# INLINE textureSpec #-}
 
