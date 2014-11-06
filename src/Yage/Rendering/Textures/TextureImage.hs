@@ -16,7 +16,7 @@ import              Data.Data
 import              Control.Monad                       ( zipWithM_ )
 import              Graphics.GLUtil.Textures            ( IsPixelData(..) )
 import              Graphics.GLUtil.TypeMapping         ( HasGLType, glType )
-import qualified    Graphics.Rendering.OpenGL           as GL
+import qualified    Yage.Core.OpenGL                    as GL
 
 import              Codec.Picture
 import              Codec.Picture.Types                 ( convertImage )
@@ -106,7 +106,7 @@ toDynamic = aux
 
 -- | deriving version of texture loading. derives the PixelInternalFormat an PixelType of the image
 -- loads into the currently bound texture object in the context
-uploadTextureImages' :: GL.TwoDimensionalTextureTarget t =>
+uploadTextureImages' :: (GL.TwoDimensionalTextureTarget t, Show t) =>
                   t -> MipMapChain TextureImage -> IO ()
 uploadTextureImages' target textureImgs =
     uploadTextureImages target $ fmap (\img -> (img, pixelSpec img)) textureImgs
@@ -114,7 +114,7 @@ uploadTextureImages' target textureImgs =
 
 -- | explicit texture loading. the types and internalFormat
 -- loads into the currently bound texture object in the context
-uploadTextureImages :: GL.TwoDimensionalTextureTarget t =>
+uploadTextureImages :: (GL.TwoDimensionalTextureTarget t, Show t) =>
                  t -> MipMapChain (TextureImage, PixelSpec) -> IO ()
 uploadTextureImages target textureImgs = zipWithM_ (uncurry aux) (toList textureImgs) [0..]
     where
@@ -132,12 +132,15 @@ uploadTextureImages target textureImgs = zipWithM_ (uncurry aux) (toList texture
 
 
 
-texImage2D :: (GL.TwoDimensionalTextureTarget t, IsPixelData d) =>
+texImage2D :: (GL.TwoDimensionalTextureTarget t, Show t, IsPixelData d) =>
             t -> GL.Level -> d -> GL.TextureSize2D -> PixelSpec -> IO ()
 texImage2D target mipLevel pxdata texSize (PixelSpec dataType components internalFormat) =
-    withPixels pxdata $
-        GL.texImage2D target GL.NoProxy mipLevel internalFormat texSize 0 . GL.PixelData components dataType
-
+    GL.checkErrorOf errFmt $ withPixels pxdata $
+            GL.texImage2D target GL.NoProxy mipLevel internalFormat texSize 0 . GL.PixelData components dataType
+    where
+    errFmt = unpack $ format
+        "texImage2D: target: {}, mipLevel: {}, texSize: {}, dataType: {}, components: {}, internalFormat: {}"
+        (Shown target, Shown mipLevel, Shown texSize, Shown dataType, Shown components, Shown internalFormat )
 
 -- | derives the pixel-spec of a TextureImage
 pixelSpec :: TextureImage -> PixelSpec

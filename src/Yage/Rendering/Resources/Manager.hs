@@ -144,7 +144,7 @@ requestTexture texture@(Texture name newConfig texData) = do
 
     newTexture :: ResourceManager TextureRHI
     newTexture = do
-        let chkErr = checkErrorOf ( unpack $ format "newTexture: {}" (Only $ Shown texture ) )
+        let chkErr = GL.checkErrorOf ( unpack $ format "newTexture: {}" (Only $ Shown texture ) )
         obj <- io GL.genObjectName
         io $ withTextureBind texture $= Just obj
 
@@ -156,10 +156,12 @@ requestTexture texture@(Texture name newConfig texData) = do
 
     -- | pushes texture to opengl
     loadData :: TextureData -> ResourceManager ()
-    loadData (Texture2D imgs) = io $
+    loadData (Texture2D imgs) = io $ do
+        GL.textureLevelRange GL.Texture2D $= (0, fromIntegral $ Tex.maxMipMapLevel imgs)
         Tex.uploadTextureImages' GL.Texture2D imgs
 
-    loadData (TextureCube cubemaps) = io $
+    loadData (TextureCube cubemaps) = io $ do
+        GL.textureLevelRange GL.TextureCubeMap $= (0, fromIntegral $ Tex.maxMipMapLevel cubemaps)
         Tex.uploadCubeTextureImages cubemaps
 
     loadData (TextureBuffer target spec) = io $ do
@@ -214,7 +216,7 @@ requestTexture texture@(Texture name newConfig texData) = do
             in do
                 tell [ unpack $ format "resizeTexture: {}\nfrom:\t{}\nto:\t{}" ( Shown name, Shown currentSpec, Shown newSpec ) ]
 
-                checkErrorOf ( unpack $ format "resizeTexture: {}" (Only $ Shown texture ) ) $ io $
+                GL.checkErrorOf ( unpack $ format "resizeTexture: {}" (Only $ Shown texture ) ) $ io $
                     case texData of
                         TextureBuffer target _ -> GL.texImage2D target GL.NoProxy 0 internalFormat texSize 0 glPixelData
                         _                      -> error "Manager.resizeTexture: invalid texture resize. Only TextureBuffer resizing currently supported!"
@@ -222,7 +224,7 @@ requestTexture texture@(Texture name newConfig texData) = do
 
 
     setTextureConfig :: ResourceManager ()
-    setTextureConfig = checkErrorOf ( unpack $ format "setTextureConfig {} {}" ( Shown name, Shown newConfig ) ) $ io $ do
+    setTextureConfig = GL.checkErrorOf ( unpack $ format "setTextureConfig {} {}" ( Shown name, Shown newConfig ) ) $ io $ do
         let TextureFiltering minification mipmap magnification = newConfig^.texConfFiltering
             TextureWrapping repetition clamping = newConfig^.texConfWrapping
 
@@ -250,7 +252,7 @@ requestRenderbuffer buff@(Renderbuffer _ newSpec@(Tex.TextureImageSpec sz pxSpec
             internalFormat = Tex.pxSpecGLFormat pxSpec
         in do
             tell [ unpack $ format "loadRenderbuffer: {}" ( Only $ Shown buff ) ]
-            checkErrorOf "loadRenderbuffer: " $ io $ do
+            GL.checkErrorOf "loadRenderbuffer: " $ io $ do
                 rObj <- GL.genObjectName
                 GL.bindRenderbuffer GL.Renderbuffer $= rObj
                 GL.renderbufferStorage GL.Renderbuffer internalFormat size
@@ -264,7 +266,7 @@ requestRenderbuffer buff@(Renderbuffer _ newSpec@(Tex.TextureImageSpec sz pxSpec
                 internalFormat  = Tex.pxSpecGLFormat pxSpec
             in do
                 tell [ unpack $ format "resizeBuffer {}" ( Only $ Shown buff ) ]
-                checkErrorOf "resizeBuffer: " $ io $ do
+                GL.checkErrorOf "resizeBuffer: " $ io $ do
                     GL.bindRenderbuffer GL.Renderbuffer $= rObj
                     GL.renderbufferStorage GL.Renderbuffer internalFormat size
                     GL.bindRenderbuffer GL.Renderbuffer $= GL.noRenderbufferObject

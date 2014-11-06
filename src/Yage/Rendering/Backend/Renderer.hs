@@ -20,10 +20,8 @@ import qualified Data.Map.Strict                         as M
 import           Data.Foldable                           ( traverse_ )
 import           Control.Monad.RWS.Strict                ( RWST, runRWST )
 
-import qualified Graphics.Rendering.OpenGL               as GL
-#ifdef GL_ERRCHECK
-import qualified Graphics.GLUtil.GLError                 as GLE
-#endif
+import qualified Yage.Core.OpenGL                        as GL
+
 import           Graphics.Rendering.OpenGL.GL            (($=))
 import           Graphics.GLUtil.ShaderProgram
 ---------------------------------------------------------------------------------------------------
@@ -47,7 +45,7 @@ makeLenses ''RenderLog
 
 
 {--
-Textureing
+Texturing
 --}
 
 
@@ -127,7 +125,7 @@ runRenderer renderer = do
     (a, _st, rlog) <- runRWST render () $ initRenderState ( fromIntegral maxTextureUnits )
     return (a, rlog)
     where
-        render = checkErrorOf "runRenderer" $ do
+        render = GL.checkErrorOf "runRenderer" $ do
             beforeRender
             a <- renderer
             afterRender
@@ -155,17 +153,17 @@ renderFrame = mapM_ renderRenderSet
 
 
 beforeRender :: Renderer ()
-beforeRender = checkError "beforeRender: "
+beforeRender = GL.checkError "beforeRender: "
 
 
 afterRender :: Renderer ()
-afterRender = checkError "afterRender: "
+afterRender = GL.checkError "afterRender: "
 
 
 ---------------------------------------------------------------------------------------------------
 
 renderRenderSet :: UniformFields (Uniforms u) => RenderSet (Uniforms u) -> Renderer ()
-renderRenderSet set@RenderSet{..} = checkErrorOf (unpack $ format "renderRenderSet: {}" ( Only $ Shown _rsVao ) ) $! do
+renderRenderSet set@RenderSet{..} = GL.checkErrorOf (unpack $ format "renderRenderSet: {}" ( Only $ Shown _rsVao ) ) $! do
     traceM $ unpack $ format "render: {}" (Only $ Shown set)
     withVAO _rsVao . withTextures _rsTextures $ do
             -- set element-wise uniform fields
@@ -175,7 +173,7 @@ renderRenderSet set@RenderSet{..} = checkErrorOf (unpack $ format "renderRenderS
             io $ GL.cullFace $= _rsDrawSettings^.cullFace
             -- todo sub elements with own texture settings
             let msg = unpack $ format "multiDrawElements {}" (Only $ Shown _rsIndexRanges)
-            checkErrorOf msg $ io . withMultiDrawIndices _rsIndexRanges $ \indexCountPtr byteOffsetPtr drawCount ->
+            GL.checkErrorOf msg $ io . withMultiDrawIndices _rsIndexRanges $ \indexCountPtr byteOffsetPtr drawCount ->
                 GL.multiDrawElements ( _rsDrawSettings^.renderMode ) indexCountPtr GL.UnsignedInt byteOffsetPtr drawCount
 
             logCountObj
@@ -194,7 +192,7 @@ renderRenderSet set@RenderSet{..} = checkErrorOf (unpack $ format "renderRenderS
     setShaderFields :: ShaderProgram -> Renderer ()
     setShaderFields shader = do
         -- set all uniform fields (excluding texture units)
-        io $ checkErrorOf "setUniforms" $ setUniforms shader _rsUniforms
+        io $ GL.checkErrorOf "setUniforms" $ setUniforms shader _rsUniforms
 
         -- set all asigned textures to it's sampler
         texMapping <- use $ rStTextures.slottedUnits
@@ -204,7 +202,7 @@ renderRenderSet set@RenderSet{..} = checkErrorOf (unpack $ format "renderRenderS
     setTextureSampler shader name unit = do
         let msg = unpack $ format "setTextureSampler: {} {}" (Shown name, Shown unit)
         traceM msg
-        io $ checkErrorOf msg $ setUniform shader name (unit^.unitGL)
+        io $ GL.checkErrorOf msg $ setUniform shader name (unit^.unitGL)
 
 ---------------------------------------------------------------------------------------------------
 
@@ -231,7 +229,7 @@ withFramebuffer fbo t action =
 
 
 withShader :: ShaderProgram -> (ShaderProgram -> Renderer a) -> Renderer a
-withShader shader m = checkErrorOf ("withShader" ++ show shader) $ do
+withShader shader m = GL.checkErrorOf ("withShader" ++ show shader) $ do
     rStCurrentShader ?= shader
     io $! GL.currentProgram $= Just (program shader)
 
@@ -245,7 +243,7 @@ withShader shader m = checkErrorOf ("withShader" ++ show shader) $ do
 -- https://github.com/acowley/GLUtil/blob/master/src/Graphics/GLUtil
 
 withVAO :: GL.VertexArrayObject -> Renderer a -> Renderer a
-withVAO v ma = checkErrorOf "withVAO" $ do
+withVAO v ma = GL.checkErrorOf "withVAO" $ do
     io $ GL.bindVertexArrayObject $= Just v
     r <- ma
     io $ GL.bindVertexArrayObject $= Nothing
@@ -268,9 +266,9 @@ withActiveUnits :: [(TextureUnit, GLTextureItem)] -> Renderer a -> Renderer a
 withActiveUnits units ma = do
     let msg = unpack $ format "withActiveUnits: {}" (Only $ Shown units)
     traceM msg
-    forM_ units $ checkErrorOf msg . activateUnit
+    forM_ units $ GL.checkErrorOf msg . activateUnit
     a <- ma
-    forM_ units $ checkErrorOf msg . deactivateUnit
+    forM_ units $ GL.checkErrorOf msg . deactivateUnit
     return a
 
     where
@@ -278,13 +276,13 @@ withActiveUnits units ma = do
     activateUnit ( (TextureUnit _ Nothing), _)   = error "withActiveUnits:activateUnit: invalid empty TextureUnit"
     activateUnit ( unit@(TextureUnit _ (Just item)), tex ) =
         case tex of
-        GLTextureItem target _ -> checkErrorOf (unpack $ format "activateUnit: {}" (Only $ Shown unit)) $ do
+        GLTextureItem target _ -> GL.checkErrorOf (unpack $ format "activateUnit: {}" (Only $ Shown unit)) $ do
             io $ GL.activeTexture         GL.$= unit^.unitGL
             io $ GL.textureBinding target GL.$= ( Just $ item^.itemTexObj )
 
     deactivateUnit (unit, tex) =
         case tex of
-        GLTextureItem target _ -> checkErrorOf (unpack $ format "deactivateUnit: {}" (Only $ Shown unit)) $ do
+        GLTextureItem target _ -> GL.checkErrorOf (unpack $ format "deactivateUnit: {}" (Only $ Shown unit)) $ do
             io $ GL.activeTexture         GL.$= unit^.unitGL
             io $ GL.textureBinding target GL.$= Nothing
 
@@ -389,19 +387,3 @@ logCountObj = scribe rlLogObjCount 1
 logCountTriangles :: (Integral i) => i -> Renderer ()
 logCountTriangles = scribe rlLogTriCount . fromIntegral
 
-
-checkError :: (MonadIO m) => String -> m ()
-#ifdef GL_ERRCHECK
-checkError = io . GLE.printErrorMsg
-#else
-checkError _ = return ()
-#endif
-{-# INLINE checkError #-}
-
-checkErrorOf :: (MonadIO m) => String -> m a -> m a
-#ifdef GL_ERRCHECK
-checkErrorOf msg ma = do {x <- ma; (io $ GLE.printErrorMsg msg); return x}
-#else
-checkErrorOf _ = id
-#endif
-{-# INLINE checkErrorOf #-}
