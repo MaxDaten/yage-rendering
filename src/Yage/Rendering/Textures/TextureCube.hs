@@ -9,6 +9,7 @@ module Yage.Rendering.Textures.TextureCube where
 import Yage.Prelude                                                 hiding ( Vector, sequence, any )
 
 import Data.Data
+import Data.List                                                    ((!!))
 import Data.Foldable
 import Data.Traversable                                             ( sequenceA )
 import qualified Graphics.Rendering.OpenGL                          as GL
@@ -54,6 +55,12 @@ glCubeFaces =
         GL.TextureCubeMapPositiveZ
         GL.TextureCubeMapNegativeZ
 
+
+cubeFromList :: [a] -> Cube a
+cubeFromList xs
+    | length xs < 6 = error "not enough elements in list (at least 6 required)"
+    | otherwise = Cube (xs !! 0) (xs !! 1) (xs !! 2)
+                       (xs !! 3) (xs !! 4) (xs !! 5)
 
 uploadCubeTextureImages :: MipMapChain TextureCube -> IO ()
 uploadCubeTextureImages cubeTexsMips =
