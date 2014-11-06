@@ -206,12 +206,17 @@ instance Ord Texture where
 
 instance Show Texture where
     show tex =
-        unpack $ format "{}.{} spec={}, conf={}"
+        unpack $ format "{}.{} spec: {}, conf: {}, mips: {}"
             ( Shown $ tex^.textureData.to toConstr
             , Shown $ tex^.textureId
             , Shown $ tex^.textureSpec
             , Shown $ tex^.textureConfig
+            , Shown $ tex^.textureData.to mipmapCnt
             )
+        where
+        mipmapCnt (TextureBuffer _ _)  = 0
+        mipmapCnt (TextureCube mips)   = maxMipMapLevel mips
+        mipmapCnt (Texture2D mips)     = maxMipMapLevel mips
 
 
 instance Eq Texture where
